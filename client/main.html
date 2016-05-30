@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="cotnet-type"
+          content="text/html; charset=utf-8"/>
+    <title>행사정보 홈페이지</title>
+    <meta name="viewport" content="initial-scale=1.0,user-scalable=no">
+    <style type="text/css">
+        html { height: 100% }
+        body { height: 100%; margin: 0; padding: 0 }
+        h1   { text-align : center}
+        #map { width: 90%; height: 80%; border : solid blue ; margin-left:auto; margin-right:auto }
+    </style>
+
+    <script type="text/javascript" src="//apis.daum.net/maps/maps3.js?apikey=1e2f4835b38514f32613b4e129c1d794"></script>    <script type="text/javascript">
+        window.onload = function() {
+
+            // 지도의 중심
+            var position = new daum.maps.LatLng(35.1574953, 129.1591424);
+
+            // 기본 지도 표시
+            var map = new daum.maps.Map(document.getElementById('map'), {
+                center: position,
+                level: 10,
+                mapTypeId: daum.maps.MapTypeId.ROADMAP
+            });
+
+            // 지도 콘트론 표시
+            var zoomControl = new daum.maps.ZoomControl();
+            map.addControl(zoomControl, daum.maps.ControlPosition.RIGHT);
+            var mapTypeControl = new daum.maps.MapTypeControl();
+            map.addControl(mapTypeControl, daum.maps.ControlPosition.TOPRIGHT);
+
+            // 다중 마커와 인포윈도우 표시
+
+            //위치 정보와 인포윈도우에 표시할 정도
+            var locations = [[35.1574953, 129.1591424,'<div style="padding:5px;"><a href="http://korean.visitkorea.or.kr/kor/bz15/where/festival/festival.jsp?cid=566822" target="_blank"><img src="hh.png"></a></div>'],
+                [35.1579385, 129.1724801,'<div style="padding:5px;"><a href="http://korean.visitkorea.or.kr/kor/bz15/where/festival/festival.jsp?cid=142080" target="_blank"><img src="sea.png"></a></div>'],
+                [35.1673024, 129.1341743,'<div style="padding:5px;"><a href="http://www.adstars.org/adstar/main/AdstarMainView.do;jsessionid=3243AB730FADF09990A36AEABDDEAC5B " target="_blank"><img src="1.png"></a></div>'],
+                [35.0944905, 129.0400067,'<div style="padding:5px;"><a href="http://korean.visitkorea.or.kr/kor/bz15/where/festival/festival.jsp?cid=1080734  " target="_blank"><img src="2.png"></a></div>'],
+                [35.1767592, 129.115494,'<div style="padding:5px;"><a href="http://korean.visitkorea.or.kr/kor/bz15/where/festival/festival.jsp?cid=619630" target="_blank"><img src="3.png"></a></div>'],
+                [35.0966358, 129.0305786,'<div style="padding:5px;"><a href="http://korean.visitkorea.or.kr/kor/bz15/where/festival/festival.jsp?cid=506562" target="_blank"><img src="4.png"></a></div>'],
+                [35.2120909, 129.0900984,'<div style="padding:5px;"><a href="http://korean.visitkorea.or.kr/kor/bz15/where/festival/festival.jsp?cid=229048" target="_blank"><img src="5.png"></a></div>'],
+
+            ];
+            for(i = 0; i < locations.length; i++) {
+                // 다중 마커
+                var marker = new daum.maps.Marker({
+                    position: new daum.maps.LatLng(locations[i][0], locations[i][1])
+                });
+                marker.setMap(map);
+
+                //인포 윈도우
+                daum.maps.event.addListener(marker, 'click', (function(marker, i) {
+                    return function() {
+                        var infowindow = new daum.maps.InfoWindow({
+                            content: '<p style="width: margin:7px 22px 7px 12px;font:12px/1.5 sans-serif">' + locations[i][2] + '</p>',
+                            removable : true
+                        });
+
+                        infowindow.open(map, marker);
+
+                    }
+                })(marker, i));
+            }
+
+        };
+    </script>
+</head>
+<body>
+
+<div id="map"></div>
+
+</body>
+</html>
