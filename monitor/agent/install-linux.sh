@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Linux 서버: 에이전트를 /opt/monitor 에 복사하고 systemd 서비스로 등록합니다.
 # agent.sh 와 같은 폴더에 두고 root 로 실행:
-#   sudo ./install-linux.sh http://192.168.10.25:8787/api/metrics
-#   sudo INTERVAL=10 TOKEN=비밀값 ./install-linux.sh http://...
+#   sudo TOKEN=비밀값 ./install-linux.sh http://ims.회사도메인/monitor/api/metrics
+#   sudo INSECURE=1 TOKEN=비밀값 ./install-linux.sh https://...   # 사설 인증서일 때
 # 제거:  sudo ./install-linux.sh --uninstall
 set -e
 
@@ -37,6 +37,7 @@ Type=simple
 Environment=URL=$URL
 Environment=INTERVAL=${INTERVAL:-5}
 Environment=TOKEN=${TOKEN:-}
+Environment=INSECURE=${INSECURE:-0}
 ExecStart=$DIR/agent.sh
 Restart=always
 RestartSec=10

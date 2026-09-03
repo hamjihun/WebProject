@@ -3,8 +3,8 @@
 #
 # 사용법 (PowerShell 창에서):
 #   Set-ExecutionPolicy -Scope Process Bypass
-#   .\agent.ps1 -Url http://192.168.0.10:8787/api/metrics
-#   .\agent.ps1 -Url http://192.168.0.10:8787/api/metrics -Interval 10 -Token 비밀값
+#   .\agent.ps1 -Url http://ims.회사도메인/monitor/api/metrics -Token 비밀값
+#   .\agent.ps1 -Url https://ims.회사도메인/monitor/api/metrics -Token 비밀값 -SkipCertCheck   # 사설 인증서일 때
 #
 # 상시 실행은 "작업 스케줄러"에 시작 시 실행으로 등록하거나 NSSM 으로 서비스화하면 됩니다.
 
@@ -12,8 +12,13 @@ param(
   [string]$Url = "http://127.0.0.1:8787/api/metrics",
   [int]$Interval = 5,
   [string]$Token = "",
-  [string]$HostName = $env:COMPUTERNAME
+  [string]$HostName = $env:COMPUTERNAME,
+  [switch]$SkipCertCheck
 )
+
+# https 로 보낼 때 구형 서버(2012/2016)에서 TLS 1.2 를 쓰도록
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+if ($SkipCertCheck) { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
 
 $os = Get-CimInstance Win32_OperatingSystem
 $osName = "$($os.Caption) $($os.Version)"

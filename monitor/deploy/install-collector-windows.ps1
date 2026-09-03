@@ -2,14 +2,18 @@
 # 관리자 PowerShell 에서 monitor 폴더를 원하는 위치(예: C:\ims\monitor)에 둔 뒤 실행:
 #   Set-ExecutionPolicy -Scope Process Bypass
 #   .\deploy\install-collector-windows.ps1
-#   .\deploy\install-collector-windows.ps1 -Port 8787 -Token 비밀값
+#   .\deploy\install-collector-windows.ps1 -Token 비밀값
+#   기본은 내부 전용(127.0.0.1)이라 IMS 웹서버(IIS 등)의 /monitor/ 프록시를 통해서만 접근됩니다.
+#   프록시 없이 포트를 직접 열려면 -Public 을 붙이세요 (방화벽 규칙도 함께 추가).
 # 제거:  .\deploy\install-collector-windows.ps1 -Uninstall
 
 param(
   [int]$Port = 8787,
   [string]$Token = "",
+  [switch]$Public,
   [switch]$Uninstall
 )
+$Bind = if ($Public) { "0.0.0.0" } else { "127.0.0.1" }
 
 $TaskName = "ServerMonitorCollector"
 $Root = Split-Path -Parent $PSScriptRoot          # monitor 폴더
@@ -28,6 +32,7 @@ $runner = Join-Path $Root "run-collector.cmd"
 @echo off
 cd /d "$Root"
 set PORT=$Port
+set BIND=$Bind
 set TOKEN=$Token
 "$Node" server.js >> "$Root\collector.log" 2>&1
 "@ | Set-Content -Encoding ASCII $runner
@@ -41,7 +46,7 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Silent
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "서버 모니터 수집기 (:$Port)" | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
-if (-not (Get-NetFirewallRule -DisplayName "ServerMonitor" -ErrorAction SilentlyContinue)) {
+if ($Public -and -not (Get-NetFirewallRule -DisplayName "ServerMonitor" -ErrorAction SilentlyContinue)) {
   New-NetFirewallRule -DisplayName "ServerMonitor" -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
   Write-Host "방화벽 규칙 추가: TCP $Port 인바운드 허용"
 }
@@ -53,4 +58,5 @@ try {
 } catch {
   Write-Warning "작업은 등록됐지만 아직 응답이 없습니다. 로그 확인: $Root\collector.log"
 }
-Write-Host "화면: http://<이 서버 IP>:$Port/   로그: $Root\collector.log"
+if ($Public) { Write-Host "화면: http://<이 서버 IP>:$Port/   로그: $Root\collector.log" }
+else { Write-Host "내부 전용(127.0.0.1:$Port). IMS 웹서버에 /monitor/ 프록시를 설정하세요. 로그: $Root\collector.log" }

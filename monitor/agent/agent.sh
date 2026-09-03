@@ -4,14 +4,15 @@
 #
 # 사용법:
 #   chmod +x agent.sh
-#   ./agent.sh http://192.168.0.10:8787/api/metrics            # 5초 간격
-#   INTERVAL=10 TOKEN=비밀값 ./agent.sh http://192.168.0.10:8787/api/metrics
+#   TOKEN=비밀값 ./agent.sh http://ims.회사도메인/monitor/api/metrics
+#   INSECURE=1 TOKEN=비밀값 ./agent.sh https://ims.회사도메인/monitor/api/metrics   # 사설 인증서일 때
 #
 # 백그라운드 실행:  nohup ./agent.sh http://... > /var/log/monitor-agent.log 2>&1 &
 
 URL="${1:-${URL:-http://127.0.0.1:8787/api/metrics}}"
 INTERVAL="${INTERVAL:-5}"
 TOKEN="${TOKEN:-}"
+CURL_OPTS=""; [ "${INSECURE:-0}" = "1" ] && CURL_OPTS="-k"
 HOST="${HOST:-$(hostname)}"
 OS="$( . /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-Linux}" || uname -sr )"
 
@@ -52,7 +53,7 @@ while true; do
   body=$(printf '{"host":"%s","os":"%s","token":"%s","cpu":%s,"mem_total":%s,"mem_used":%s,"load1":%s,"uptime":%s,"net_rx":%s,"net_tx":%s,"disks":[%s]}' \
     "$HOST" "$OS" "$TOKEN" "$cpu" "$mem_total" "$mem_used" "$load1" "$uptime" "$net_rx" "$net_tx" "$disks")
 
-  if curl -sS -m 5 -o /dev/null -X POST -H 'Content-Type: application/json' -H "X-Token: $TOKEN" --data "$body" "$URL"; then
+  if curl -sS $CURL_OPTS -m 5 -o /dev/null -X POST -H 'Content-Type: application/json' -H "X-Token: $TOKEN" --data "$body" "$URL"; then
     echo "$(date '+%F %T') sent cpu=${cpu}% mem=$((mem_used*100/mem_total))%"
   else
     echo "$(date '+%F %T') send failed to $URL" >&2

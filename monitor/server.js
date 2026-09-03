@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = Number(process.env.PORT || 8787);
+const BIND = process.env.BIND || '0.0.0.0';             // IMS 웹서버 뒤에 둘 때는 127.0.0.1 (외부 노출 안 함)
 const TOKEN = process.env.TOKEN || '';                 // 설정하면 에이전트도 같은 값을 보내야 함
 const HISTORY = Number(process.env.HISTORY || 720);     // 서버당 보관 포인트 수 (5초 간격이면 1시간)
 const OFFLINE_AFTER = Number(process.env.OFFLINE_AFTER || 90) * 1000; // 이 시간 동안 데이터 없으면 오프라인
@@ -173,7 +174,12 @@ loadState();
 if (STATE_FILE) setInterval(() => saveState(false), SAVE_EVERY).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); process.exit(0); });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`서버 모니터 수집기 실행 중: http://0.0.0.0:${PORT}/`);
-  console.log(`에이전트 전송 주소: http://<이 PC IP>:${PORT}/api/metrics` + (TOKEN ? ' (토큰 사용)' : ' (토큰 없음)'));
+server.listen(PORT, BIND, () => {
+  console.log(`서버 모니터 수집기 실행 중: http://${BIND}:${PORT}/` + (TOKEN ? ' (토큰 사용)' : ' (토큰 없음)'));
+  if (BIND === '127.0.0.1' || BIND === 'localhost') {
+    console.log('내부 전용으로 실행 중입니다. IMS 웹서버 프록시(/monitor/)를 통해서만 접근됩니다.');
+    console.log('에이전트 전송 주소: http://<IMS 주소>/monitor/api/metrics');
+  } else {
+    console.log(`에이전트 전송 주소: http://<이 서버 IP>:${PORT}/api/metrics`);
+  }
 });
