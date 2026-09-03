@@ -195,7 +195,10 @@ const server = http.createServer(async (req, res) => {
       const text = await readBody(req);
       const raw = JSON.parse(text || '{}');
       const token = req.headers['x-token'] || raw.token || '';
-      if (TOKEN && token !== TOKEN) return json(res, 401, { ok: false, error: 'bad token' });
+      if (TOKEN && token !== TOKEN) {
+        console.log(`[${new Date().toLocaleTimeString()}] 토큰 불일치: ${raw.host || '?'} (${remoteIp}) - 에이전트 토큰과 수집기 TOKEN 이 다릅니다`);
+        return json(res, 401, { ok: false, error: 'bad token' });
+      }
       const m = ingest(raw, remoteIp);
       console.log(`[${new Date().toLocaleTimeString()}] ${m.host} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}%`);
       return json(res, 200, { ok: true });

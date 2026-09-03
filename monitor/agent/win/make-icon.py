@@ -34,9 +34,10 @@ def shade(u, v):
     return (*col, 255)
 
 def render(size, ss=4):
+    """RGBA 픽셀 행 목록 (위→아래)"""
     rows = []
     for y in range(size):
-        row = bytearray([0])
+        row = []
         for x in range(size):
             r = g = b = a = 0
             for j in range(ss):
@@ -45,18 +46,28 @@ def render(size, ss=4):
                     pr, pg, pb, pa = shade(u, v)
                     r += pr * pa; g += pg * pa; b += pb * pa; a += pa
             n = ss * ss
-            if a: row += bytes((r // a, g // a, b // a, a // n))
-            else: row += b"\0\0\0\0"
-        rows.append(bytes(row))
-    return b"".join(rows)
+            row.append((r // a, g // a, b // a, a // n) if a else (0, 0, 0, 0))
+        rows.append(row)
+    return rows
 
-def png(size, raw):
+def png(size, rows):
+    raw = b"".join(b"\0" + bytes(c for px in row for c in px) for row in rows)
     def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 
+def dib(size, rows):
+    """고전 ICO 항목 (32bpp BGRA + AND 마스크). .NET Framework(Windows PowerShell) 트레이 아이콘 호환"""
+    mask_row = ((size + 31) // 32) * 4
+    hdr = struct.pack("<IiiHHIIiiII", 40, size, size * 2, 1, 32, 0, size * size * 4 + mask_row * size, 0, 0, 0, 0)
+    xor = b"".join(bytes(c for (r, g, b, a) in row for c in (b, g, r, a)) for row in reversed(rows))
+    return hdr + xor + b"\0" * (mask_row * size)
+
 sizes = [256, 64, 48, 32, 24, 16]
-images = [(s, png(s, render(s))) for s in sizes]
-open("app-256.png", "wb").write(images[0][1])          # 미리보기용
+images = []
+for s in sizes:
+    rows = render(s)
+    if s == 256: open("app-256.png", "wb").write(png(s, rows))   # 미리보기용
+    images.append((s, png(s, rows) if s == 256 else dib(s, rows)))
 with open("app.ico", "wb") as f:
     f.write(struct.pack("<HHH", 0, 1, len(images)))
     off = 6 + 16 * len(images)

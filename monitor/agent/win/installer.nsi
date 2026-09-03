@@ -7,7 +7,7 @@ Unicode true
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.0.0"
+!define VERSION "1.1.0"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
@@ -157,6 +157,8 @@ Section "Install"
   File "tray.vbs"
   File "service.ps1"
   File "app.ico"
+  File "start.ps1"
+  File "start.vbs"
 
   ; 설정 파일
   FileOpen $0 "$INSTDIR\agent.conf" w
@@ -187,6 +189,13 @@ Section "Install"
   WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
   WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" 512
 
+  ; 바탕화면 / 시작 메뉴 바로가기 (모든 사용자)
+  SetShellVarContext all
+  CreateShortcut "$DESKTOP\${APPNAME}.lnk" "wscript.exe" '"$INSTDIR\start.vbs"' "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "IMS Monitoring Agent 실행 / 상태 보기"
+  CreateDirectory "$SMPROGRAMS\${APPNAME}"
+  CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "wscript.exe" '"$INSTDIR\start.vbs"' "$INSTDIR\app.ico" 0
+  CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME} 제거.lnk" "$INSTDIR\Uninstall.exe"
+
   ; 현재 사용자에게 트레이 아이콘 바로 표시
   Exec 'wscript.exe "$INSTDIR\tray.vbs"'
 SectionEnd
@@ -200,6 +209,13 @@ Section "Uninstall"
   Delete "$INSTDIR\service.ps1"
   Delete "$INSTDIR\agent.conf"
   Delete "$INSTDIR\app.ico"
+  Delete "$INSTDIR\start.ps1"
+  Delete "$INSTDIR\start.vbs"
+  SetShellVarContext all
+  Delete "$DESKTOP\${APPNAME}.lnk"
+  Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
+  Delete "$SMPROGRAMS\${APPNAME}\${APPNAME} 제거.lnk"
+  RMDir "$SMPROGRAMS\${APPNAME}"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
   SetShellVarContext all
