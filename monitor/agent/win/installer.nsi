@@ -7,7 +7,7 @@ Unicode true
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.1.0"
+!define VERSION "1.1.1"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
@@ -57,7 +57,7 @@ Page custom ConfigPage ConfigPageLeave
 
 Function .onInit
   StrCpy $Url "http://192.168.0.9:15138/api/metrics"
-  StrCpy $Token ""
+  StrCpy $Token "ilsan-mon-2026"
   StrCpy $Interval "5"
   ; 재설치 시 기존 설정 불러오기
   IfFileExists "$INSTDIR\agent.conf" 0 done
@@ -120,7 +120,7 @@ Function ConfigPage
   ${NSD_CreateText} 0 26u 100% 13u $Url
   Pop $hUrl
 
-  ${NSD_CreateLabel} 0 48u 100% 12u "토큰 (수집기 설치 시 정한 값과 동일하게):"
+  ${NSD_CreateLabel} 0 48u 100% 12u "토큰 (IMS 서버 setup-collector.cmd 의 TOKEN 과 동일, 기본값 그대로 두면 됨):"
   Pop $0
   ${NSD_CreateText} 0 62u 100% 13u $Token
   Pop $hToken
