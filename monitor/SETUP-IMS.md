@@ -77,6 +77,8 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
 프록시를 넣으려면 IMS 코드를 고쳐야 하므로, 1차는 수집기를 **IMS 옆 포트**로 직접 연다. IMS 가 이미 비표준 포트를 쓰고 있으니 하나 더 여는 것은 같은 관리 방식이다.
 
 1. 1단계 설치를 `-Public -Port 15138` 로 한다 (IMS 포트 + 1). 방화벽 규칙이 자동 추가된다.
+   가장 쉬운 방법: `deploy\setup-collector.cmd` 의 PORT/TOKEN 을 확인하고 **더블클릭**.
+   명령으로 하려면:
    ```
    .\deploy\install-collector-windows.ps1 -Public -Port 15138 -Token 정한토큰
    ```
@@ -94,7 +96,11 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
 
 가장 덜 중요한 서버부터. 에이전트는 읽기만 하고 서버에 아무것도 바꾸지 않는다.
 
-**Windows 서버**: `agent\agent.ps1` 과 `agent\install-windows.ps1` 을 `C:\monitor\` 에 복사. 관리자 PowerShell:
+**Windows 서버 (더블클릭 설치)**: `agent` 폴더 안의 `setup-agent.cmd` 를 열어 URL 과 TOKEN 두 줄을 회사 값으로 한 번만 고친다.
+그 뒤 `agent` 폴더 전체를 서버의 `C:\monitor\` 에 복사하고 `setup-agent.cmd` 를 더블클릭 → 관리자 확인 "예" → 창에 "설치 완료" 가 뜨면 끝.
+제거는 `remove-agent.cmd` 더블클릭.
+
+명령으로 하려면 관리자 PowerShell:
 ```
 cd C:\monitor
 Set-ExecutionPolicy -Scope Process Bypass

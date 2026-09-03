@@ -21,6 +21,8 @@
 | `agent/agent.ps1` | Windows 에이전트 (PowerShell 5.1+) | 각 Windows 서버 |
 | `agent/install-linux.sh` | Linux 에이전트를 systemd 서비스로 등록 | 각 Linux 서버 |
 | `agent/install-windows.ps1` | Windows 에이전트를 작업 스케줄러에 등록 | 각 Windows 서버 |
+| `agent/setup-agent.cmd`, `remove-agent.cmd` | 위 등록/제거를 더블클릭으로 실행 (URL/TOKEN 은 파일 안에서 수정) | 각 Windows 서버 |
+| `deploy/setup-collector.cmd` | 수집기 등록을 더블클릭으로 실행 (PORT/TOKEN 은 파일 안에서 수정) | IMS 서버 |
 | `agent/simulate.js` | 서버 없이 화면 확인용 가짜 데이터 전송기 | 내 PC |
 | `deploy/install-collector-*.{ps1,sh}` | 수집기를 IMS 서버에 상시 실행 등록 | IMS 서버 |
 | `deploy/nginx.conf`, `apache.conf`, `iis-web.config` | IMS 웹서버에서 `/monitor/` 경로로 프록시하는 설정 예시 | IMS 서버 |
