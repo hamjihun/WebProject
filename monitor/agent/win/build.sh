@@ -4,4 +4,4 @@ set -e
 cd "$(dirname "$0")"
 mkdir -p ../../dist
 makensis -V2 installer.nsi
-ls -la ../../dist/ServerMonitorAgent-Setup.exe
+ls -la ../../dist/IMS-Monitoring-Agent-Setup.exe

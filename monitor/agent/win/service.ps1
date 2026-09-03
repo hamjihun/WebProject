@@ -3,10 +3,12 @@
 param([switch]$Install, [switch]$Uninstall)
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$TaskName = "ServerMonitorAgent"
+$TaskName = "IMSMonitoringAgent"
+$LegacyTasks = @("ServerMonitorAgent")
 $RunKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
-$RunName = "ServerMonitorAgentTray"
-$DataDir = Join-Path $env:ProgramData "ServerMonitorAgent"
+$RunName = "IMSMonitoringAgentTray"
+$LegacyRunNames = @("ServerMonitorAgentTray")
+$DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 
 function Stop-AgentProcesses {
   # 어느 경로에서 띄웠든 (예전 수동 설치 포함) agent.ps1 / tray.ps1 실행 중인 PowerShell 을 모두 종료
@@ -15,9 +17,11 @@ function Stop-AgentProcesses {
 }
 
 if ($Uninstall) {
-  try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
-  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-  Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue
+  foreach ($t in @($TaskName) + $LegacyTasks) {
+    try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}
+    Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
+  }
+  foreach ($n in @($RunName) + $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }
   Stop-AgentProcesses
   Write-Host "제거 완료"
   exit 0
@@ -25,8 +29,9 @@ if ($Uninstall) {
 
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-  # 이전 방식(install-windows.ps1)으로 등록된 것이 있으면 정리
-  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+  # 이전 이름/수동 설치로 등록된 것이 있으면 정리
+  foreach ($t in @($TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
+  foreach ($n in $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }
   Stop-AgentProcesses
 
   $args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Dir\agent.ps1`""
@@ -34,7 +39,7 @@ if ($Install) {
   $trigger   = New-ScheduledTaskTrigger -AtStartup
   $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
   $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "서버 모니터 에이전트 (CPU/메모리/디스크 전송)" | Out-Null
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "IMS Monitoring Agent (CPU/메모리/디스크 전송)" | Out-Null
   Start-ScheduledTask -TaskName $TaskName
 
   Set-ItemProperty -Path $RunKey -Name $RunName -Value "wscript.exe `"$Dir\tray.vbs`""

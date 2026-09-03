@@ -2,11 +2,11 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$mutex = New-Object System.Threading.Mutex($false, "Global\ServerMonitorAgentTray_" + $env:USERNAME)
+$mutex = New-Object System.Threading.Mutex($false, "Global\IMSMonitoringAgentTray_" + $env:USERNAME)
 if (-not $mutex.WaitOne(0, $false)) { exit 0 }   # 이미 떠 있으면 종료
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DataDir = Join-Path $env:ProgramData "ServerMonitorAgent"
+$DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
 
@@ -16,23 +16,29 @@ if (Test-Path $confPath) {
   foreach ($line in Get-Content $confPath) { if ($line -match '^\s*URL\s*=\s*(.*?)\s*$') { $dashUrl = $matches[1] -replace '/api/metrics/?$', '/' } }
 }
 
-function New-DotIcon([System.Drawing.Color]$color) {
-  $bmp = New-Object System.Drawing.Bitmap 16, 16
+# app.ico 를 바탕으로 오른쪽 아래에 상태 점(초록/빨강/노랑)을 얹은 아이콘 생성
+$baseIcon = $null
+try { $baseIcon = New-Object System.Drawing.Icon((Join-Path $Dir "app.ico"), 32, 32) } catch {}
+function New-StatusIcon([System.Drawing.Color]$color) {
+  $bmp = New-Object System.Drawing.Bitmap 32, 32
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
   $g.Clear([System.Drawing.Color]::Transparent)
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(40, 40, 40))), 1, 1, 14, 14)
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush $color), 3, 3, 10, 10)
+  if ($baseIcon) { $g.DrawIcon($baseIcon, (New-Object System.Drawing.Rectangle 0, 0, 32, 32)) }
+  else { $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(160, 20, 60))), 2, 2, 28, 28) }
+  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)), 17, 17, 15, 15)
+  $g.FillEllipse((New-Object System.Drawing.SolidBrush $color), 19, 19, 11, 11)
   $g.Dispose()
   return [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
 }
-$iconOk = New-DotIcon ([System.Drawing.Color]::FromArgb(34, 197, 94))
-$iconBad = New-DotIcon ([System.Drawing.Color]::FromArgb(239, 68, 68))
-$iconWarn = New-DotIcon ([System.Drawing.Color]::FromArgb(245, 158, 11))
+$iconOk = New-StatusIcon ([System.Drawing.Color]::FromArgb(34, 197, 94))
+$iconBad = New-StatusIcon ([System.Drawing.Color]::FromArgb(239, 68, 68))
+$iconWarn = New-StatusIcon ([System.Drawing.Color]::FromArgb(245, 158, 11))
 
 $ni = New-Object System.Windows.Forms.NotifyIcon
 $ni.Icon = $iconWarn
-$ni.Text = "서버 모니터 에이전트: 확인 중"
+$ni.Text = "IMS Monitoring Agent: 확인 중"
 $ni.Visible = $true
 
 $script:lastText = ""
@@ -49,7 +55,7 @@ function Read-Status {
 function Update-Tray {
   $s = Read-Status
   $ni.Icon = switch ($s.state) { 'ok' { $iconOk } 'bad' { $iconBad } default { $iconWarn } }
-  $t = "서버 모니터 에이전트: " + $s.text
+  $t = "IMS Monitoring Agent: " + $s.text
   if ($t.Length -gt 63) { $t = $t.Substring(0, 60) + "..." }
   $ni.Text = $t
   $script:lastText = $s.text
@@ -57,7 +63,7 @@ function Update-Tray {
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $mStatus = $menu.Items.Add("상태 보기")
-$mStatus.add_Click({ [System.Windows.Forms.MessageBox]::Show("호스트: $env:COMPUTERNAME`n상태: $script:lastText`n`n로그: $LogFile", "서버 모니터 에이전트") | Out-Null })
+$mStatus.add_Click({ [System.Windows.Forms.MessageBox]::Show("호스트: $env:COMPUTERNAME`n상태: $script:lastText`n`n로그: $LogFile", "IMS Monitoring Agent") | Out-Null })
 if ($dashUrl) { $mDash = $menu.Items.Add("모니터링 화면 열기"); $mDash.add_Click({ Start-Process $dashUrl }) }
 $mLog = $menu.Items.Add("로그 보기")
 $mLog.add_Click({ if (Test-Path $LogFile) { Start-Process notepad.exe $LogFile } })

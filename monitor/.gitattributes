@@ -3,3 +3,4 @@
 *.vbs -text
 *.nsi -text
 *.exe binary
+*.ico binary

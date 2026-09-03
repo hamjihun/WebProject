@@ -18,7 +18,7 @@
 | `server.js` | 수집기. 데이터를 받아 메모리에 보관하고 화면을 제공 | 내 PC |
 | `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
 | `agent/agent.sh` | Linux 에이전트 (bash + curl) | 각 Linux 서버 |
-| `dist/ServerMonitorAgent-Setup.exe` | **Windows 에이전트 설치 프로그램** (프로그램 추가/제거 등록, 트레이 아이콘) | 각 Windows 서버 |
+| `dist/IMS-Monitoring-Agent-Setup.exe` | **Windows 에이전트 설치 프로그램** (프로그램 추가/제거 등록, 트레이 아이콘) | 각 Windows 서버 |
 | `agent/win/` | 설치 프로그램 소스 (agent.ps1, tray.ps1, service.ps1, installer.nsi). `build.sh` 로 빌드 | 개발 참고 |
 | `agent/agent.ps1` | Windows 에이전트 수동 실행용 (PowerShell 5.1+) | 각 Windows 서버 |
 | `agent/install-linux.sh` | Linux 에이전트를 systemd 서비스로 등록 | 각 Linux 서버 |

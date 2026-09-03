@@ -97,13 +97,13 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
 가장 덜 중요한 서버부터. 에이전트는 읽기만 하고 서버에 아무것도 바꾸지 않는다.
 
 **Windows 서버: 설치 프로그램 실행**
-1. `dist\ServerMonitorAgent-Setup.exe` 를 서버로 복사해서 실행한다 (관리자 확인 "예").
+1. `dist\IMS-Monitoring-Agent-Setup.exe` 를 서버로 복사해서 실행한다 (관리자 확인 "예").
 2. 설정 화면에서 전송 주소 `http://192.168.0.9:15138/api/metrics` 와 토큰(1단계에서 정한 값)을 입력하고 다음 → 설치.
 3. 설치가 끝나면 작업 표시줄 트레이에 원형 아이콘이 생긴다. **초록 = 정상 전송, 빨강 = 전송 실패/미실행**. 두 번 클릭하면 모니터링 화면이 열린다.
-4. 설치 프로그램이 하는 일: `C:\Program Files\ServerMonitorAgent` 에 파일 복사, 작업 스케줄러에 시스템 시작 시 자동 실행 등록(SYSTEM, 죽으면 1분 뒤 재시작), 로그온 시 트레이 아이콘 자동 실행, [프로그램 추가/제거] 등록.
-5. 제거: [설정 > 앱] 또는 [프로그램 추가/제거] 에서 "서버 모니터 에이전트" 제거. 로그는 `C:\ProgramData\ServerMonitorAgent\agent.log`.
+4. 설치 프로그램이 하는 일: `C:\Program Files\IMSMonitoringAgent` 에 파일 복사, 작업 스케줄러에 시스템 시작 시 자동 실행 등록(SYSTEM, 죽으면 1분 뒤 재시작), 로그온 시 트레이 아이콘 자동 실행, [프로그램 추가/제거] 등록.
+5. 제거: [설정 > 앱] 또는 [프로그램 추가/제거] 에서 "IMS Monitoring Agent" 제거. 로그는 `C:\ProgramData\IMSMonitoringAgent\agent.log`.
 
-재설치하면 기존 주소/토큰이 자동으로 채워진다. 설치 프로그램은 `agent/win/build.sh` 로 다시 빌드할 수 있다 (NSIS 필요).
+재설치하면 기존 주소/토큰이 자동으로 채워진다. 설치 프로그램은 `agent/win/build.sh` 로 다시 빌드할 수 있다 (NSIS 필요). 아이콘은 `agent/win/make-icon.py` 가 생성한다.
 
 **Linux 서버**: `agent/agent.sh` 와 `agent/install-linux.sh` 를 복사.
 ```

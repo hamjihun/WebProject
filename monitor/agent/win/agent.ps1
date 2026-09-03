@@ -1,6 +1,6 @@
-﻿# 서버 모니터 에이전트 (설치 프로그램용)
+﻿# IMS Monitoring Agent (설치 프로그램용)
 # CPU/메모리/디스크/네트워크를 읽어 수집기로 전송합니다.
-# 설정은 같은 폴더의 agent.conf 에서 읽고, 상태는 %ProgramData%\ServerMonitorAgent\status.json 에 기록합니다.
+# 설정은 같은 폴더의 agent.conf 에서 읽고, 상태는 %ProgramData%\IMSMonitoringAgent\status.json 에 기록합니다.
 param(
   [string]$Url = "",
   [int]$Interval = 0,
@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DataDir = Join-Path $env:ProgramData "ServerMonitorAgent"
+$DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
 try { New-Item -ItemType Directory -Force -Path $DataDir | Out-Null } catch {}
