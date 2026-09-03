@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -19,15 +19,18 @@ const STATE_FILE = process.env.STATE_FILE === '' ? '' : (process.env.STATE_FILE 
 const SAVE_EVERY = Number(process.env.SAVE_EVERY || 30) * 1000;
 const DAILY_KEEP = Number(process.env.DAILY_KEEP || 400);     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
-// { host: { latest: {...}, history: [ {...}, ... ] } }
+// { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
 const store = new Map();
+let order = [];   // 화면 카드 순서 (호스트명 배열). 화면에서 드래그하면 갱신됨
 
 // ---- 스냅샷 저장/복원 (재시작해도 이력 유지) ----
 function loadState() {
   if (!STATE_FILE) return;
   try {
     const obj = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    for (const [host, e] of Object.entries(obj)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY), daily: e.daily || {} });
+    const hosts = obj.hosts || obj;                       // 구버전 파일은 호스트 맵 그대로
+    if (Array.isArray(obj.order)) order = obj.order.filter((h) => typeof h === 'string');
+    for (const [host, e] of Object.entries(hosts)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY), daily: e.daily || {} });
     console.log(`스냅샷 복원: ${store.size}대 (${STATE_FILE})`);
   } catch (e) { if (e.code !== 'ENOENT') console.warn('스냅샷 복원 실패:', e.message); }
 }
@@ -35,7 +38,8 @@ let dirty = false;
 function saveState(sync) {
   if (!STATE_FILE || !dirty) return;
   dirty = false;
-  const obj = {}; for (const [h, e] of store) obj[h] = e;
+  const hosts = {}; for (const [h, e] of store) hosts[h] = e;
+  const obj = { hosts, order };
   const tmp = STATE_FILE + '.tmp';
   try {
     fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
@@ -166,8 +170,21 @@ function serversView() {
   for (const [host, e] of store) {
     list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length });
   }
-  list.sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host, 'ko'));
+  // 저장된 순서 우선, 나머지는 이름순으로 뒤에
+  const idx = new Map(order.map((h, i) => [h, i]));
+  list.sort((a, b) => {
+    const ia = idx.has(a.host) ? idx.get(a.host) : Infinity, ib = idx.has(b.host) ? idx.get(b.host) : Infinity;
+    if (ia !== ib) return ia - ib;
+    return (a.name || a.host).localeCompare(b.name || b.host, 'ko');
+  });
   return list;
+}
+
+function removeHost(host) {
+  const existed = store.delete(host);
+  order = order.filter((h) => h !== host);
+  if (existed) dirty = true;
+  return existed;
 }
 
 function serveStatic(res, file) {
@@ -188,7 +205,7 @@ const server = http.createServer(async (req, res) => {
   const remoteIp = (fwd || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Token', 'Access-Control-Allow-Methods': 'POST, GET' });
+    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Token', 'Access-Control-Allow-Methods': 'POST, GET, PUT' });
     return res.end();
   }
 
@@ -207,6 +224,30 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return json(res, 400, { ok: false, error: String(e.message || e) });
     }
+  }
+
+  // 에이전트 제거 시 호출: 목록에서 삭제 (에이전트가 다시 보내면 자동으로 다시 나타남)
+  if (req.method === 'POST' && url.pathname === '/api/unregister') {
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      const host = String(raw.host || '').trim();
+      if (!host) return json(res, 400, { ok: false, error: 'host required' });
+      const removed = removeHost(host);
+      console.log(`[${new Date().toLocaleTimeString()}] 목록에서 제거: ${host} (${remoteIp})${removed ? '' : ' - 없던 호스트'}`);
+      saveState(false);
+      return json(res, 200, { ok: true, removed });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
+  // 화면 카드 순서 저장
+  if (req.method === 'PUT' && url.pathname === '/api/order') {
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      if (!Array.isArray(raw.order)) return json(res, 400, { ok: false, error: 'order array required' });
+      order = raw.order.map(String).filter((h) => store.has(h));
+      dirty = true; saveState(false);
+      return json(res, 200, { ok: true, order });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
   if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView() });

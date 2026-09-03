@@ -23,6 +23,15 @@
   main { padding:16px 20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; align-content:start; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; cursor:pointer; transition:border-color .15s; }
   .card:hover, .card.sel { border-color:var(--accent); }
+  .card.dragging { opacity:.4; }
+  .card.dropTarget { outline:2px dashed var(--accent); outline-offset:2px; }
+  .grip { color:var(--muted); font-size:14px; cursor:grab; flex:none; margin-right:-2px; user-select:none; }
+  .grip:hover { color:var(--text); }
+  .actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .actions button { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:5px 10px; cursor:pointer; font-size:13px; }
+  .actions button:hover { border-color:var(--accent); }
+  .actions button.danger { color:var(--bad); border-color:var(--bad); margin-left:auto; }
+  .actions button:disabled { opacity:.4; cursor:default; }
   .card.off { border-color:var(--bad); background:rgba(239,68,68,.12); }
   .card.off .bar > i { background:#7f1d1d; }
   .top { display:flex; align-items:center; gap:8px; }
@@ -78,6 +87,11 @@
     <h3>CPU / 메모리 추이</h3>
     <div class="legend"><span style="background:#38bdf8"></span>CPU %<span style="background:#a78bfa"></span>메모리 %</div>
     <canvas id="chart"></canvas>
+    <div class="actions">
+      <button id="bPrev">◀ 앞으로</button><button id="bNext">뒤로 ▶</button>
+      <span class="dim" style="font-size:12px;align-self:center">카드를 드래그해서 순서를 바꿀 수도 있습니다</span>
+      <button id="bRemove" class="danger">목록에서 삭제</button>
+    </div>
   </div>
 </div>
 
@@ -132,8 +146,8 @@ function cardHtml(s) {
     return bar(esc(d.mount), d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`) + warn;
   }).join('');
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
-  return `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}">
-    <div class="top"><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
+  return `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
+    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
     <div class="hostline">${s.name ? esc(s.host) : '&nbsp;'}</div>
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
@@ -150,8 +164,48 @@ function render() {
     return;
   }
   $main.innerHTML = servers.map(cardHtml).join('');
-  for (const c of $main.querySelectorAll('.card')) c.onclick = () => openDetail(c.dataset.host);
+  for (const c of $main.querySelectorAll('.card')) {
+    c.onclick = () => openDetail(c.dataset.host);
+    c.addEventListener('dragstart', (e) => { dragging = c.dataset.host; c.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+    c.addEventListener('dragend', () => { dragging = null; c.classList.remove('dragging'); $main.querySelectorAll('.dropTarget').forEach(x => x.classList.remove('dropTarget')); });
+    c.addEventListener('dragover', (e) => { if (dragging && dragging !== c.dataset.host) { e.preventDefault(); c.classList.add('dropTarget'); } });
+    c.addEventListener('dragleave', () => c.classList.remove('dropTarget'));
+    c.addEventListener('drop', (e) => { e.preventDefault(); if (dragging && dragging !== c.dataset.host) moveHost(dragging, c.dataset.host); });
+  }
 }
+
+// ---------- 순서 변경 / 삭제 ----------
+let dragging = null;
+async function saveOrder() {
+  try { await fetch('api/order', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: servers.map(s => s.host) }) }); } catch (e) {}
+}
+function moveHost(host, beforeHost) {      // host 를 beforeHost 위치로 이동
+  const from = servers.findIndex(s => s.host === host), to = servers.findIndex(s => s.host === beforeHost);
+  if (from < 0 || to < 0) return;
+  const [item] = servers.splice(from, 1);
+  servers.splice(to, 0, item);
+  render(); saveOrder();
+}
+function shiftHost(host, delta) {
+  const i = servers.findIndex(s => s.host === host), j = i + delta;
+  if (i < 0 || j < 0 || j >= servers.length) return;
+  [servers[i], servers[j]] = [servers[j], servers[i]];
+  render(); saveOrder(); updateActionButtons();
+}
+function updateActionButtons() {
+  const i = servers.findIndex(s => s.host === selected);
+  document.getElementById('bPrev').disabled = i <= 0;
+  document.getElementById('bNext').disabled = i < 0 || i >= servers.length - 1;
+}
+document.getElementById('bPrev').onclick = () => shiftHost(selected, -1);
+document.getElementById('bNext').onclick = () => shiftHost(selected, 1);
+document.getElementById('bRemove').onclick = async () => {
+  const s = servers.find(x => x.host === selected) || {};
+  const label = s.name ? `${s.name} (${s.host})` : s.host;
+  if (!confirm(`${label} 을(를) 목록에서 삭제할까요?\n\n에이전트가 아직 실행 중이면 다음 전송 때 다시 나타납니다. 완전히 빼려면 그 서버에서 에이전트를 제거하세요.`)) return;
+  try { await fetch('api/unregister', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: selected }) }); } catch (e) {}
+  closeDetail(); refresh();
+};
 
 // ---------- 상세 팝업 ----------
 function growthTable(j) {
@@ -216,6 +270,7 @@ function openDetail(host) {
   $overlay.hidden = false;
   render();
   loadDetail();
+  updateActionButtons();
 }
 function closeDetail() {
   selected = null;
@@ -232,6 +287,7 @@ async function refresh() {
   try {
     const r = await fetch('api/servers');
     const j = await r.json();
+    if (dragging) return;              // 드래그 중에는 갱신 보류
     servers = j.servers;
     if (j.version) document.getElementById('ver').textContent = '수집기 v' + j.version;
     render();

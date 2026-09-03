@@ -105,7 +105,7 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
    **이름 설정**에서 "ERP 서버" 처럼 표시 이름을 넣으면 모니터링 화면에 그 이름이 크게, 호스트명은 작게 표시된다. 비우면 호스트명으로 돌아간다.
    바탕화면과 시작 메뉴에 "IMS Monitoring Agent" 아이콘이 생긴다. 실행하면 멈춰 있던 에이전트를 시작하고 트레이 아이콘을 띄운다.
 4. 설치 프로그램이 하는 일: `C:\Program Files\IMSMonitoringAgent` 에 파일 복사, 작업 스케줄러에 시스템 시작 시 자동 실행 등록(SYSTEM, 죽으면 1분 뒤 재시작), 로그온 시 트레이 아이콘 자동 실행, [프로그램 추가/제거] 등록.
-5. 제거: [설정 > 앱] 또는 [프로그램 추가/제거] 에서 "IMS Monitoring Agent" 제거. 로그는 `C:\ProgramData\IMSMonitoringAgent\agent.log`.
+5. 제거: [설정 > 앱] 또는 [프로그램 추가/제거] 에서 "IMS Monitoring Agent" 제거. 제거하면 수집기에 알려서 모니터링 화면에서도 카드가 사라진다. 로그는 `C:\ProgramData\IMSMonitoringAgent\agent.log`.
 
 재설치하면 기존 주소/토큰이 자동으로 채워진다. 설치 프로그램은 `agent/win/build.sh` 로 다시 빌드할 수 있다 (NSIS 필요). 아이콘은 `agent/win/make-icon.py` 가 생성한다.
 

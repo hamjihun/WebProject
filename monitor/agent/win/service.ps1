@@ -17,6 +17,21 @@ function Stop-AgentProcesses {
 }
 
 if ($Uninstall) {
+  # 수집기에 "이 서버를 목록에서 빼달라"고 알림 (실패해도 제거는 계속)
+  try {
+    $conf = @{}
+    $confPath = Join-Path $Dir "agent.conf"
+    if (Test-Path $confPath) { foreach ($line in Get-Content $confPath) { if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$') { $conf[$matches[1].ToUpper()] = $matches[2] } } }
+    if ($conf['URL']) {
+      $unregUrl = $conf['URL'] -replace '/api/metrics/?$', '/api/unregister'
+      if ($conf['SKIPCERT'] -eq '1') { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+      $body = @{ host = $env:COMPUTERNAME; token = $conf['TOKEN'] } | ConvertTo-Json -Compress
+      Invoke-RestMethod -Uri $unregUrl -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 5 | Out-Null
+      Write-Host "수집기 목록에서 제거 요청 완료: $unregUrl"
+    }
+  } catch { Write-Host "수집기 알림 실패 (무시): $($_.Exception.Message)" }
+
   foreach ($t in @($TaskName) + $LegacyTasks) {
     try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}
     Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
