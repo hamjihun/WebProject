@@ -73,7 +73,18 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
 
 **Apache**: `deploy/apache.conf` 내용을 VirtualHost 에 넣고 재시작. `proxy`, `proxy_http` 모듈 필요.
 
-**톰캣만 있고 앞에 웹서버가 없는 경우**: 톰캣은 프록시 기능이 약하므로 IMS 서버에 nginx 를 하나 앞에 두거나, 이 단계를 건너뛰고 수집기를 `-Public` 으로 설치해 8787 을 직접 연다. (임시 방편, 3단계 주소도 `:8787` 로)
+**IMS 가 자체 포트로 직접 뜨는 애플리케이션인 경우** (예: `http://192.168.0.9:15137/` 처럼 IIS/nginx 없이 앱이 포트를 여는 구조)
+프록시를 넣으려면 IMS 코드를 고쳐야 하므로, 1차는 수집기를 **IMS 옆 포트**로 직접 연다. IMS 가 이미 비표준 포트를 쓰고 있으니 하나 더 여는 것은 같은 관리 방식이다.
+
+1. 1단계 설치를 `-Public -Port 15138` 로 한다 (IMS 포트 + 1). 방화벽 규칙이 자동 추가된다.
+   ```
+   .\deploy\install-collector-windows.ps1 -Public -Port 15138 -Token 정한토큰
+   ```
+2. 이후 단계의 주소는 `http://192.168.0.9:15138/...` 이 된다.
+   - 에이전트: `-Url http://192.168.0.9:15138/api/metrics`
+   - 확인: `http://192.168.0.9:15138/api/health`
+   - IMS 메뉴 iframe: `http://192.168.0.9:15138/?embed=1&theme=light`
+3. 나중에 IMS 앱에 `/monitor/` 프록시 라우트를 추가하면 (Express, Spring, ASP.NET 모두 몇 줄) 15138 을 닫고 한 포트로 합칠 수 있다.
 
 확인: 다른 PC 브라우저에서 `http://IMS주소/monitor/` 를 열면 대시보드가 뜬다. `http://IMS주소/monitor/api/health` 는 `{"ok":true,...}` 를 보여준다.
 
