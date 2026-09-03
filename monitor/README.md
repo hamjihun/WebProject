@@ -17,6 +17,8 @@
 | `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
 | `agent/agent.sh` | Linux 에이전트 (bash + curl) | 각 Linux 서버 |
 | `agent/agent.ps1` | Windows 에이전트 (PowerShell 5.1+) | 각 Windows 서버 |
+| `agent/install-linux.sh` | Linux 에이전트를 systemd 서비스로 등록 | 각 Linux 서버 |
+| `agent/install-windows.ps1` | Windows 에이전트를 작업 스케줄러에 등록 | 각 Windows 서버 |
 | `agent/simulate.js` | 서버 없이 화면 확인용 가짜 데이터 전송기 | 내 PC |
 
 ## 1. 내 PC에서 수집기 실행
@@ -64,10 +66,12 @@ chmod +x /opt/agent.sh
 /opt/agent.sh http://192.168.0.10:8787/api/metrics
 ```
 
-동작이 확인되면 백그라운드로 두거나 systemd 서비스로 등록합니다.
+동작이 확인되면 설치 스크립트로 systemd 서비스 등록 (부팅 시 자동 시작, 죽으면 재시작):
 
 ```
-nohup /opt/agent.sh http://192.168.0.10:8787/api/metrics > /var/log/monitor-agent.log 2>&1 &
+sudo ./install-linux.sh http://192.168.0.10:8787/api/metrics
+journalctl -u monitor-agent -f        # 로그 확인
+sudo ./install-linux.sh --uninstall   # 제거
 ```
 
 ### Windows
@@ -79,11 +83,14 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\agent.ps1 -Url http://192.168.0.10:8787/api/metrics
 ```
 
-상시 실행은 작업 스케줄러에 "시스템 시작 시" 트리거로 등록하면 됩니다.
+동작이 확인되면 설치 스크립트로 작업 스케줄러에 등록 (관리자 PowerShell, `agent.ps1` 과 같은 폴더에서):
 
 ```
-powershell.exe -ExecutionPolicy Bypass -File C:\monitor\agent.ps1 -Url http://192.168.0.10:8787/api/metrics
+.\install-windows.ps1 -Url http://192.168.0.10:8787/api/metrics
+.\install-windows.ps1 -Uninstall     # 제거
 ```
+
+작업 스케줄러에 `ServerMonitorAgent` 이름으로 등록되며 시스템 시작 시 SYSTEM 계정으로 실행됩니다.
 
 두 에이전트 모두 `-Interval` / `INTERVAL` (초), `-Token` / `TOKEN` 옵션을 지원합니다.
 
