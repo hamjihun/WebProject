@@ -1,0 +1,125 @@
+# 서버 모니터 (1단계: 내 PC에서 보기)
+
+각 서버에서 CPU / 메모리 / 디스크 / 네트워크 정보를 읽어 **내 PC로 전송**하고,
+브라우저에서 확인하는 최소 구성입니다. IMS 연동 전 검증용이며 외부 패키지 설치가 필요 없습니다.
+
+```
+[서버 A] agent.sh  ─┐
+[서버 B] agent.ps1 ─┼─ HTTP POST ─▶ [내 PC] node server.js (:8787) ─▶ 브라우저 http://localhost:8787
+[서버 C] ...       ─┘
+```
+
+## 구성 파일
+
+| 파일 | 역할 | 실행 위치 |
+|---|---|---|
+| `server.js` | 수집기. 데이터를 받아 메모리에 보관하고 화면을 제공 | 내 PC |
+| `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
+| `agent/agent.sh` | Linux 에이전트 (bash + curl) | 각 Linux 서버 |
+| `agent/agent.ps1` | Windows 에이전트 (PowerShell 5.1+) | 각 Windows 서버 |
+| `agent/simulate.js` | 서버 없이 화면 확인용 가짜 데이터 전송기 | 내 PC |
+
+## 1. 내 PC에서 수집기 실행
+
+Node.js 18 이상이 설치되어 있어야 합니다. (https://nodejs.org)
+
+```
+cd monitor
+node server.js
+```
+
+브라우저에서 http://localhost:8787 을 엽니다.
+아직 서버가 없다면 다른 터미널에서 가짜 데이터를 보내 화면을 확인할 수 있습니다.
+
+```
+node agent/simulate.js
+```
+
+옵션은 환경 변수로 줍니다.
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `PORT` | 8787 | 수신 포트 |
+| `TOKEN` | (없음) | 설정하면 에이전트도 같은 값을 보내야 수신 |
+| `HISTORY` | 720 | 서버당 보관 포인트 수 (5초 간격 = 1시간) |
+| `OFFLINE_AFTER` | 90 | 이 시간(초) 동안 데이터가 없으면 오프라인 표시 |
+| `LOG_FILE` | (없음) | 지정하면 수신 데이터를 JSON Lines 파일로도 기록 |
+
+예: `set TOKEN=abc123 && node server.js` (Windows CMD) / `TOKEN=abc123 node server.js` (Linux)
+
+**내 PC 방화벽**에서 8787 포트 인바운드를 허용해야 서버에서 접속할 수 있습니다.
+Windows: 관리자 PowerShell 에서
+`New-NetFirewallRule -DisplayName "ServerMonitor" -Direction Inbound -Protocol TCP -LocalPort 8787 -Action Allow`
+
+## 2. 각 서버에 에이전트 실행
+
+내 PC의 IP가 `192.168.0.10` 이라고 가정합니다. (`ipconfig` / `ip a` 로 확인)
+
+### Linux
+
+```
+scp agent/agent.sh user@server:/opt/
+ssh user@server
+chmod +x /opt/agent.sh
+/opt/agent.sh http://192.168.0.10:8787/api/metrics
+```
+
+동작이 확인되면 백그라운드로 두거나 systemd 서비스로 등록합니다.
+
+```
+nohup /opt/agent.sh http://192.168.0.10:8787/api/metrics > /var/log/monitor-agent.log 2>&1 &
+```
+
+### Windows
+
+에이전트 파일을 서버에 복사한 뒤 PowerShell 에서:
+
+```
+Set-ExecutionPolicy -Scope Process Bypass
+.\agent.ps1 -Url http://192.168.0.10:8787/api/metrics
+```
+
+상시 실행은 작업 스케줄러에 "시스템 시작 시" 트리거로 등록하면 됩니다.
+
+```
+powershell.exe -ExecutionPolicy Bypass -File C:\monitor\agent.ps1 -Url http://192.168.0.10:8787/api/metrics
+```
+
+두 에이전트 모두 `-Interval` / `INTERVAL` (초), `-Token` / `TOKEN` 옵션을 지원합니다.
+
+## 3. 화면 설명
+
+- 서버별 카드에 CPU, 메모리, 디스크 사용률이 표시됩니다. 75% 이상 노랑, 90% 이상 빨강.
+- 90초 동안 데이터가 없으면 카드가 흐려지고 "오프라인"으로 표시됩니다.
+- 카드를 클릭하면 아래에 최근 CPU / 메모리 추이 그래프가 나타납니다.
+- 5초마다 자동 갱신됩니다.
+
+## 4. 데이터 형식 (IMS 연동 시 참고)
+
+에이전트가 보내는 JSON:
+
+```json
+{
+  "host": "ERP-DB01", "os": "Windows Server 2019", "token": "",
+  "cpu": 35.2,
+  "mem_total": 68719476736, "mem_used": 34359738368,
+  "uptime": 1036800, "net_rx": 120000, "net_tx": 45000,
+  "disks": [ { "mount": "C:", "total": 214748364800, "used": 128849018880 } ]
+}
+```
+
+수집기가 제공하는 API:
+
+| 경로 | 설명 |
+|---|---|
+| `POST /api/metrics` | 에이전트 수신 |
+| `GET /api/servers` | 전체 서버 최신 상태 |
+| `GET /api/history?host=이름` | 해당 서버의 CPU/메모리 추이 |
+
+나중에 IMS에 붙일 때는 IMS 쪽에서 `GET /api/servers` 를 호출해 그리거나,
+에이전트의 전송 주소만 IMS의 API로 바꾸면 됩니다.
+
+## 알아둘 점
+
+- 데이터는 수집기 메모리에만 있으므로 `server.js` 를 재시작하면 이력이 사라집니다. 보관이 필요하면 `LOG_FILE` 을 지정하세요.
+- 사내망 전용입니다. 인터넷에 노출하지 마시고, 여러 사람이 쓰기 시작하면 `TOKEN` 을 설정하세요.

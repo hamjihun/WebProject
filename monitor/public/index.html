@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서버 모니터</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:14px 20px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; }
+  header .sum { color:var(--muted); font-size:13px; }
+  header .sum b { color:var(--text); }
+  main { padding:16px 20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; cursor:pointer; transition:border-color .15s; }
+  .card:hover, .card.sel { border-color:var(--accent); }
+  .card.off { opacity:.55; }
+  .card .top { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--ok); flex:none; }
+  .dot.off { background:var(--bad); }
+  .host { font-weight:700; font-size:15px; }
+  .ip { color:var(--muted); font-size:12px; margin-left:auto; }
+  .row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:13px; }
+  .row .lbl { width:52px; color:var(--muted); flex:none; }
+  .bar { flex:1; height:10px; background:#0b1220; border-radius:5px; overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--ok); border-radius:5px; transition:width .4s; }
+  .bar > i.w { background:var(--warn); } .bar > i.b { background:var(--bad); }
+  .val { width:132px; text-align:right; font-variant-numeric:tabular-nums; flex:none; }
+  .meta { color:var(--muted); font-size:12px; margin-top:8px; display:flex; justify-content:space-between; }
+  #detail { grid-column:1/-1; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; display:none; }
+  #detail h2 { margin:0 0 8px; font-size:15px; }
+  #detail canvas { width:100%; height:220px; display:block; }
+  .legend { font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .legend span { display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 12px; vertical-align:middle; }
+  .empty { grid-column:1/-1; color:var(--muted); text-align:center; padding:60px 0; line-height:1.8; }
+  .empty code { color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>서버 모니터</h1>
+  <div class="sum" id="sum">연결 중…</div>
+</header>
+<main id="main"></main>
+
+<script>
+const $main = document.getElementById('main');
+const $sum = document.getElementById('sum');
+let selected = null;
+
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const u = ['B','KB','MB','GB','TB']; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return (i >= 3 ? b.toFixed(1) : Math.round(b)) + ' ' + u[i];
+}
+function fmtUptime(s) {
+  s = Math.floor(s || 0);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}일 ${h}시간` : h ? `${h}시간 ${m}분` : `${m}분`;
+}
+function level(p) { return p >= 90 ? 'b' : p >= 75 ? 'w' : ''; }
+function bar(label, pct, text) {
+  pct = Math.max(0, Math.min(100, pct || 0));
+  return `<div class="row"><span class="lbl">${label}</span><div class="bar"><i class="${level(pct)}" style="width:${pct}%"></i></div><span class="val">${text}</span></div>`;
+}
+
+function render(servers) {
+  const online = servers.filter(s => s.online).length;
+  $sum.innerHTML = `총 <b>${servers.length}</b>대 · 온라인 <b>${online}</b> · 오프라인 <b>${servers.length - online}</b> · ${new Date().toLocaleTimeString('ko-KR')}`;
+
+  if (!servers.length) {
+    $main.innerHTML = `<div class="empty">아직 수신된 데이터가 없습니다.<br>서버에서 에이전트를 실행하면 여기에 카드가 나타납니다.<br>테스트: <code>node agent/simulate.js</code></div>`;
+    return;
+  }
+
+  let html = '';
+  for (const s of servers) {
+    const disks = (s.disks || []).map(d => bar(d.mount, d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`)).join('');
+    html += `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${s.host}">
+      <div class="top"><span class="dot ${s.online ? '' : 'off'}"></span><span class="host">${s.host}</span><span class="ip">${s.ip || ''}</span></div>
+      ${bar('CPU', s.cpu, `${s.cpu}%`)}
+      ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
+      ${disks}
+      <div class="meta"><span>${s.os || ''}</span><span>가동 ${fmtUptime(s.uptime)}</span><span>${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
+    </div>`;
+  }
+  html += `<div id="detail"><h2 id="dtitle"></h2><div class="legend"><span style="background:#38bdf8"></span>CPU %<span style="background:#a78bfa"></span>메모리 %</div><canvas id="chart"></canvas></div>`;
+  $main.innerHTML = html;
+
+  for (const c of $main.querySelectorAll('.card')) c.onclick = () => { selected = c.dataset.host; refresh(); };
+  if (selected) loadHistory(selected);
+}
+
+function drawChart(canvas, hist) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+  const padL = 36, padR = 10, padT = 10, padB = 22;
+  const w = W - padL - padR, h = H - padT - padB;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = '#334155'; ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+  for (const p of [0, 25, 50, 75, 100]) {
+    const y = padT + h - h * p / 100;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(p + '%', padL - 6, y + 4);
+  }
+  if (hist.length < 2) return;
+  const t0 = hist[0].ts, t1 = hist[hist.length - 1].ts, span = Math.max(1, t1 - t0);
+  const x = t => padL + w * (t - t0) / span;
+  const y = v => padT + h - h * Math.max(0, Math.min(100, v || 0)) / 100;
+  const line = (key, color) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.beginPath();
+    hist.forEach((p, i) => i ? ctx.lineTo(x(p.ts), y(p[key])) : ctx.moveTo(x(p.ts), y(p[key])));
+    ctx.stroke();
+  };
+  line('cpu', '#38bdf8'); line('mem_pct', '#a78bfa');
+  ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'left';
+  ctx.fillText(new Date(t0).toLocaleTimeString('ko-KR'), padL, H - 6);
+  ctx.textAlign = 'right';
+  ctx.fillText(new Date(t1).toLocaleTimeString('ko-KR'), W - padR, H - 6);
+}
+
+async function loadHistory(host) {
+  const d = document.getElementById('detail'); if (!d) return;
+  try {
+    const r = await fetch('/api/history?host=' + encodeURIComponent(host));
+    if (!r.ok) return;
+    const j = await r.json();
+    d.style.display = 'block';
+    document.getElementById('dtitle').textContent = `${host} · 최근 ${j.history.length}개 포인트`;
+    drawChart(document.getElementById('chart'), j.history);
+  } catch (e) {}
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/api/servers');
+    const j = await r.json();
+    render(j.servers);
+  } catch (e) {
+    $sum.textContent = '수집 서버에 연결할 수 없습니다: ' + e.message;
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
