@@ -4,6 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
+const VERSION = '1.3.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -208,8 +209,8 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), servers: serversView() });
-  if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, servers: store.size, uptime: Math.round(process.uptime()) });
+  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView() });
+  if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, servers: store.size, uptime: Math.round(process.uptime()) });
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
     const host = url.searchParams.get('host') || '';
@@ -229,8 +230,12 @@ loadState();
 if (STATE_FILE) setInterval(() => saveState(false), SAVE_EVERY).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); process.exit(0); });
 
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') { console.error(`포트 ${PORT} 가 이미 사용 중입니다. 예전 수집기가 아직 실행 중일 수 있습니다. (설치 스크립트를 다시 실행하거나 node.exe 를 종료하세요)`); process.exit(2); }
+  throw e;
+});
 server.listen(PORT, BIND, () => {
-  console.log(`서버 모니터 수집기 실행 중: http://${BIND}:${PORT}/` + (TOKEN ? ' (토큰 사용)' : ' (토큰 없음)'));
+  console.log(`서버 모니터 수집기 v${VERSION} 실행 중: http://${BIND}:${PORT}/` + (TOKEN ? ' (토큰 사용)' : ' (토큰 없음)'));
   if (BIND === '127.0.0.1' || BIND === 'localhost') {
     console.log('내부 전용으로 실행 중입니다. IMS 웹서버 프록시(/monitor/)를 통해서만 접근됩니다.');
     console.log('에이전트 전송 주소: http://<IMS 주소>/monitor/api/metrics');

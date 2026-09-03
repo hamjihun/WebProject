@@ -42,7 +42,12 @@ $trigger   = New-ScheduledTaskTrigger -AtStartup
 $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
+# 기존 수집기 종료: 작업 중지 + 이 폴더의 server.js 를 실행 중인 node.exe 종료 (포트를 넘겨받기 위해)
+try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'server\.js' } |
+  ForEach-Object { Write-Host "기존 수집기 종료 (PID $($_.ProcessId))"; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 2
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "서버 모니터 수집기 (:$Port)" | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
@@ -54,7 +59,7 @@ if ($Public -and -not (Get-NetFirewallRule -DisplayName "ServerMonitor" -ErrorAc
 Start-Sleep -Seconds 3
 try {
   $h = Invoke-RestMethod "http://127.0.0.1:$Port/api/health" -TimeoutSec 5
-  Write-Host "설치 완료: 수집기 응답 확인 (서버 $($h.servers)대 등록됨)"
+  Write-Host "설치 완료: 수집기 v$($h.version) 응답 확인 (서버 $($h.servers)대 등록됨)"
 } catch {
   Write-Warning "작업은 등록됐지만 아직 응답이 없습니다. 로그 확인: $Root\collector.log"
 }
