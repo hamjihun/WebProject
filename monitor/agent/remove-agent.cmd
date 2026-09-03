@@ -1,4 +1,4 @@
 @echo off
-REM ì„œë²„ ëª¨ë‹ˆí„° ì—ì´ì „íŠ¸ ì œê±° (ë”ë¸”í´ë¦­)
+REM ¼­¹ö ¸ğ´ÏÅÍ ¿¡ÀÌÀüÆ® Á¦°Å (´õºíÅ¬¸¯)
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -NoExit -File \"%~dp0install-windows.ps1\" -Uninstall'"

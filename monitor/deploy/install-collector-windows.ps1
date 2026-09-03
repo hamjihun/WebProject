@@ -1,4 +1,4 @@
-# IMS 서버(Windows)에 수집기(server.js)를 작업 스케줄러에 등록해서 부팅 시 자동 실행합니다.
+﻿# IMS 서버(Windows)에 수집기(server.js)를 작업 스케줄러에 등록해서 부팅 시 자동 실행합니다.
 # 관리자 PowerShell 에서 monitor 폴더를 원하는 위치(예: C:\ims\monitor)에 둔 뒤 실행:
 #   Set-ExecutionPolicy -Scope Process Bypass
 #   .\deploy\install-collector-windows.ps1

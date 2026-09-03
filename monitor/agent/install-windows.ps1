@@ -1,4 +1,4 @@
-# Windows 서버: 에이전트를 C:\monitor 에 복사하고 "작업 스케줄러"에 시스템 시작 시 실행으로 등록합니다.
+﻿# Windows 서버: 에이전트를 C:\monitor 에 복사하고 "작업 스케줄러"에 시스템 시작 시 실행으로 등록합니다.
 # 관리자 PowerShell 에서 agent.ps1 과 같은 폴더에 두고 실행:
 #   Set-ExecutionPolicy -Scope Process Bypass
 #   .\install-windows.ps1 -Url http://ims.회사도메인/monitor/api/metrics -Token 비밀값
