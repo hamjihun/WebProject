@@ -29,6 +29,8 @@ if ($Uninstall) {
 
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
+  # 트레이(일반 사용자)가 표시 이름을 저장할 수 있도록 Users 그룹에 수정 권한 (S-1-5-32-545 = Users)
+  try { & icacls.exe "$DataDir" /grant "*S-1-5-32-545:(OI)(CI)M" /Q | Out-Null } catch {}
   # 이전 이름/수동 설치로 등록된 것이 있으면 정리
   foreach ($t in @($TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   foreach ($n in $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }

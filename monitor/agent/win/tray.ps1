@@ -11,6 +11,25 @@ $TaskName = "IMSMonitoringAgent"
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
+$DisplayFile = Join-Path $DataDir "display.conf"
+
+function Get-DisplayName {
+  try { if (Test-Path $DisplayFile) { foreach ($l in Get-Content $DisplayFile -Encoding UTF8) { if ($l -match '^\s*NAME\s*=\s*(.*?)\s*$') { return $matches[1] } } } } catch {}
+  return ""
+}
+function Show-NameDialog([string]$current) {
+  $f = New-Object System.Windows.Forms.Form
+  $f.Text = "IMS Monitoring Agent - 표시 이름"
+  $f.Size = New-Object System.Drawing.Size(380, 170)
+  $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.TopMost = $true
+  $lb = New-Object System.Windows.Forms.Label; $lb.Text = "모니터링 화면에 표시할 이름 (예: ERP 서버, 생산 MES, 파일서버)"; $lb.AutoSize = $true; $lb.Location = New-Object System.Drawing.Point(12, 14)
+  $tb = New-Object System.Windows.Forms.TextBox; $tb.Location = New-Object System.Drawing.Point(12, 40); $tb.Size = New-Object System.Drawing.Size(340, 24); $tb.Text = $current; $tb.MaxLength = 40
+  $ok = New-Object System.Windows.Forms.Button; $ok.Text = "저장"; $ok.Location = New-Object System.Drawing.Point(196, 84); $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
+  $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = "취소"; $cancel.Location = New-Object System.Drawing.Point(277, 84); $cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+  $f.Controls.AddRange(@($lb, $tb, $ok, $cancel)); $f.AcceptButton = $ok; $f.CancelButton = $cancel
+  if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { return $tb.Text.Trim() }
+  return $null
+}
 
 $dashUrl = ""
 $confPath = Join-Path $Dir "agent.conf"
@@ -94,7 +113,23 @@ function Invoke-TaskCommand([string]$verb) {
 # ---- 메뉴 ----
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $mStatus = $menu.Items.Add("상태 보기")
-$mStatus.add_Click({ [System.Windows.Forms.MessageBox]::Show("호스트: $env:COMPUTERNAME`n상태: $script:lastText`n`n로그: $LogFile", "IMS Monitoring Agent") | Out-Null })
+$mStatus.add_Click({
+  $nm = Get-DisplayName; if (-not $nm) { $nm = "(설정 안 함)" }
+  [System.Windows.Forms.MessageBox]::Show("표시 이름: $nm`n호스트: $env:COMPUTERNAME`n상태: $script:lastText`n`n로그: $LogFile", "IMS Monitoring Agent") | Out-Null
+})
+$mName = $menu.Items.Add("이름 설정...")
+$mName.add_Click({
+  $new = Show-NameDialog (Get-DisplayName)
+  if ($new -ne $null) {
+    try {
+      if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Force -Path $DataDir | Out-Null }
+      Set-Content -Path $DisplayFile -Value "NAME=$new" -Encoding UTF8
+      $ni.ShowBalloonTip(3000, "IMS Monitoring Agent", $(if ($new) { "표시 이름을 '$new' 으로 저장했습니다. 잠시 후 화면에 반영됩니다." } else { "표시 이름을 지웠습니다. 호스트명으로 표시됩니다." }), [System.Windows.Forms.ToolTipIcon]::Info)
+    } catch {
+      [System.Windows.Forms.MessageBox]::Show("이름을 저장하지 못했습니다: $($_.Exception.Message)", "IMS Monitoring Agent") | Out-Null
+    }
+  }
+})
 if ($dashUrl) { $mDash = $menu.Items.Add("모니터링 화면 열기"); $mDash.add_Click({ Start-Process $dashUrl }) }
 $mLog = $menu.Items.Add("로그 보기")
 $mLog.add_Click({ if (Test-Path $LogFile) { Start-Process notepad.exe $LogFile } else { [System.Windows.Forms.MessageBox]::Show("아직 로그가 없습니다.", "IMS Monitoring Agent") | Out-Null } })

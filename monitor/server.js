@@ -82,6 +82,7 @@ function normalize(raw, remoteIp) {
   })) : [];
   return {
     host,
+    name: String(raw.name || '').trim().slice(0, 60),   // 트레이에서 설정한 표시 이름
     ip: remoteIp,
     os: String(raw.os || ''),
     ts: Date.now(),
@@ -164,7 +165,7 @@ function serversView() {
   for (const [host, e] of store) {
     list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length });
   }
-  list.sort((a, b) => a.host.localeCompare(b.host));
+  list.sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host, 'ko'));
   return list;
 }
 

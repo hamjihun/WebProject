@@ -51,6 +51,31 @@ $os = Get-CimInstance Win32_OperatingSystem
 $osName = "$($os.Caption) $($os.Version)"
 Log "에이전트 시작: $HostName -> $Url (간격 ${Interval}초)"
 
+# 가동 시간 기준: Windows 가 실제로 켜진 시점.
+# 빠른 시작(Fast Startup)으로 종료/시작하면 LastBootUpTime 이 갱신되지 않으므로
+# 시스템 로그의 Kernel-Boot(ID 27) 이벤트(모든 시작마다 기록됨)와 비교해 더 최근 값을 쓴다.
+function Get-StartTime {
+  $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+  try {
+    $ev = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Boot'; Id = 27 } -MaxEvents 1 -ErrorAction Stop
+    if ($ev -and $ev.TimeCreated -gt $boot) { $boot = $ev.TimeCreated }
+  } catch {}
+  return $boot
+}
+$startTime = Get-StartTime
+$startChecked = Get-Date
+
+# 표시 이름: 트레이 메뉴 "이름 설정" 이 %ProgramData%\IMSMonitoringAgent\display.conf 에 저장 (NAME=...)
+$DisplayFile = Join-Path $DataDir "display.conf"
+function Get-DisplayName {
+  try {
+    if (Test-Path $DisplayFile) {
+      foreach ($line in Get-Content $DisplayFile -Encoding UTF8) { if ($line -match '^\s*NAME\s*=\s*(.*?)\s*$') { return $matches[1] } }
+    }
+  } catch {}
+  return ""
+}
+
 function Get-NetBytes {
   $s = Get-CimInstance Win32_PerfRawData_Tcpip_NetworkInterface | Where-Object { $_.Name -notmatch 'Loopback|isatap|Teredo' }
   [pscustomobject]@{ rx = ($s | Measure-Object BytesReceivedPersec -Sum).Sum; tx = ($s | Measure-Object BytesSentPersec -Sum).Sum }
@@ -71,7 +96,8 @@ while ($true) {
     $memTotal = [int64]$os.TotalVisibleMemorySize * 1024
     $memUsed = $memTotal - ([int64]$os.FreePhysicalMemory * 1024)
     $memPct = [int][math]::Round($memUsed * 100 / $memTotal)
-    $uptime = [int]((Get-Date) - $os.LastBootUpTime).TotalSeconds
+    if (((Get-Date) - $startChecked).TotalMinutes -ge 10) { $startTime = Get-StartTime; $startChecked = Get-Date }
+    $uptime = [int]((Get-Date) - $startTime).TotalSeconds
 
     $now = Get-Date
     $dt = [math]::Max(1, ($now - $prevT).TotalSeconds)
@@ -84,7 +110,7 @@ while ($true) {
       @{ mount = $_.DeviceID; total = [int64]$_.Size; used = [int64]$_.Size - [int64]$_.FreeSpace }
     }
     $body = @{
-      host = $HostName; os = $osName; token = $Token
+      host = $HostName; name = (Get-DisplayName); os = $osName; token = $Token
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
