@@ -10,6 +10,8 @@
   :root[data-theme="light"] { --bg:#f1f5f9; --card:#ffffff; --line:#cbd5e1; --text:#0f172a; --muted:#64748b; }
   :root[data-theme="light"] .bar { background:#e2e8f0; }
   :root[data-theme="light"] .card { box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  :root[data-theme="light"] .card.off { background:#fee2e2; }
+  :root[data-theme="light"] .up { color:#dc2626; } :root[data-theme="light"] .down { color:#16a34a; }
   body.embed header { display:none; }
   body.embed main { padding:10px; }
   * { box-sizing:border-box; }
@@ -21,7 +23,19 @@
   main { padding:16px 20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; cursor:pointer; transition:border-color .15s; }
   .card:hover, .card.sel { border-color:var(--accent); }
-  .card.off { opacity:.55; }
+  .card.off { border-color:var(--bad); background:rgba(239,68,68,.12); }
+  .card.off .bar > i { background:#7f1d1d; }
+  .badge { font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; background:var(--bad); color:#fff; }
+  .growth { font-size:11px; color:var(--muted); margin:-2px 0 6px 60px; }
+  .growth b { color:var(--text); font-weight:600; }
+  .growth .bad { color:var(--bad); font-weight:700; }
+  table.g { width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
+  table.g th, table.g td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  table.g th:first-child, table.g td:first-child { text-align:left; }
+  table.g th { color:var(--muted); font-weight:600; }
+  .up { color:#f87171; } .down { color:#4ade80; }
+  .note { font-size:12px; color:var(--muted); margin-top:6px; }
+  .dim { color:var(--muted); }
   .card .top { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
   .dot { width:10px; height:10px; border-radius:50%; background:var(--ok); flex:none; }
   .dot.off { background:var(--bad); }
@@ -71,6 +85,23 @@ function fmtUptime(s) {
   return d ? `${d}일 ${h}시간` : h ? `${h}시간 ${m}분` : `${m}분`;
 }
 function level(p) { return p >= 90 ? 'b' : p >= 75 ? 'w' : ''; }
+function fmtDelta(b, cls) {
+  if (b == null) return '<span class="dim">-</span>';
+  const sign = b > 0 ? '+' : b < 0 ? '-' : '';
+  const c = cls === false ? '' : (b > 0 ? 'up' : b < 0 ? 'down' : '');
+  return `<span class="${c}">${sign}${fmtBytes(Math.abs(b))}</span>`;
+}
+function fmtLeft(g) {
+  if (g.days_left == null) return g.rate_day != null && g.rate_day <= 0 ? '증가 없음' : '-';
+  if (g.days_left > 3650) return '10년 이상';
+  return g.days_left < 30 ? `<span class="bad">약 ${g.days_left}일 후 가득</span>` : `약 ${g.days_left}일 후 가득`;
+}
+function growthLine(g) {
+  if (!g) return '';
+  const parts = [`전일 <b>${fmtDelta(g.day, false)}</b>`, `7일 <b>${fmtDelta(g.week, false)}</b>`, `30일 <b>${fmtDelta(g.month, false)}</b>`];
+  if (g.days_left != null && g.days_left < 90) parts.push(fmtLeft(g));
+  return `<div class="growth">${parts.join(' · ')}</div>`;
+}
 function bar(label, pct, text) {
   pct = Math.max(0, Math.min(100, pct || 0));
   return `<div class="row"><span class="lbl">${label}</span><div class="bar"><i class="${level(pct)}" style="width:${pct}%"></i></div><span class="val">${text}</span></div>`;
@@ -87,16 +118,17 @@ function render(servers) {
 
   let html = '';
   for (const s of servers) {
-    const disks = (s.disks || []).map(d => bar(d.mount, d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`)).join('');
+    const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
+    const disks = (s.disks || []).map(d => bar(d.mount, d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`) + growthLine(gmap[d.mount])).join('');
     html += `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${s.host}">
-      <div class="top"><span class="dot ${s.online ? '' : 'off'}"></span><span class="host">${s.host}</span><span class="ip">${s.ip || ''}</span></div>
+      <div class="top"><span class="dot ${s.online ? '' : 'off'}"></span><span class="host">${s.host}</span>${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${s.ip || ''}</span></div>
       ${bar('CPU', s.cpu, `${s.cpu}%`)}
       ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
       ${disks}
       <div class="meta"><span>${s.os || ''}</span><span>가동 ${fmtUptime(s.uptime)}</span><span>${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
     </div>`;
   }
-  html += `<div id="detail"><h2 id="dtitle"></h2><div class="legend"><span style="background:#38bdf8"></span>CPU %<span style="background:#a78bfa"></span>메모리 %</div><canvas id="chart"></canvas></div>`;
+  html += `<div id="detail"><h2 id="dtitle"></h2><div class="legend"><span style="background:#38bdf8"></span>CPU %<span style="background:#a78bfa"></span>메모리 %</div><canvas id="chart"></canvas><div id="gtable"></div></div>`;
   $main.innerHTML = html;
 
   for (const c of $main.querySelectorAll('.card')) c.onclick = () => { selected = c.dataset.host; refresh(); };
@@ -142,6 +174,16 @@ async function loadHistory(host) {
     d.style.display = 'block';
     document.getElementById('dtitle').textContent = `${host} · 최근 ${j.history.length}개 포인트`;
     drawChart(document.getElementById('chart'), j.history);
+    const rows = (j.growth || []).map(g => `<tr><td>${g.mount}</td><td>${fmtBytes(g.used)} / ${fmtBytes(g.total)}</td>
+      <td>${fmtDelta(g.day)}${g.day_days > 1 ? ` <span class="dim">(${g.day_days}일)</span>` : ''}</td>
+      <td>${fmtDelta(g.week)}${g.week_days && g.week_days !== 7 ? ` <span class="dim">(${g.week_days}일)</span>` : ''}</td>
+      <td>${fmtDelta(g.month)}${g.month_days && g.month_days !== 30 ? ` <span class="dim">(${g.month_days}일)</span>` : ''}</td>
+      <td>${g.rate_day != null ? fmtDelta(Math.round(g.rate_day)) + '/일' : '-'}</td><td>${fmtLeft(g)}</td></tr>`).join('');
+    const days = (j.daily || []).length;
+    document.getElementById('gtable').innerHTML = rows
+      ? `<table class="g"><thead><tr><th>드라이브</th><th>사용 / 전체</th><th>전일 대비</th><th>7일 대비</th><th>30일 대비</th><th>하루 평균</th><th>예상</th></tr></thead><tbody>${rows}</tbody></table>
+         <div class="note">디스크 증가량은 수집 시작일부터 하루 1개씩 쌓입니다. 현재 ${days}일치. 7일·30일 값은 데이터가 쌓이면 자동으로 채워지고, 부족하면 가능한 가장 오래된 날짜 기준으로 (n일) 표시합니다.</div>`
+      : '';
   } catch (e) {}
 }
 

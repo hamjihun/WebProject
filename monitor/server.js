@@ -16,6 +16,7 @@ const OFFLINE_AFTER = Number(process.env.OFFLINE_AFTER || 90) * 1000; // 이 시
 const LOG_FILE = process.env.LOG_FILE || '';            // 지정하면 JSON Lines 로 파일에도 기록
 const STATE_FILE = process.env.STATE_FILE === '' ? '' : (process.env.STATE_FILE || path.join(__dirname, 'data', 'state.json')); // 재시작 대비 스냅샷
 const SAVE_EVERY = Number(process.env.SAVE_EVERY || 30) * 1000;
+const DAILY_KEEP = Number(process.env.DAILY_KEEP || 400);     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ] } }
 const store = new Map();
@@ -25,7 +26,7 @@ function loadState() {
   if (!STATE_FILE) return;
   try {
     const obj = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    for (const [host, e] of Object.entries(obj)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY) });
+    for (const [host, e] of Object.entries(obj)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY), daily: e.daily || {} });
     console.log(`스냅샷 복원: ${store.size}대 (${STATE_FILE})`);
   } catch (e) { if (e.code !== 'ENOENT') console.warn('스냅샷 복원 실패:', e.message); }
 }
@@ -96,11 +97,60 @@ function normalize(raw, remoteIp) {
   };
 }
 
+// ---- 디스크 일별 스냅샷 / 증가량 ----
+function dayKey(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function daysBetween(k1, k2) { return Math.round((new Date(k2 + 'T00:00:00') - new Date(k1 + 'T00:00:00')) / 86400000); }
+
+function recordDaily(entry, m) {
+  if (!m.disks.length) return;
+  const disks = {};
+  for (const d of m.disks) if (d.mount) disks[d.mount] = { used: d.used, total: d.total };
+  entry.daily[dayKey(m.ts)] = { ts: m.ts, disks };            // 그날의 마지막 값이 남음
+  const keys = Object.keys(entry.daily);
+  if (keys.length > DAILY_KEEP) { keys.sort(); for (const k of keys.slice(0, keys.length - DAILY_KEEP)) delete entry.daily[k]; }
+}
+
+// 드라이브별 전일/7일/30일 대비 증가량과 예상 소진일
+function diskGrowth(entry) {
+  const daily = entry.daily || {};
+  const keys = Object.keys(daily).sort();
+  if (!keys.length) return [];
+  const todayKey = keys[keys.length - 1];
+  const today = daily[todayKey];
+  const before = (n) => {            // n일 전 이하로 가장 가까운 스냅샷
+    const t = new Date(today.ts); t.setDate(t.getDate() - n);
+    const target = dayKey(t.getTime());
+    let best = null;
+    for (const k of keys) { if (k <= target) best = k; else break; }
+    return best && best !== todayKey ? best : null;
+  };
+  const out = [];
+  for (const [mount, cur] of Object.entries(today.disks)) {
+    const g = { mount, used: cur.used, total: cur.total, day: null, week: null, month: null, rate_day: null, days_left: null };
+    for (const [name, n] of [['day', 1], ['week', 7], ['month', 30]]) {
+      const k = before(n);
+      if (k && daily[k].disks[mount]) { g[name] = cur.used - daily[k].disks[mount].used; g[name + '_days'] = daysBetween(k, todayKey); }
+    }
+    const basis = ['month', 'week', 'day'].find((b) => g[b] != null);
+    if (basis) {
+      g.rate_day = g[basis] / g[basis + '_days'];
+      g.basis_days = g[basis + '_days'];
+      if (g.rate_day > 0) g.days_left = Math.floor((cur.total - cur.used) / g.rate_day);
+    }
+    out.push(g);
+  }
+  return out;
+}
+
 function ingest(raw, remoteIp) {
   const m = normalize(raw, remoteIp);
   let entry = store.get(m.host);
-  if (!entry) { entry = { latest: null, history: [] }; store.set(m.host, entry); }
+  if (!entry) { entry = { latest: null, history: [], daily: {} }; store.set(m.host, entry); }
   entry.latest = m;
+  recordDaily(entry, m);
   entry.history.push({ ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx });
   if (entry.history.length > HISTORY) entry.history.splice(0, entry.history.length - HISTORY);
   dirty = true;
@@ -112,7 +162,7 @@ function serversView() {
   const now = Date.now();
   const list = [];
   for (const [host, e] of store) {
-    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000) });
+    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length });
   }
   list.sort((a, b) => a.host.localeCompare(b.host));
   return list;
@@ -161,7 +211,8 @@ const server = http.createServer(async (req, res) => {
     const host = url.searchParams.get('host') || '';
     const e = store.get(host);
     if (!e) return json(res, 404, { ok: false, error: 'unknown host' });
-    return json(res, 200, { host, history: e.history });
+    const daily = Object.keys(e.daily || {}).sort().map((k) => ({ date: k, disks: e.daily[k].disks }));
+    return json(res, 200, { host, history: e.history, daily, growth: diskGrowth(e) });
   }
 
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return serveStatic(res, 'index.html');

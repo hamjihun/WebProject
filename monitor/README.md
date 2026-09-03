@@ -18,7 +18,9 @@
 | `server.js` | 수집기. 데이터를 받아 메모리에 보관하고 화면을 제공 | 내 PC |
 | `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
 | `agent/agent.sh` | Linux 에이전트 (bash + curl) | 각 Linux 서버 |
-| `agent/agent.ps1` | Windows 에이전트 (PowerShell 5.1+) | 각 Windows 서버 |
+| `dist/ServerMonitorAgent-Setup.exe` | **Windows 에이전트 설치 프로그램** (프로그램 추가/제거 등록, 트레이 아이콘) | 각 Windows 서버 |
+| `agent/win/` | 설치 프로그램 소스 (agent.ps1, tray.ps1, service.ps1, installer.nsi). `build.sh` 로 빌드 | 개발 참고 |
+| `agent/agent.ps1` | Windows 에이전트 수동 실행용 (PowerShell 5.1+) | 각 Windows 서버 |
 | `agent/install-linux.sh` | Linux 에이전트를 systemd 서비스로 등록 | 각 Linux 서버 |
 | `agent/install-windows.ps1` | Windows 에이전트를 작업 스케줄러에 등록 | 각 Windows 서버 |
 | `agent/setup-agent.cmd`, `remove-agent.cmd` | 위 등록/제거를 더블클릭으로 실행 (URL/TOKEN 은 파일 안에서 수정) | 각 Windows 서버 |
@@ -107,7 +109,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 ## 3. 화면 설명
 
 - 서버별 카드에 CPU, 메모리, 디스크 사용률이 표시됩니다. 75% 이상 노랑, 90% 이상 빨강.
-- 90초 동안 데이터가 없으면 카드가 흐려지고 "오프라인"으로 표시됩니다.
+- 드라이브마다 **전일 / 7일 / 30일 대비 증가량**이 표시되고, 남은 용량이 90일 안에 소진될 것으로 예상되면 경고가 붙습니다. 카드를 클릭하면 드라이브별 상세 표(하루 평균 증가량, 예상 소진일)가 나옵니다. 일별 스냅샷은 수집 시작일부터 쌓이므로 7일·30일 값은 시간이 지나면서 채워집니다.
+- 90초 동안 데이터가 없으면 카드 전체가 **빨간색**으로 바뀌고 "오프라인" 배지가 붙습니다.
 - 카드를 클릭하면 아래에 최근 CPU / 메모리 추이 그래프가 나타납니다.
 - 5초마다 자동 갱신됩니다.
 
