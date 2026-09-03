@@ -7,6 +7,11 @@
 <link rel="icon" href="data:,">
 <style>
   :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#38bdf8; }
+  :root[data-theme="light"] { --bg:#f1f5f9; --card:#ffffff; --line:#cbd5e1; --text:#0f172a; --muted:#64748b; }
+  :root[data-theme="light"] .bar { background:#e2e8f0; }
+  :root[data-theme="light"] .card { box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  body.embed header { display:none; }
+  body.embed main { padding:10px; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; }
   header { display:flex; align-items:center; gap:16px; padding:14px 20px; border-bottom:1px solid var(--line); }
@@ -46,6 +51,10 @@
 <main id="main"></main>
 
 <script>
+const params = new URLSearchParams(location.search);
+if (params.get('embed') === '1') document.body.classList.add('embed');
+if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
+const REFRESH = Math.max(2, Number(params.get('refresh') || 5)) * 1000;
 const $main = document.getElementById('main');
 const $sum = document.getElementById('sum');
 let selected = null;
@@ -127,7 +136,7 @@ function drawChart(canvas, hist) {
 async function loadHistory(host) {
   const d = document.getElementById('detail'); if (!d) return;
   try {
-    const r = await fetch('/api/history?host=' + encodeURIComponent(host));
+    const r = await fetch('api/history?host=' + encodeURIComponent(host));
     if (!r.ok) return;
     const j = await r.json();
     d.style.display = 'block';
@@ -138,7 +147,7 @@ async function loadHistory(host) {
 
 async function refresh() {
   try {
-    const r = await fetch('/api/servers');
+    const r = await fetch('api/servers');
     const j = await r.json();
     render(j.servers);
   } catch (e) {
@@ -146,7 +155,7 @@ async function refresh() {
   }
 }
 refresh();
-setInterval(refresh, 5000);
+setInterval(refresh, REFRESH);
 </script>
 </body>
 </html>

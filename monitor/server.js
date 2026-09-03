@@ -13,9 +13,33 @@ const TOKEN = process.env.TOKEN || '';                 // 설정하면 에이전
 const HISTORY = Number(process.env.HISTORY || 720);     // 서버당 보관 포인트 수 (5초 간격이면 1시간)
 const OFFLINE_AFTER = Number(process.env.OFFLINE_AFTER || 90) * 1000; // 이 시간 동안 데이터 없으면 오프라인
 const LOG_FILE = process.env.LOG_FILE || '';            // 지정하면 JSON Lines 로 파일에도 기록
+const STATE_FILE = process.env.STATE_FILE === '' ? '' : (process.env.STATE_FILE || path.join(__dirname, 'data', 'state.json')); // 재시작 대비 스냅샷
+const SAVE_EVERY = Number(process.env.SAVE_EVERY || 30) * 1000;
 
 // { host: { latest: {...}, history: [ {...}, ... ] } }
 const store = new Map();
+
+// ---- 스냅샷 저장/복원 (재시작해도 이력 유지) ----
+function loadState() {
+  if (!STATE_FILE) return;
+  try {
+    const obj = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    for (const [host, e] of Object.entries(obj)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY) });
+    console.log(`스냅샷 복원: ${store.size}대 (${STATE_FILE})`);
+  } catch (e) { if (e.code !== 'ENOENT') console.warn('스냅샷 복원 실패:', e.message); }
+}
+let dirty = false;
+function saveState(sync) {
+  if (!STATE_FILE || !dirty) return;
+  dirty = false;
+  const obj = {}; for (const [h, e] of store) obj[h] = e;
+  const tmp = STATE_FILE + '.tmp';
+  try {
+    fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    if (sync) { fs.writeFileSync(tmp, JSON.stringify(obj)); fs.renameSync(tmp, STATE_FILE); return; }
+    fs.writeFile(tmp, JSON.stringify(obj), (err) => { if (!err) fs.rename(tmp, STATE_FILE, () => {}); });
+  } catch (e) { console.warn('스냅샷 저장 실패:', e.message); }
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -78,6 +102,7 @@ function ingest(raw, remoteIp) {
   entry.latest = m;
   entry.history.push({ ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx });
   if (entry.history.length > HISTORY) entry.history.splice(0, entry.history.length - HISTORY);
+  dirty = true;
   if (LOG_FILE) fs.appendFile(LOG_FILE, JSON.stringify(m) + '\n', () => {});
   return m;
 }
@@ -105,7 +130,9 @@ function serveStatic(res, file) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  const remoteIp = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  // 프록시(nginx/IIS/Apache) 뒤에 있으면 X-Real-IP / X-Forwarded-For 로 실제 에이전트 IP를 받음
+  const fwd = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const remoteIp = (fwd || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Token', 'Access-Control-Allow-Methods': 'POST, GET' });
@@ -127,6 +154,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), servers: serversView() });
+  if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, servers: store.size, uptime: Math.round(process.uptime()) });
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
     const host = url.searchParams.get('host') || '';
@@ -140,6 +168,10 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404); res.end('not found');
 });
+
+loadState();
+if (STATE_FILE) setInterval(() => saveState(false), SAVE_EVERY).unref();
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); process.exit(0); });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`서버 모니터 수집기 실행 중: http://0.0.0.0:${PORT}/`);

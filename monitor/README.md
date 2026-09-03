@@ -20,6 +20,9 @@
 | `agent/install-linux.sh` | Linux 에이전트를 systemd 서비스로 등록 | 각 Linux 서버 |
 | `agent/install-windows.ps1` | Windows 에이전트를 작업 스케줄러에 등록 | 각 Windows 서버 |
 | `agent/simulate.js` | 서버 없이 화면 확인용 가짜 데이터 전송기 | 내 PC |
+| `deploy/install-collector-*.{ps1,sh}` | 수집기를 IMS 서버에 상시 실행 등록 | IMS 서버 |
+| `deploy/nginx.conf`, `apache.conf`, `iis-web.config` | IMS 웹서버에서 `/monitor/` 경로로 프록시하는 설정 예시 | IMS 서버 |
+| `deploy/embed-sample.html` | IMS 화면에 삽입하는 예시 (요약 타일 + iframe) | IMS 개발 참고 |
 
 ## 1. 내 PC에서 수집기 실행
 
@@ -46,6 +49,8 @@ node agent/simulate.js
 | `HISTORY` | 720 | 서버당 보관 포인트 수 (5초 간격 = 1시간) |
 | `OFFLINE_AFTER` | 90 | 이 시간(초) 동안 데이터가 없으면 오프라인 표시 |
 | `LOG_FILE` | (없음) | 지정하면 수신 데이터를 JSON Lines 파일로도 기록 |
+| `STATE_FILE` | `data/state.json` | 재시작 대비 스냅샷 파일. 빈 값이면 저장 안 함 |
+| `SAVE_EVERY` | 30 | 스냅샷 저장 간격(초) |
 
 예: `set TOKEN=abc123 && node server.js` (Windows CMD) / `TOKEN=abc123 node server.js` (Linux)
 
@@ -126,7 +131,27 @@ Set-ExecutionPolicy -Scope Process Bypass
 나중에 IMS에 붙일 때는 IMS 쪽에서 `GET /api/servers` 를 호출해 그리거나,
 에이전트의 전송 주소만 IMS의 API로 바꾸면 됩니다.
 
+## 5. IMS 서버에 올리기 (방법 A: 수집기를 IMS 옆에 띄우기)
+
+IMS 코드를 고치지 않고 붙이는 방법입니다. 수집기는 IMS 서버에서 별도 프로세스로 돌고, IMS 화면은 그 API를 호출하거나 iframe 으로 삽입합니다.
+
+1. `monitor` 폴더를 IMS 서버로 복사합니다. (예: `C:\ims\monitor` 또는 `/opt/ims/monitor`)
+2. Node.js 18 이상을 IMS 서버에 설치합니다.
+3. 상시 실행 등록 (부팅 시 자동 시작, 죽으면 재시작):
+   - Windows (관리자 PowerShell): `.\deploy\install-collector-windows.ps1 -Token 비밀값`
+   - Linux: `sudo TOKEN=비밀값 ./deploy/install-collector-linux.sh`
+   - `http://IMS서버IP:8787/` 에서 화면이 뜨면 성공입니다.
+4. 에이전트 전송 주소를 IMS 서버로 바꿔 재설치합니다. `-Url http://IMS서버IP:8787/api/metrics -Token 비밀값`
+5. IMS 웹서버에서 `/monitor/` 경로를 8787 로 넘겨주는 프록시를 설정합니다. (`deploy/nginx.conf`, `apache.conf`, `iis-web.config` 참고)
+   이렇게 하면 사용자는 IMS 포트만 쓰고, 8787 은 서버 대역에서 에이전트가 보낼 때만 쓰입니다.
+6. IMS 화면에 삽입합니다. `deploy/embed-sample.html` 참고.
+   - iframe: `<iframe src="/monitor/?embed=1&theme=light"></iframe>` (`embed=1` 헤더 숨김, `theme=light` 밝은 배경, `refresh=10` 갱신 초)
+   - 또는 IMS 화면에서 `/monitor/api/servers` 를 호출해 IMS 스타일로 직접 그리기
+
+**방법 B (정식)**: IMS 애플리케이션에 `POST /api/metrics` 수신 API 와 DB 테이블을 추가하고 에이전트 전송 주소만 그리로 바꿉니다.
+에이전트가 보내는 JSON 형식은 아래 4절과 같습니다.
+
 ## 알아둘 점
 
-- 데이터는 수집기 메모리에만 있으므로 `server.js` 를 재시작하면 이력이 사라집니다. 보관이 필요하면 `LOG_FILE` 을 지정하세요.
+- 데이터는 메모리에 두고 30초마다 `data/state.json` 에 스냅샷을 저장하므로 재시작해도 최근 이력이 유지됩니다. 장기 보관은 `LOG_FILE` 또는 방법 B의 DB 저장을 쓰세요.
 - 사내망 전용입니다. 인터넷에 노출하지 마시고, 여러 사람이 쓰기 시작하면 `TOKEN` 을 설정하세요.
