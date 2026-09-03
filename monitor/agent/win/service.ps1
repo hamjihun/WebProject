@@ -9,7 +9,8 @@ $RunName = "ServerMonitorAgentTray"
 $DataDir = Join-Path $env:ProgramData "ServerMonitorAgent"
 
 function Stop-AgentProcesses {
-  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match 'ServerMonitorAgent\\(agent|tray)\.ps1' } |
+  # 어느 경로에서 띄웠든 (예전 수동 설치 포함) agent.ps1 / tray.ps1 실행 중인 PowerShell 을 모두 종료
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\(agent|tray)\.ps1' } |
     ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
 }
 
