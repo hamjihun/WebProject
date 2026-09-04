@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -171,7 +171,7 @@ function serversView() {
   const now = Date.now();
   const list = [];
   for (const [host, e] of store) {
-    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length });
+    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host) });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));
@@ -240,6 +240,18 @@ const server = http.createServer(async (req, res) => {
       console.log(`[${new Date().toLocaleTimeString()}] 목록에서 제거: ${host} (${remoteIp})${removed ? '' : ' - 없던 호스트'}`);
       saveState(false);
       return json(res, 200, { ok: true, removed });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
+  // 서버별 알림 끄기/켜기
+  if (req.method === 'POST' && url.pathname === '/api/mute') {
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      const host = String(raw.host || '').trim();
+      if (!host || !store.has(host)) return json(res, 404, { ok: false, error: 'unknown host' });
+      const muted = alerter.setMuted(host, !!raw.muted);
+      console.log(`[${new Date().toLocaleTimeString()}] 알림 ${muted ? '끔' : '켬'}: ${host}`);
+      return json(res, 200, { ok: true, host, muted });
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 

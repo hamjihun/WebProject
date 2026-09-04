@@ -18,11 +18,10 @@
 | `server.js` | 수집기. 데이터를 받아 메모리에 보관하고 화면을 제공 | 내 PC |
 | `alerts.js` | 알림 엔진. 임계치 감지, 재알림/복귀/조용 시간, 텔레그램 전송 | (수집기가 사용) |
 | `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
-| `agent/agent.sh` | Linux 에이전트 (bash + curl) | 각 Linux 서버 |
+| `agent/linux/install.sh`, `ims-agent.sh` | Linux 에이전트 설치/관리 명령 + 에이전트 본체 (bash + curl, systemd) | 각 Linux 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` | **Windows 에이전트 설치 프로그램** (프로그램 추가/제거 등록, 트레이 아이콘) | 각 Windows 서버 |
 | `agent/win/` | 설치 프로그램 소스 (agent.ps1, tray.ps1, service.ps1, installer.nsi). `build.sh` 로 빌드 | 개발 참고 |
 | `agent/agent.ps1` | Windows 에이전트 수동 실행용 (PowerShell 5.1+) | 각 Windows 서버 |
-| `agent/install-linux.sh` | Linux 에이전트를 systemd 서비스로 등록 | 각 Linux 서버 |
 | `agent/install-windows.ps1` | Windows 에이전트를 작업 스케줄러에 등록 | 각 Windows 서버 |
 | `agent/setup-agent.cmd`, `remove-agent.cmd` | 위 등록/제거를 더블클릭으로 실행 (URL/TOKEN 은 파일 안에서 수정) | 각 Windows 서버 |
 | `deploy/setup-collector.cmd` | 수집기 등록을 더블클릭으로 실행 (PORT/TOKEN 은 파일 안에서 수정) | IMS 서버 |
@@ -73,19 +72,21 @@ Windows: 관리자 PowerShell 에서
 
 ### Linux
 
-```
-scp agent/agent.sh user@server:/opt/
-ssh user@server
-chmod +x /opt/agent.sh
-/opt/agent.sh http://192.168.0.10:8787/api/metrics
-```
-
-동작이 확인되면 설치 스크립트로 systemd 서비스 등록 (부팅 시 자동 시작, 죽으면 재시작):
+`agent/linux` 폴더(두 파일)를 서버로 복사한 뒤:
 
 ```
-sudo ./install-linux.sh http://192.168.0.10:8787/api/metrics
-journalctl -u monitor-agent -f        # 로그 확인
-sudo ./install-linux.sh --uninstall   # 제거
+chmod +x install.sh
+sudo ./install.sh --url http://192.168.0.10:8787/api/metrics --token 토큰 --name "ERP 서버"
+```
+
+systemd 서비스(`ims-agent`)로 등록되어 부팅 시 자동 시작되고 죽으면 재시작됩니다. 설치 후 관리:
+
+```
+ims-agent status               # 상태
+sudo ims-agent name "파일 서버"  # 화면 표시 이름 변경
+sudo ims-agent restart         # 재시작
+ims-agent log                  # 실시간 로그
+sudo ims-agent uninstall       # 제거 (화면에서도 자동으로 빠짐)
 ```
 
 ### Windows
@@ -114,6 +115,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 - 카드를 클릭하면 팝업으로 드라이브별 **전일 / 7일 / 30일 대비 증가량**, 하루 평균, 예상 소진일 표와 CPU/메모리 추이가 뜹니다. 닫기 버튼, 바깥 클릭, Esc 로 닫힙니다. 남은 용량이 90일 안에 소진될 것으로 예상되면 카드에도 경고가 붙습니다. 일별 스냅샷은 수집 시작일부터 쌓이므로 7일·30일 값은 시간이 지나면서 채워집니다.
 - 에이전트 트레이 메뉴 "이름 설정"으로 정한 표시 이름이 카드 제목으로 나오고 호스트명은 그 아래 줄에 작게 표시됩니다.
 - 카드 왼쪽 위 ⠿ 를 잡고 **드래그**하면 순서가 바뀌고 수집기에 저장되어 모든 PC 에서 같은 순서로 보입니다. 팝업의 "◀ 앞으로 / 뒤로 ▶" 버튼으로도 옮길 수 있습니다.
+- 팝업의 "🔕 이 서버 알림 끄기"로 서버별 알림을 끌 수 있습니다 (카드에 🔕 표시). 🔔 알림 창에서는 전체 알림, CPU/메모리/디스크/오프라인 알림을 각각 켜고 끕니다.
 - 팝업의 "목록에서 삭제"로 카드를 지울 수 있습니다. 에이전트가 아직 실행 중이면 다음 전송 때 다시 나타나고, 서버에서 에이전트를 제거하면 자동으로 목록에서 빠집니다.
 - 🔔 알림 버튼에서 텔레그램 봇과 임계치를 설정합니다. 경고가 있으면 상단에 빨간 배너가 뜨고 카드에 ⚠ 가 붙습니다. 설정 방법은 [SETUP-IMS.md](SETUP-IMS.md) 의 "알림 설정" 참고.
 - 헤더 오른쪽에 수집기 버전이 표시됩니다. 업그레이드 후 버전이 안 바뀌면 예전 프로세스가 남아 있는 것입니다.
@@ -142,6 +144,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `POST /api/metrics` | 에이전트 수신 |
 | `POST /api/unregister` | 목록에서 호스트 제거 (`{"host":"..."}`), 에이전트 제거 시 자동 호출 |
 | `PUT /api/order` | 카드 순서 저장 (`{"order":["호스트",...]}`) |
+| `POST /api/mute` | 서버별 알림 끄기/켜기 (`{"host":"...","muted":true}`) |
 | `GET /api/alerts` | 현재 경고와 최근 알림 이력 (기본 10건, `?n=`) |
 | `GET /api/alerts/log` | 월별 알림 로그 텍스트 (`?month=YYYY-MM`, `?download=1` 이면 파일 다운로드) |
 | `GET/PUT /api/settings` | 알림 설정 (텔레그램, 임계치, 조용 시간). 토큰은 마스킹되어 반환 |

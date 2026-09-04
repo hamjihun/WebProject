@@ -29,6 +29,8 @@
   #banner[hidden] { display:none; }
   #banner span b { color:var(--bad); }
   .warnmark { color:var(--warn); font-size:13px; flex:none; }
+  .mutemark { color:var(--muted); font-size:13px; flex:none; }
+  header .bell.off { color:var(--muted); }
   /* 알림 설정 창 */
   #aoverlay[hidden] { display:none; }
   #aoverlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:11; }
@@ -123,6 +125,15 @@
     <h3>현재 경고</h3>
     <div id="activeList" class="msg">없음</div>
 
+    <h3>알림 사용</h3>
+    <div class="form">
+      <label class="chk"><input type="checkbox" id="aEnabled"> <b>전체 알림 사용</b> (끄면 아무 알림도 만들지 않음)</label>
+      <label class="chk"><input type="checkbox" id="rCpuOn"> CPU 알림</label>
+      <label class="chk"><input type="checkbox" id="rMemOn"> 메모리 알림</label>
+      <label class="chk"><input type="checkbox" id="rDiskOn"> 디스크 알림 (사용률 + 소진 예상)</label>
+      <label class="chk"><input type="checkbox" id="rOffline"> 오프라인 알림</label>
+    </div>
+
     <h3>텔레그램 전송</h3>
     <div class="form">
       <label class="chk wide"><input type="checkbox" id="tgEnabled"> 텔레그램으로 알림 보내기</label>
@@ -146,7 +157,6 @@
       <label>디스크 이상 (%)<input type="number" id="rDisk" min="1" max="100"></label>
       <label>디스크 소진 예상 (일 이내)<input type="number" id="rDays" min="1" max="3650"></label>
       <label>재알림 간격 (분, 0=한 번만)<input type="number" id="rRemind" min="0" max="1440"></label>
-      <label class="chk"><input type="checkbox" id="rOffline"> 오프라인 알림</label>
       <label class="chk"><input type="checkbox" id="rRecovery"> 정상 복귀 알림</label>
     </div>
 
@@ -182,6 +192,7 @@
     <canvas id="chart"></canvas>
     <div class="actions">
       <button id="bPrev">◀ 앞으로</button><button id="bNext">뒤로 ▶</button>
+      <button id="bMute">🔕 이 서버 알림 끄기</button>
       <span class="dim" style="font-size:12px;align-self:center">카드를 드래그해서 순서를 바꿀 수도 있습니다</span>
       <button id="bRemove" class="danger">목록에서 삭제</button>
     </div>
@@ -189,7 +200,7 @@
 </div>
 
 <script>
-const UI_VERSION = '1.6.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.7.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -244,7 +255,7 @@ function cardHtml(s) {
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
   return `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
-    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
+    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : ''}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
     <div class="hostline">${s.name ? esc(s.host) : '&nbsp;'}</div>
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
@@ -291,11 +302,21 @@ function shiftHost(host, delta) {
 }
 function updateActionButtons() {
   const i = servers.findIndex(s => s.host === selected);
+  const s = servers[i];
+  document.getElementById('bMute').textContent = s && s.muted ? '🔔 이 서버 알림 켜기' : '🔕 이 서버 알림 끄기';
   document.getElementById('bPrev').disabled = i <= 0;
   document.getElementById('bNext').disabled = i < 0 || i >= servers.length - 1;
 }
 document.getElementById('bPrev').onclick = () => shiftHost(selected, -1);
 document.getElementById('bNext').onclick = () => shiftHost(selected, 1);
+document.getElementById('bMute').onclick = async () => {
+  const s = servers.find(x => x.host === selected); if (!s) return;
+  try {
+    const r = await fetch('api/mute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: selected, muted: !s.muted }) });
+    const j = await r.json(); if (j.ok) s.muted = j.muted;
+  } catch (e) {}
+  render(); updateActionButtons(); loadAlerts();
+};
 document.getElementById('bRemove').onclick = async () => {
   const s = servers.find(x => x.host === selected) || {};
   const label = s.name ? `${s.name} (${s.host})` : s.host;
@@ -439,6 +460,9 @@ async function loadSettings() {
   F('rCpu').value = c.rules.cpu; F('rCpuMin').value = c.rules.cpu_minutes; F('rMem').value = c.rules.mem; F('rMemMin').value = c.rules.mem_minutes;
   F('rDisk').value = c.rules.disk; F('rDays').value = c.rules.days_left; F('rRemind').value = c.remind_min;
   F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery;
+  F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
+  document.getElementById('bell').classList.toggle('off', c.enabled === false);
+  document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
   F('qEnabled').checked = !!c.quiet.enabled; F('qFrom').value = c.quiet.from; F('qTo').value = c.quiet.to;
 }
 function validChatId(v) { return /^-?\d{5,}$/.test(v); }
@@ -447,7 +471,9 @@ function collectSettings() {
   const patch = {
     telegram: { enabled: F('tgEnabled').checked, chatId: F('tgChat').value.trim() },
     title: F('aTitle').value.trim() || 'IMS 모니터',
-    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked },
+    enabled: F('aEnabled').checked,
+    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked,
+             cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
   };
@@ -523,7 +549,7 @@ async function refresh() {
       $vm.textContent = `⚠ 수집기 프로그램이 ${j.version ? 'v' + j.version : '구버전'} 이고 화면 파일은 v${UI_VERSION} 입니다. 예전 수집기 프로세스가 남아 있는 상태입니다. IMS 서버에서 deploy\\setup-collector.cmd 를 다시 실행하세요 (안 되면 작업 관리자에서 node.exe 종료 후 재실행).`;
     } else $vm.hidden = true;
     render();
-    if (selected) loadDetail();
+    if (selected) { loadDetail(); updateActionButtons(); }
   } catch (e) {
     $sum.textContent = '수집 서버에 연결할 수 없습니다: ' + e.message;
   }
@@ -532,6 +558,7 @@ refresh();
 setInterval(refresh, REFRESH);
 loadAlerts();
 setInterval(loadAlerts, 10000);
+fetch('api/settings').then(r => r.json()).then(c => { if (c.enabled === false) { document.getElementById('bell').classList.add('off'); document.getElementById('bell').title = '전체 알림이 꺼져 있습니다'; } }).catch(() => {});
 </script>
 </body>
 </html>

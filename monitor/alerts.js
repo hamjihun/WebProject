@@ -6,14 +6,16 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULTS = {
+  enabled: true,                   // 전체 알림 스위치
   telegram: { enabled: false, token: '', chatId: '' },
   rules: {
-    cpu: 80, cpu_minutes: 1,       // CPU 80% 이상이 1분 이상 지속
-    mem: 90, mem_minutes: 1,       // 메모리 90% 이상이 1분 이상 지속
-    disk: 90,                      // 디스크 사용률 90% 이상
-    days_left: 30,                 // 예상 소진 30일 이내
-    offline: true,                 // 오프라인 알림
+    cpu: 80, cpu_minutes: 1, cpu_on: true,      // CPU 80% 이상이 1분 이상 지속
+    mem: 90, mem_minutes: 1, mem_on: true,      // 메모리 90% 이상이 1분 이상 지속
+    disk: 90, disk_on: true,                    // 디스크 사용률 90% 이상 / 소진 예상
+    days_left: 30,                              // 예상 소진 30일 이내
+    offline: true,                              // 오프라인 알림
   },
+  muted: {},                       // 서버별 알림 끄기 { 호스트명: true }
   remind_min: 60,                  // 계속 경고 상태면 이 간격으로 다시 알림 (0 = 처음 한 번만)
   recovery: true,                  // 정상 복귀 알림
   quiet: { enabled: false, from: '23:00', to: '07:00' },  // 조용 시간 (오프라인 알림은 예외)
@@ -166,12 +168,25 @@ function create({ settingsFile, logDir, log = console.log }) {
     }
   }
 
+  // 조용히 해제 (알림 끔/서버 음소거 시)
+  function clearHost(host) {
+    for (const [key, st] of states) if (key.split('|')[0] === host && st.active) { st.active = false; st.notified = false; st.since = null; }
+  }
+  function clearRule(host, rule) {
+    for (const [key, st] of states) { const p = key.split('|'); if (p[0] === host && p[1] === rule && st.active) { st.active = false; st.notified = false; st.since = null; } }
+  }
+
   function evaluate(servers) {
     const r = settings.rules;
     const live = new Set();
+    if (!settings.enabled) { for (const s of servers) clearHost(s.host); return; }
     for (const s of servers) {
       live.add(s.host);
       const H = s.host, N = s.name;
+      if (settings.muted && settings.muted[H]) { clearHost(H); continue; }
+      if (!r.cpu_on) clearRule(H, 'cpu');
+      if (!r.mem_on) clearRule(H, 'mem');
+      if (!r.disk_on) { clearRule(H, 'disk'); clearRule(H, 'full'); }
       // 오프라인
       check(`${H}|offline`, H, N, r.offline && !s.online,
         () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)`, { rule: 'offline', critical: true, recoverMsg: () => '서버 응답 복구' });
@@ -180,15 +195,15 @@ function create({ settingsFile, logDir, log = console.log }) {
         continue;
       }
       // CPU / 메모리 (지속 시간, 히스테리시스 5%)
-      check(`${H}|cpu`, H, N, s.cpu >= r.cpu,
+      if (r.cpu_on) check(`${H}|cpu`, H, N, s.cpu >= r.cpu,
         () => `CPU ${s.cpu}% 가 ${r.cpu_minutes}분 이상 지속 (기준 ${r.cpu}%)`,
         { rule: 'cpu', minutes: r.cpu_minutes, threshold: r.cpu, hold: s.cpu >= r.cpu - 5, recoverMsg: () => `CPU 정상 복귀 (${s.cpu}%)` });
-      check(`${H}|mem`, H, N, s.mem_pct >= r.mem,
+      if (r.mem_on) check(`${H}|mem`, H, N, s.mem_pct >= r.mem,
         () => `메모리 ${s.mem_pct}% 가 ${r.mem_minutes}분 이상 지속 (${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}, 기준 ${r.mem}%)`,
         { rule: 'mem', minutes: r.mem_minutes, threshold: r.mem, hold: s.mem_pct >= r.mem - 5, recoverMsg: () => `메모리 정상 복귀 (${s.mem_pct}%)` });
       // 디스크
       const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
-      for (const d of (s.disks || [])) {
+      for (const d of (r.disk_on ? (s.disks || []) : [])) {
         check(`${H}|disk|${d.mount}`, H, N, d.pct >= r.disk,
           () => `${d.mount} 드라이브 ${d.pct}% 사용 (${fmtBytes(d.used)} / ${fmtBytes(d.total)}, 기준 ${r.disk}%)`,
           { rule: 'disk', threshold: r.disk, hold: d.pct >= r.disk - 2, recoverMsg: () => `${d.mount} 드라이브 사용률 정상 (${d.pct}%)` });
@@ -203,7 +218,15 @@ function create({ settingsFile, logDir, log = console.log }) {
 
   return {
     evaluate,
-    forget(host) { for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key); },
+    forget(host) { for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key); if (settings.muted && settings.muted[host]) { delete settings.muted[host]; saveSettings(); } },
+    isMuted(host) { return !!(settings.muted && settings.muted[host]); },
+    setMuted(host, muted) {
+      if (!settings.muted) settings.muted = {};
+      if (muted) settings.muted[host] = true; else delete settings.muted[host];
+      if (muted) clearHost(host);
+      saveSettings();
+      return this.isMuted(host);
+    },
     getActive() { const out = []; for (const [key, st] of states) if (st.active) { const [host, rule, mount] = key.split('|'); out.push({ host, rule, mount, since: st.since, msg: st.msg }); } return out; },
     getRecent(n = 100) { return recent.slice(0, n); },
     getSettings(masked = true) {

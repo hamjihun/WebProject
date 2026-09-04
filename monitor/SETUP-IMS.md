@@ -109,11 +109,12 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
 
 재설치하면 기존 주소/토큰이 자동으로 채워진다. 설치 프로그램은 `agent/win/build.sh` 로 다시 빌드할 수 있다 (NSIS 필요). 아이콘은 `agent/win/make-icon.py` 가 생성한다.
 
-**Linux 서버**: `agent/agent.sh` 와 `agent/install-linux.sh` 를 복사.
+**Linux 서버**: `agent/linux` 폴더의 두 파일을 서버로 복사한 뒤
 ```
-chmod +x install-linux.sh
-sudo TOKEN=ilsan-mon-2026 ./install-linux.sh http://192.168.0.9:15138/api/metrics
+chmod +x install.sh
+sudo ./install.sh --url http://192.168.0.9:15138/api/metrics --token ilsan-mon-2026 --name "리눅스 서버"
 ```
+`ims-agent` 서비스로 등록된다. 이후 `ims-agent status`, `sudo ims-agent name "이름"`, `sudo ims-agent restart`, `ims-agent log`, `sudo ims-agent uninstall`(화면에서도 자동 제거). https 사설 인증서면 `--insecure` 추가.
 
 확인: `http://192.168.0.9:15138/` 에 그 서버 카드가 뜬다. 서버를 재부팅해도 다시 뜨면 등록 완료.
 
@@ -157,6 +158,10 @@ IMS 스타일로 요약 숫자만 보여주고 싶으면 `deploy/embed-sample.ht
 ## 알림 설정 (텔레그램)
 
 수집기가 10초마다 규칙을 검사해서 경고를 만들고, 텔레그램 봇으로 휴대폰에 보낸다. 화면이 열려 있는 PC 에는 상단 빨간 배너와 브라우저 알림도 뜬다.
+
+**끄고 켜기**
+- 🔔 알림 창 맨 위 "알림 사용"에서 전체 알림, CPU / 메모리 / 디스크 / 오프라인 알림을 각각 끌 수 있다.
+- 특정 서버만 끄려면 카드를 클릭해 "🔕 이 서버 알림 끄기". 카드에 🔕 가 붙고 그 서버는 어떤 알림도 만들지 않는다.
 
 **기본 규칙** (🔔 알림 창에서 변경 가능)
 - CPU 80% 이상이 1분 이상 지속 / 메모리 90% 이상이 1분 이상 지속
