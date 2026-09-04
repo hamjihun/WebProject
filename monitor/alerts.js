@@ -90,6 +90,7 @@ function create({ settingsFile, log = console.log }) {
 
   function push(ev) {
     ev.id = ++seq; ev.time = Date.now();
+    if (ev.delivery === undefined) ev.delivery = 'pending';
     recent.unshift(ev); if (recent.length > RECENT_MAX) recent.length = RECENT_MAX;
     return ev;
   }
@@ -103,10 +104,20 @@ function create({ settingsFile, log = console.log }) {
   }
 
   // ---- 규칙 평가 ----
+  // cond: 새로 켜질 조건. opts.hold: 켜진 뒤 유지 조건(완충). opts.threshold 가 바뀌면 완충 없이 새 기준으로 재판단.
   function check(key, host, name, cond, msgFn, opts = {}) {
     const now = Date.now();
     let st = states.get(key);
     if (!st) { st = { since: null, active: false, notified: false, lastSent: 0 }; states.set(key, st); }
+    const thresholdChanged = opts.threshold !== undefined && st.threshold !== undefined && st.threshold !== opts.threshold;
+    st.threshold = opts.threshold;
+    if (thresholdChanged && st.active && !cond) {
+      // 기준이 올라가서 더 이상 해당 안 됨 → 조용히 해제 (이력에만 남김)
+      st.active = false; st.notified = false; st.since = null;
+      push({ kind: 'recovery', host, name, rule: opts.rule, msg: '기준 변경으로 경고 해제', delivery: 'skipped' });
+      return;
+    }
+    if (!thresholdChanged && !cond && st.active && opts.hold) cond = true;   // 완충 구간이면 유지
     if (cond) {
       if (!st.since) st.since = now;
       const sustainMs = (opts.minutes || 0) * 60000;
@@ -141,21 +152,22 @@ function create({ settingsFile, log = console.log }) {
         continue;
       }
       // CPU / 메모리 (지속 시간, 히스테리시스 5%)
-      const cpuSt = states.get(`${H}|cpu`);
-      check(`${H}|cpu`, H, N, s.cpu >= r.cpu || (cpuSt && cpuSt.active && s.cpu >= r.cpu - 5),
-        () => `CPU ${s.cpu}% 가 ${r.cpu_minutes}분 이상 지속 (기준 ${r.cpu}%)`, { rule: 'cpu', minutes: r.cpu_minutes, recoverMsg: () => `CPU 정상 복귀 (${s.cpu}%)` });
-      const memSt = states.get(`${H}|mem`);
-      check(`${H}|mem`, H, N, s.mem_pct >= r.mem || (memSt && memSt.active && s.mem_pct >= r.mem - 5),
-        () => `메모리 ${s.mem_pct}% 가 ${r.mem_minutes}분 이상 지속 (${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)})`, { rule: 'mem', minutes: r.mem_minutes, recoverMsg: () => `메모리 정상 복귀 (${s.mem_pct}%)` });
+      check(`${H}|cpu`, H, N, s.cpu >= r.cpu,
+        () => `CPU ${s.cpu}% 가 ${r.cpu_minutes}분 이상 지속 (기준 ${r.cpu}%)`,
+        { rule: 'cpu', minutes: r.cpu_minutes, threshold: r.cpu, hold: s.cpu >= r.cpu - 5, recoverMsg: () => `CPU 정상 복귀 (${s.cpu}%)` });
+      check(`${H}|mem`, H, N, s.mem_pct >= r.mem,
+        () => `메모리 ${s.mem_pct}% 가 ${r.mem_minutes}분 이상 지속 (${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}, 기준 ${r.mem}%)`,
+        { rule: 'mem', minutes: r.mem_minutes, threshold: r.mem, hold: s.mem_pct >= r.mem - 5, recoverMsg: () => `메모리 정상 복귀 (${s.mem_pct}%)` });
       // 디스크
       const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
       for (const d of (s.disks || [])) {
-        const k = `${H}|disk|${d.mount}`, st = states.get(k);
-        check(k, H, N, d.pct >= r.disk || (st && st.active && d.pct >= r.disk - 2),
-          () => `${d.mount} 드라이브 ${d.pct}% 사용 (${fmtBytes(d.used)} / ${fmtBytes(d.total)}, 기준 ${r.disk}%)`, { rule: 'disk', recoverMsg: () => `${d.mount} 드라이브 사용률 정상 (${d.pct}%)` });
+        check(`${H}|disk|${d.mount}`, H, N, d.pct >= r.disk,
+          () => `${d.mount} 드라이브 ${d.pct}% 사용 (${fmtBytes(d.used)} / ${fmtBytes(d.total)}, 기준 ${r.disk}%)`,
+          { rule: 'disk', threshold: r.disk, hold: d.pct >= r.disk - 2, recoverMsg: () => `${d.mount} 드라이브 사용률 정상 (${d.pct}%)` });
         const g = gmap[d.mount];
         check(`${H}|full|${d.mount}`, H, N, !!(g && g.days_left != null && g.days_left <= r.days_left),
-          () => `${d.mount} 드라이브 약 ${g.days_left}일 후 가득 찰 것으로 예상 (하루 +${fmtBytes(g.rate_day)})`, { rule: 'full', recoverMsg: () => `${d.mount} 드라이브 소진 예상 해제` });
+          () => `${d.mount} 드라이브 약 ${g.days_left}일 후 가득 찰 것으로 예상 (하루 +${fmtBytes(g.rate_day)})`,
+          { rule: 'full', threshold: r.days_left, recoverMsg: () => `${d.mount} 드라이브 소진 예상 해제` });
       }
     }
     for (const key of [...states.keys()]) if (!live.has(key.split('|')[0])) states.delete(key);

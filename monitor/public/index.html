@@ -183,7 +183,7 @@
 </div>
 
 <script>
-const UI_VERSION = '1.5.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.5.2';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -414,7 +414,7 @@ function renderAlertLists(j) {
   $a.innerHTML = (j.active || []).length
     ? `<table class="ev">${j.active.map(a => `<tr><td class="t">${fmtTime(a.since)}부터</td><td><b>${esc(hostLabel(a.host))}</b></td><td>${esc(a.msg || RULE_KO[a.rule])}</td></tr>`).join('')}</table>`
     : '없음';
-  const dl = (ev) => ev.delivery === 'telegram' ? '텔레그램 전송' : ev.delivery === 'quiet' ? '조용 시간(미전송)' : ev.delivery === 'error' ? `전송 실패: ${esc(ev.error || '')}` : ev.delivery === 'off' ? '텔레그램 꺼짐' : '';
+  const dl = (ev) => ev.delivery === 'telegram' ? '텔레그램 전송' : ev.delivery === 'quiet' ? '조용 시간(미전송)' : ev.delivery === 'error' ? `전송 실패: ${esc(ev.error || '')}` : ev.delivery === 'off' ? '텔레그램 꺼짐' : ev.delivery === 'skipped' ? '이력만 기록' : '';
   $r.innerHTML = (j.recent || []).length
     ? `<table class="ev">${j.recent.map(ev => `<tr><td class="t">${fmtTime(ev.time)}</td><td class="k-${ev.kind}">${ev.kind === 'alert' ? '🔴 경고' : ev.kind === 'remind' ? '🟠 계속' : '🟢 복귀'}</td><td><b>${esc(hostLabel(ev.host))}</b></td><td>${esc(ev.msg)}<div class="dl">${dl(ev)}</div></td></tr>`).join('')}</table>`
     : '없음';
