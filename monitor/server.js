@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.5.2';
+const VERSION = '1.6.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -255,7 +255,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- 알림 ----
-  if (req.method === 'GET' && url.pathname === '/api/alerts') return json(res, 200, { active: alerter.getActive(), recent: alerter.getRecent(100) });
+  if (req.method === 'GET' && url.pathname === '/api/alerts') return json(res, 200, { active: alerter.getActive(), recent: alerter.getRecent(Number(url.searchParams.get('n') || 10)), months: alerter.listLogs() });
+  // 알림 로그 파일: 보기(텍스트) 또는 다운로드. ?month=YYYY-MM, ?download=1
+  if (req.method === 'GET' && url.pathname === '/api/alerts/log') {
+    const { month, text } = alerter.readLog(url.searchParams.get('month'));
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' };
+    if (url.searchParams.get('download') === '1') headers['Content-Disposition'] = `attachment; filename="alerts-${month}.txt"`;
+    res.writeHead(200, headers);
+    return res.end(text || `(${month} 알림 이력 없음)\r\n`);
+  }
   if (req.method === 'GET' && url.pathname === '/api/settings') return json(res, 200, alerter.getSettings(true));
   if (req.method === 'PUT' && url.pathname === '/api/settings') {
     try { const patch = JSON.parse((await readBody(req)) || '{}'); return json(res, 200, alerter.updateSettings(patch)); }

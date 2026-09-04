@@ -32,7 +32,34 @@ function fmtBytes(b) { if (!b) return '0 B'; const u = ['B', 'KB', 'MB', 'GB', '
 function ts(d = new Date()) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
-function create({ settingsFile, log = console.log }) {
+function fmtTs(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+
+function create({ settingsFile, logDir, log = console.log }) {
+  // ---- 알림 로그 파일 (월별, data/alerts-YYYY-MM.log) ----
+  logDir = logDir || path.dirname(settingsFile);
+  const KIND_KO = { alert: '경고', remind: '계속', recovery: '복귀' };
+  const DELIV_KO = { telegram: '텔레그램 전송', quiet: '조용 시간(미전송)', error: '전송 실패', off: '텔레그램 꺼짐', skipped: '이력만 기록', pending: '' };
+  function logFileFor(month) { return path.join(logDir, `alerts-${month}.log`); }
+  function monthKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+  function writeLog(ev) {
+    const d = new Date(ev.time);
+    const label = ev.name ? `${ev.name} (${ev.host})` : ev.host;
+    const deliv = DELIV_KO[ev.delivery] !== undefined ? DELIV_KO[ev.delivery] : ev.delivery;
+    const line = `[${fmtTs(d)}] ${KIND_KO[ev.kind] || ev.kind}\t${label}\t${ev.msg}\t${deliv}${ev.error ? ': ' + ev.error : ''}\r\n`;
+    try {
+      fs.mkdirSync(logDir, { recursive: true });
+      const file = logFileFor(monthKey(d));
+      fs.appendFileSync(file, (fs.existsSync(file) ? '' : '\uFEFF') + line);   // 새 파일이면 BOM (메모장에서 한글 정상 표시)
+    } catch (e) { log('알림 로그 기록 실패:', e.message); }
+  }
+  function listLogs() {
+    try { return fs.readdirSync(logDir).filter((f) => /^alerts-\d{4}-\d{2}\.log$/.test(f)).map((f) => f.slice(7, 14)).sort().reverse(); } catch { return []; }
+  }
+  function readLog(month) {
+    if (!/^\d{4}-\d{2}$/.test(month || '')) month = monthKey();
+    try { return { month, text: fs.readFileSync(logFileFor(month), 'utf8') }; } catch { return { month, text: '' }; }
+  }
+
   let settings = { ...DEFAULTS };
   try { settings = deepMerge(DEFAULTS, JSON.parse(fs.readFileSync(settingsFile, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') log('알림 설정 읽기 실패:', e.message); }
   function saveSettings() {
@@ -98,9 +125,10 @@ function create({ settingsFile, log = console.log }) {
     const label = ev.name ? `${ev.name} (${ev.host})` : ev.host;
     const icon = ev.kind === 'recovery' ? '🟢' : ev.kind === 'remind' ? '🟠' : '🔴';
     const text = `${icon} <b>[${esc(settings.title)}] ${esc(label)}</b>\n${esc(ev.msg)}\n<i>${ts(new Date(ev.time))}</i>`;
-    if (inQuiet() && !critical) { ev.delivery = 'quiet'; return; }
+    if (inQuiet() && !critical) { ev.delivery = 'quiet'; writeLog(ev); return; }
     try { const r = await sendTelegram(text); ev.delivery = r.sent ? 'telegram' : 'off'; }
     catch (e) { ev.delivery = 'error'; ev.error = e.message; log('텔레그램 전송 실패:', e.message); }
+    writeLog(ev);
   }
 
   // ---- 규칙 평가 ----
@@ -114,7 +142,7 @@ function create({ settingsFile, log = console.log }) {
     if (thresholdChanged && st.active && !cond) {
       // 기준이 올라가서 더 이상 해당 안 됨 → 조용히 해제 (이력에만 남김)
       st.active = false; st.notified = false; st.since = null;
-      push({ kind: 'recovery', host, name, rule: opts.rule, msg: '기준 변경으로 경고 해제', delivery: 'skipped' });
+      writeLog(push({ kind: 'recovery', host, name, rule: opts.rule, msg: '기준 변경으로 경고 해제', delivery: 'skipped' }));
       return;
     }
     if (!thresholdChanged && !cond && st.active && opts.hold) cond = true;   // 완충 구간이면 유지
@@ -196,6 +224,7 @@ function create({ settingsFile, log = console.log }) {
       return { ok: true, message_id: r.message_id };
     },
     discoverChats,
+    listLogs, readLog,
     exportState() { return { recent, states: [...states.entries()], seq }; },
     importState(st) {
       if (!st) return;

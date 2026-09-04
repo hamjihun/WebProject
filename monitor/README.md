@@ -59,7 +59,7 @@ node agent/simulate.js
 | `LOG_FILE` | (없음) | 지정하면 수신 데이터를 JSON Lines 파일로도 기록 |
 | `STATE_FILE` | `data/state.json` | 재시작 대비 스냅샷 파일. 빈 값이면 저장 안 함 |
 | `SAVE_EVERY` | 30 | 스냅샷 저장 간격(초) |
-| `SETTINGS_FILE` | `data/settings.json` | 알림 설정 파일 |
+| `SETTINGS_FILE` | `data/settings.json` | 알림 설정 파일. 알림 로그는 같은 폴더에 `alerts-YYYY-MM.log` 로 월별 기록 |
 
 예: `set TOKEN=abc123 && node server.js` (Windows CMD) / `TOKEN=abc123 node server.js` (Linux)
 
@@ -142,7 +142,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `POST /api/metrics` | 에이전트 수신 |
 | `POST /api/unregister` | 목록에서 호스트 제거 (`{"host":"..."}`), 에이전트 제거 시 자동 호출 |
 | `PUT /api/order` | 카드 순서 저장 (`{"order":["호스트",...]}`) |
-| `GET /api/alerts` | 현재 경고와 최근 알림 이력 |
+| `GET /api/alerts` | 현재 경고와 최근 알림 이력 (기본 10건, `?n=`) |
+| `GET /api/alerts/log` | 월별 알림 로그 텍스트 (`?month=YYYY-MM`, `?download=1` 이면 파일 다운로드) |
 | `GET/PUT /api/settings` | 알림 설정 (텔레그램, 임계치, 조용 시간). 토큰은 마스킹되어 반환 |
 | `POST /api/alerts/test` | 텔레그램 테스트 전송 |
 | `POST /api/alerts/discover` | 봇에게 말을 건 대화 목록에서 채팅 ID 찾기 |

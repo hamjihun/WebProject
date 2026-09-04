@@ -163,8 +163,14 @@
       <span class="msg" id="saveMsg"></span>
     </div>
 
-    <h3>최근 알림 이력</h3>
+    <h3>최근 알림 이력 (최근 10건)</h3>
     <div id="recentList" class="msg">없음</div>
+    <div class="btns">
+      <select id="logMonth"></select>
+      <button id="bLogView">전체 이력 보기</button>
+      <button id="bLogDown">텍스트 파일 다운로드</button>
+      <span class="msg">전체 이력은 IMS 서버 data\alerts-YYYY-MM.log 에 월별로 쌓입니다</span>
+    </div>
   </div>
 </div>
 <div id="overlay" hidden>
@@ -183,7 +189,7 @@
 </div>
 
 <script>
-const UI_VERSION = '1.5.2';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.6.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -415,8 +421,12 @@ function renderAlertLists(j) {
     ? `<table class="ev">${j.active.map(a => `<tr><td class="t">${fmtTime(a.since)}부터</td><td><b>${esc(hostLabel(a.host))}</b></td><td>${esc(a.msg || RULE_KO[a.rule])}</td></tr>`).join('')}</table>`
     : '없음';
   const dl = (ev) => ev.delivery === 'telegram' ? '텔레그램 전송' : ev.delivery === 'quiet' ? '조용 시간(미전송)' : ev.delivery === 'error' ? `전송 실패: ${esc(ev.error || '')}` : ev.delivery === 'off' ? '텔레그램 꺼짐' : ev.delivery === 'skipped' ? '이력만 기록' : '';
+  const $sel = document.getElementById('logMonth');
+  if (j.months && $sel.options.length !== (j.months.length || 1)) {
+    $sel.innerHTML = (j.months.length ? j.months : [new Date().toISOString().slice(0, 7)]).map(m => `<option value="${m}">${m.replace('-', '년 ')}월</option>`).join('');
+  }
   $r.innerHTML = (j.recent || []).length
-    ? `<table class="ev">${j.recent.map(ev => `<tr><td class="t">${fmtTime(ev.time)}</td><td class="k-${ev.kind}">${ev.kind === 'alert' ? '🔴 경고' : ev.kind === 'remind' ? '🟠 계속' : '🟢 복귀'}</td><td><b>${esc(hostLabel(ev.host))}</b></td><td>${esc(ev.msg)}<div class="dl">${dl(ev)}</div></td></tr>`).join('')}</table>`
+    ? `<table class="ev">${j.recent.slice(0, 10).map(ev => `<tr><td class="t">${fmtTime(ev.time)}</td><td class="k-${ev.kind}">${ev.kind === 'alert' ? '🔴 경고' : ev.kind === 'remind' ? '🟠 계속' : '🟢 복귀'}</td><td><b>${esc(hostLabel(ev.host))}</b></td><td>${esc(ev.msg)}<div class="dl">${dl(ev)}</div></td></tr>`).join('')}</table>`
     : '없음';
 }
 
@@ -488,6 +498,8 @@ F('bNotify').onclick = async () => {
   $m.textContent = p === 'granted' ? '이 브라우저에서 알림이 켜졌습니다 (화면이 열려 있을 때 표시)' : '알림 권한이 거부되었습니다. 브라우저 주소창 왼쪽 아이콘에서 허용하세요';
   if (p === 'granted') notify('알림 켜짐', '서버 경고가 발생하면 여기에 표시됩니다.');
 };
+document.getElementById('bLogView').onclick = () => window.open('api/alerts/log?month=' + encodeURIComponent(document.getElementById('logMonth').value), '_blank');
+document.getElementById('bLogDown').onclick = () => { location.href = 'api/alerts/log?download=1&month=' + encodeURIComponent(document.getElementById('logMonth').value); };
 function openAlerts() { $aoverlay.hidden = false; loadSettings().catch(() => {}); loadAlerts(); }
 function closeAlerts() { $aoverlay.hidden = true; }
 document.getElementById('bell').onclick = openAlerts;
