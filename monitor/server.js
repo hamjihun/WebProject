@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -17,7 +17,9 @@ const OFFLINE_AFTER = Number(process.env.OFFLINE_AFTER || 90) * 1000; // 이 시
 const LOG_FILE = process.env.LOG_FILE || '';            // 지정하면 JSON Lines 로 파일에도 기록
 const STATE_FILE = process.env.STATE_FILE === '' ? '' : (process.env.STATE_FILE || path.join(__dirname, 'data', 'state.json')); // 재시작 대비 스냅샷
 const SAVE_EVERY = Number(process.env.SAVE_EVERY || 30) * 1000;
-const DAILY_KEEP = Number(process.env.DAILY_KEEP || 400);     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
+const DAILY_KEEP = Number(process.env.DAILY_KEEP || 400);
+const SETTINGS_FILE = process.env.SETTINGS_FILE || path.join(__dirname, 'data', 'settings.json');   // 알림 설정
+const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
 const store = new Map();
@@ -30,6 +32,7 @@ function loadState() {
     const obj = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     const hosts = obj.hosts || obj;                       // 구버전 파일은 호스트 맵 그대로
     if (Array.isArray(obj.order)) order = obj.order.filter((h) => typeof h === 'string');
+    alerter.importState(obj.alerts);
     for (const [host, e] of Object.entries(hosts)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY), daily: e.daily || {} });
     console.log(`스냅샷 복원: ${store.size}대 (${STATE_FILE})`);
   } catch (e) { if (e.code !== 'ENOENT') console.warn('스냅샷 복원 실패:', e.message); }
@@ -39,7 +42,7 @@ function saveState(sync) {
   if (!STATE_FILE || !dirty) return;
   dirty = false;
   const hosts = {}; for (const [h, e] of store) hosts[h] = e;
-  const obj = { hosts, order };
+  const obj = { hosts, order, alerts: alerter.exportState() };
   const tmp = STATE_FILE + '.tmp';
   try {
     fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
@@ -183,6 +186,7 @@ function serversView() {
 function removeHost(host) {
   const existed = store.delete(host);
   order = order.filter((h) => h !== host);
+  alerter.forget(host);
   if (existed) dirty = true;
   return existed;
 }
@@ -250,7 +254,21 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView() });
+  // ---- 알림 ----
+  if (req.method === 'GET' && url.pathname === '/api/alerts') return json(res, 200, { active: alerter.getActive(), recent: alerter.getRecent(100) });
+  if (req.method === 'GET' && url.pathname === '/api/settings') return json(res, 200, alerter.getSettings(true));
+  if (req.method === 'PUT' && url.pathname === '/api/settings') {
+    try { const patch = JSON.parse((await readBody(req)) || '{}'); return json(res, 200, alerter.updateSettings(patch)); }
+    catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/alerts/test') {
+    try { return json(res, 200, await alerter.sendTest()); } catch (e) { return json(res, 502, { ok: false, error: String(e.message || e) }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/alerts/discover') {
+    try { return json(res, 200, { ok: true, chats: await alerter.discoverChats() }); } catch (e) { return json(res, 502, { ok: false, error: String(e.message || e) }); }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView(), active_alerts: alerter.getActive() });
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, servers: store.size, uptime: Math.round(process.uptime()) });
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
@@ -269,6 +287,7 @@ const server = http.createServer(async (req, res) => {
 
 loadState();
 if (STATE_FILE) setInterval(() => saveState(false), SAVE_EVERY).unref();
+setInterval(() => { try { alerter.evaluate(serversView()); } catch (e) { console.error('알림 평가 오류:', e.message); } }, 10000).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); process.exit(0); });
 
 server.on('error', (e) => {

@@ -16,6 +16,7 @@
 | 파일 | 역할 | 실행 위치 |
 |---|---|---|
 | `server.js` | 수집기. 데이터를 받아 메모리에 보관하고 화면을 제공 | 내 PC |
+| `alerts.js` | 알림 엔진. 임계치 감지, 재알림/복귀/조용 시간, 텔레그램 전송 | (수집기가 사용) |
 | `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
 | `agent/agent.sh` | Linux 에이전트 (bash + curl) | 각 Linux 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` | **Windows 에이전트 설치 프로그램** (프로그램 추가/제거 등록, 트레이 아이콘) | 각 Windows 서버 |
@@ -58,6 +59,7 @@ node agent/simulate.js
 | `LOG_FILE` | (없음) | 지정하면 수신 데이터를 JSON Lines 파일로도 기록 |
 | `STATE_FILE` | `data/state.json` | 재시작 대비 스냅샷 파일. 빈 값이면 저장 안 함 |
 | `SAVE_EVERY` | 30 | 스냅샷 저장 간격(초) |
+| `SETTINGS_FILE` | `data/settings.json` | 알림 설정 파일 |
 
 예: `set TOKEN=abc123 && node server.js` (Windows CMD) / `TOKEN=abc123 node server.js` (Linux)
 
@@ -113,6 +115,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 - 에이전트 트레이 메뉴 "이름 설정"으로 정한 표시 이름이 카드 제목으로 나오고 호스트명은 그 아래 줄에 작게 표시됩니다.
 - 카드 왼쪽 위 ⠿ 를 잡고 **드래그**하면 순서가 바뀌고 수집기에 저장되어 모든 PC 에서 같은 순서로 보입니다. 팝업의 "◀ 앞으로 / 뒤로 ▶" 버튼으로도 옮길 수 있습니다.
 - 팝업의 "목록에서 삭제"로 카드를 지울 수 있습니다. 에이전트가 아직 실행 중이면 다음 전송 때 다시 나타나고, 서버에서 에이전트를 제거하면 자동으로 목록에서 빠집니다.
+- 🔔 알림 버튼에서 텔레그램 봇과 임계치를 설정합니다. 경고가 있으면 상단에 빨간 배너가 뜨고 카드에 ⚠ 가 붙습니다. 설정 방법은 [SETUP-IMS.md](SETUP-IMS.md) 의 "알림 설정" 참고.
 - 헤더 오른쪽에 수집기 버전이 표시됩니다. 업그레이드 후 버전이 안 바뀌면 예전 프로세스가 남아 있는 것입니다.
 - 90초 동안 데이터가 없으면 카드 전체가 **빨간색**으로 바뀌고 "오프라인" 배지가 붙습니다.
 - 카드를 클릭하면 아래에 최근 CPU / 메모리 추이 그래프가 나타납니다.
@@ -139,6 +142,10 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `POST /api/metrics` | 에이전트 수신 |
 | `POST /api/unregister` | 목록에서 호스트 제거 (`{"host":"..."}`), 에이전트 제거 시 자동 호출 |
 | `PUT /api/order` | 카드 순서 저장 (`{"order":["호스트",...]}`) |
+| `GET /api/alerts` | 현재 경고와 최근 알림 이력 |
+| `GET/PUT /api/settings` | 알림 설정 (텔레그램, 임계치, 조용 시간). 토큰은 마스킹되어 반환 |
+| `POST /api/alerts/test` | 텔레그램 테스트 전송 |
+| `POST /api/alerts/discover` | 봇에게 말을 건 대화 목록에서 채팅 ID 찾기 |
 | `GET /api/servers` | 전체 서버 최신 상태 |
 | `GET /api/history?host=이름` | 해당 서버의 CPU/메모리 추이 |
 
