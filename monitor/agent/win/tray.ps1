@@ -87,6 +87,7 @@ function Read-Status {
     if (-not (Test-Path $StatusFile)) { return @{ state = 'warn'; text = "에이전트 시작 중..." } }
     $st = Get-Content $StatusFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $age = [int]((Get-Date) - [datetime]$st.time).TotalSeconds
+    if ($st.starting -and $age -lt 180) { return @{ state = 'warn'; text = "에이전트 시작 중 ($age 초)" } }
     if ($age -gt ([int]$st.interval * 6 + 30)) { return @{ state = 'bad'; text = "에이전트 응답 없음 ($age 초 전이 마지막)" } }
     if ($st.ok) { return @{ state = 'ok'; text = "정상 전송 중 ($age 초 전) CPU $($st.cpu)% MEM $($st.mem_pct)%" } }
     return @{ state = 'bad'; text = "전송 실패: $($st.error)" }
@@ -136,6 +137,8 @@ $mLog.add_Click({ if (Test-Path $LogFile) { Start-Process notepad.exe $LogFile }
 $menu.Items.Add("-") | Out-Null
 $mStart = $menu.Items.Add("에이전트 시작")
 $mStart.add_Click({ Invoke-TaskCommand '/Run' })
+$mRestart = $menu.Items.Add("에이전트 재시작")
+$mRestart.add_Click({ Invoke-TaskCommand '/End'; Start-Sleep -Seconds 2; Invoke-TaskCommand '/Run' })
 $mStop = $menu.Items.Add("에이전트 종료 (전송 중지)")
 $mStop.add_Click({
   $r = [System.Windows.Forms.MessageBox]::Show("에이전트를 종료하면 이 서버의 정보가 모니터링 화면에 오프라인으로 표시됩니다.`n종료할까요?", "IMS Monitoring Agent", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
@@ -147,6 +150,7 @@ $mHide.add_Click({ $ni.Visible = $false; [System.Windows.Forms.Application]::Exi
 $menu.add_Opening({
   $mStart.Enabled = ($script:taskState -eq 'stopped')
   $mStop.Enabled = ($script:taskState -eq 'running')
+  $mRestart.Enabled = ($script:taskState -ne 'missing')
 })
 $ni.ContextMenuStrip = $menu
 $ni.add_DoubleClick({ if ($dashUrl) { Start-Process $dashUrl } })

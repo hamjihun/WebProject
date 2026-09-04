@@ -47,9 +47,17 @@ function WriteStatus([bool]$ok, [string]$err, [double]$cpu, [int]$memPct) {
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 if ($SkipCertCheck) { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
 
-$os = Get-CimInstance Win32_OperatingSystem
-$osName = "$($os.Caption) $($os.Version)"
+# 시작 직후 상태 파일부터 기록 (트레이가 "시작 중"으로 표시)
+try { @{ ok = $false; starting = $true; time = (Get-Date).ToString('o'); error = '시작 중'; host = $HostName; url = $Url; interval = $Interval } | ConvertTo-Json -Compress | Set-Content -Path $StatusFile -Encoding UTF8 } catch {}
 Log "에이전트 시작: $HostName -> $Url (간격 ${Interval}초)"
+
+# 부팅 직후에는 WMI 가 준비 안 됐을 수 있으므로 될 때까지 재시도
+$os = $null
+for ($i = 0; $i -lt 40 -and -not $os; $i++) {
+  try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { if ($i -eq 0) { Log "WMI 준비 대기: $($_.Exception.Message)" }; Start-Sleep -Seconds 15 }
+}
+if (-not $os) { Log "WMI 를 사용할 수 없어 종료합니다 (작업 스케줄러가 1분 뒤 재시작)"; exit 1 }
+$osName = "$($os.Caption) $($os.Version)"
 
 # 가동 시간 기준: Windows 가 실제로 켜진 시점.
 # 빠른 시작(Fast Startup)으로 종료/시작하면 LastBootUpTime 이 갱신되지 않으므로
@@ -62,7 +70,7 @@ function Get-StartTime {
   } catch {}
   return $boot
 }
-$startTime = Get-StartTime
+$startTime = try { Get-StartTime } catch { $os.LastBootUpTime }
 $startChecked = Get-Date
 
 # 표시 이름: 트레이 메뉴 "이름 설정" 이 %ProgramData%\IMSMonitoringAgent\display.conf 에 저장 (NAME=...)
@@ -84,14 +92,28 @@ $prevNet = Get-NetBytes
 $prevT = Get-Date
 $failStreak = 0
 
+# CPU 사용률: Win32_PerfRawData_PerfOS_Processor(_Total) 의 유휴 시간 차이로 계산 (성능 카운터 cmdlet 미사용)
+$script:prevCpuRaw = $null
+function Get-CpuPercent {
+  try {
+    $p = Get-CimInstance Win32_PerfRawData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
+    if ($p) {
+      $cur = @{ idle = [double]$p.PercentProcessorTime; ts = [double]$p.Timestamp_Sys100NS }
+      $prev = $script:prevCpuRaw; $script:prevCpuRaw = $cur
+      if ($prev -and ($cur.ts - $prev.ts) -gt 0) {
+        $v = 100.0 - (($cur.idle - $prev.idle) / ($cur.ts - $prev.ts)) * 100.0
+        return [math]::Round([math]::Max(0, [math]::Min(100, $v)), 1)
+      }
+    }
+  } catch {}
+  try { return [double](Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average } catch { return 0 }
+}
+Get-CpuPercent | Out-Null   # 첫 샘플
+
 while ($true) {
   Start-Sleep -Seconds $Interval
   try {
-    try {
-      $cpu = [math]::Round((Get-Counter '\Processor(_Total)\% Processor Time' -ErrorAction Stop).CounterSamples[0].CookedValue, 1)
-    } catch {
-      $cpu = (Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average
-    }
+    $cpu = Get-CpuPercent
     $os = Get-CimInstance Win32_OperatingSystem
     $memTotal = [int64]$os.TotalVisibleMemorySize * 1024
     $memUsed = $memTotal - ([int64]$os.FreePhysicalMemory * 1024)

@@ -54,6 +54,7 @@ if ($Install) {
   $args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Dir\agent.ps1`""
   $action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $args -WorkingDirectory $Dir
   $trigger   = New-ScheduledTaskTrigger -AtStartup
+  $trigger.Delay = 'PT30S'    # 부팅 후 30초 뒤 시작 (네트워크/WMI 준비 시간)
   $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
   $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "IMS Monitoring Agent (CPU/메모리/디스크 전송)" | Out-Null
