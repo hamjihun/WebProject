@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.5.0';
+const VERSION = '1.5.1';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

@@ -65,7 +65,8 @@ function create({ settingsFile, log = console.log }) {
   }
   async function sendTelegram(text) {
     if (!settings.telegram.enabled) return { skipped: 'disabled' };
-    if (!settings.telegram.chatId) throw new Error('채팅 ID가 없습니다');
+    if (!settings.telegram.chatId) throw new Error('채팅 ID가 없습니다 ("채팅 ID 찾기"로 선택)');
+    if (!/^-?\d{5,}$/.test(String(settings.telegram.chatId))) throw new Error('채팅 ID는 숫자여야 합니다 (봇 아이디 @... 가 아님)');
     await tgRequest('sendMessage', { chat_id: settings.telegram.chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
     return { sent: true };
   }
@@ -177,6 +178,7 @@ function create({ settingsFile, log = console.log }) {
       return this.getSettings(true);
     },
     async sendTest() {
+      if (!/^-?\d{5,}$/.test(String(settings.telegram.chatId))) throw new Error('채팅 ID는 숫자여야 합니다. 봇에게 메시지를 보낸 뒤 "채팅 ID 찾기"로 본인을 선택하세요');
       const r = await tgRequest('sendMessage', { chat_id: settings.telegram.chatId, parse_mode: 'HTML',
         text: `✅ <b>[${esc(settings.title)}] 테스트</b>\n알림 연결이 정상입니다.\n<i>${ts()}</i>` });
       return { ok: true, message_id: r.message_id };

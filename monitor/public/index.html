@@ -20,6 +20,8 @@
   header .sum { color:var(--muted); font-size:13px; }
   header .sum b { color:var(--text); }
   header .ver { margin-left:auto; color:var(--muted); font-size:11px; }
+  #vermismatch { background:#7c2d12; color:#fff; padding:8px 20px; font-size:13px; }
+  #vermismatch[hidden] { display:none; }
   header .bell { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:13px; position:relative; }
   header .bell:hover { border-color:var(--accent); }
   header .bell b { background:var(--bad); color:#fff; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
@@ -111,6 +113,7 @@
   <div class="ver" id="ver"></div>
   <button class="bell" id="bell" title="알림 설정과 이력">🔔 알림<b id="bellcnt" hidden>0</b></button>
 </header>
+<div id="vermismatch" hidden></div>
 <div id="banner" hidden></div>
 <main id="main"></main>
 <div id="aoverlay" hidden>
@@ -124,7 +127,7 @@
     <div class="form">
       <label class="chk wide"><input type="checkbox" id="tgEnabled"> 텔레그램으로 알림 보내기</label>
       <label class="wide">봇 토큰 (텔레그램 @BotFather 에서 발급, 예: 123456789:AAH...)<input type="password" id="tgToken" placeholder="변경할 때만 입력"></label>
-      <label class="wide">채팅 ID (봇에게 아무 메시지를 보낸 뒤 "채팅 ID 찾기")<input type="text" id="tgChat" placeholder="예: 123456789 또는 -100xxxx (그룹)">
+      <label class="wide">채팅 ID (봇에게 아무 메시지를 보낸 뒤 "채팅 ID 찾기")<input type="text" id="tgChat" placeholder="숫자만 (예: 123456789, 그룹은 -100xxxx). 아래 '채팅 ID 찾기'로 자동 입력">
         <div class="chatpick" id="chatpick"></div></label>
       <label class="wide">알림 제목<input type="text" id="aTitle"></label>
     </div>
@@ -180,6 +183,7 @@
 </div>
 
 <script>
+const UI_VERSION = '1.5.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -427,6 +431,7 @@ async function loadSettings() {
   F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery;
   F('qEnabled').checked = !!c.quiet.enabled; F('qFrom').value = c.quiet.from; F('qTo').value = c.quiet.to;
 }
+function validChatId(v) { return /^-?\d{5,}$/.test(v); }
 function collectSettings() {
   const num = (id, d) => { const v = Number(F(id).value); return Number.isFinite(v) ? v : d; };
   const patch = {
@@ -441,8 +446,14 @@ function collectSettings() {
 }
 async function saveSettings(silent) {
   const $m = F('saveMsg'); $m.className = 'msg';
+  const chat = F('tgChat').value.trim();
+  if (chat && !validChatId(chat)) {
+    $m.textContent = '채팅 ID는 숫자입니다 (예: 123456789). 봇 아이디(@...)가 아니라, 봇에게 메시지를 보낸 뒤 "채팅 ID 찾기"를 눌러 본인을 선택하세요.';
+    $m.className = 'msg err'; return false;
+  }
   try {
     const r = await fetch('api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectSettings()) });
+    if (r.status === 404) throw new Error('수집기가 구버전입니다. IMS 서버에서 setup-collector.cmd 를 다시 실행하세요');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await loadSettings();
     if (!silent) { $m.textContent = '저장했습니다'; $m.className = 'msg ok'; }
@@ -493,7 +504,12 @@ async function refresh() {
     if (dragging) return;              // 드래그 중에는 갱신 보류
     servers = j.servers;
     activeAlerts = j.active_alerts || activeAlerts;
-    if (j.version) document.getElementById('ver').textContent = '수집기 v' + j.version;
+    document.getElementById('ver').textContent = '수집기 v' + (j.version || '구버전');
+    const $vm = document.getElementById('vermismatch');
+    if ((j.version || '') !== UI_VERSION) {
+      $vm.hidden = false;
+      $vm.textContent = `⚠ 수집기 프로그램이 ${j.version ? 'v' + j.version : '구버전'} 이고 화면 파일은 v${UI_VERSION} 입니다. 예전 수집기 프로세스가 남아 있는 상태입니다. IMS 서버에서 deploy\\setup-collector.cmd 를 다시 실행하세요 (안 되면 작업 관리자에서 node.exe 종료 후 재실행).`;
+    } else $vm.hidden = true;
     render();
     if (selected) loadDetail();
   } catch (e) {
