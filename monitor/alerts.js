@@ -14,8 +14,10 @@ const DEFAULTS = {
     disk: 90, disk_on: true,                    // 디스크 사용률 90% 이상 / 소진 예상
     days_left: 30,                              // 예상 소진 30일 이내
     offline: true,                              // 오프라인 알림
+    disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
   },
-  muted: {},                       // 서버별 알림 끄기 { 호스트명: true }
+  muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
+  hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
   remind_min: 60,                  // 계속 경고 상태면 이 간격으로 다시 알림 (0 = 처음 한 번만)
   recovery: true,                  // 정상 복귀 알림
   quiet: { enabled: false, from: '23:00', to: '07:00' },  // 조용 시간 (오프라인 알림은 예외)
@@ -176,34 +178,50 @@ function create({ settingsFile, logDir, log = console.log }) {
     for (const [key, st] of states) { const p = key.split('|'); if (p[0] === host && p[1] === rule && st.active) { st.active = false; st.notified = false; st.since = null; } }
   }
 
+  let lastDiskCheckDay = null;
+  function diskCheckDue() {
+    const t = settings.rules.disk_check_time;
+    if (!t) return true;                                   // 미설정 = 항상
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t); if (!m) return true;
+    const now = new Date(), cur = now.getHours() * 60 + now.getMinutes(), target = Number(m[1]) * 60 + Number(m[2]);
+    const day = now.toDateString();
+    if (cur >= target && lastDiskCheckDay !== day) { lastDiskCheckDay = day; return true; }
+    return false;
+  }
+
   function evaluate(servers) {
     const r = settings.rules;
     const live = new Set();
     if (!settings.enabled) { for (const s of servers) clearHost(s.host); return; }
+    const diskNow = diskCheckDue();
     for (const s of servers) {
       live.add(s.host);
       const H = s.host, N = s.name;
       if (settings.muted && settings.muted[H]) { clearHost(H); continue; }
-      if (!r.cpu_on) clearRule(H, 'cpu');
-      if (!r.mem_on) clearRule(H, 'mem');
-      if (!r.disk_on) { clearRule(H, 'disk'); clearRule(H, 'full'); }
+      const hr = (settings.hostRules && settings.hostRules[H]) || {};
+      const cpuOn = r.cpu_on !== false && hr.cpu !== false, memOn = r.mem_on !== false && hr.mem !== false;
+      const diskOn = r.disk_on !== false && hr.disk !== false, offOn = !!r.offline && hr.offline !== false;
+      if (!cpuOn) clearRule(H, 'cpu');
+      if (!memOn) clearRule(H, 'mem');
+      if (!diskOn) { clearRule(H, 'disk'); clearRule(H, 'full'); }
+      if (!offOn) clearRule(H, 'offline');
       // 오프라인
-      check(`${H}|offline`, H, N, r.offline && !s.online,
+      if (offOn) check(`${H}|offline`, H, N, !s.online,
         () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)`, { rule: 'offline', critical: true, recoverMsg: () => '서버 응답 복구' });
       if (!s.online) {   // 오프라인이면 다른 규칙은 판단 보류 (값이 오래된 것)
         for (const k of ['cpu', 'mem']) { const st = states.get(`${H}|${k}`); if (st) st.since = null; }
         continue;
       }
       // CPU / 메모리 (지속 시간, 히스테리시스 5%)
-      if (r.cpu_on) check(`${H}|cpu`, H, N, s.cpu >= r.cpu,
+      if (cpuOn) check(`${H}|cpu`, H, N, s.cpu >= r.cpu,
         () => `CPU ${s.cpu}% 가 ${r.cpu_minutes}분 이상 지속 (기준 ${r.cpu}%)`,
         { rule: 'cpu', minutes: r.cpu_minutes, threshold: r.cpu, hold: s.cpu >= r.cpu - 5, recoverMsg: () => `CPU 정상 복귀 (${s.cpu}%)` });
-      if (r.mem_on) check(`${H}|mem`, H, N, s.mem_pct >= r.mem,
+      if (memOn) check(`${H}|mem`, H, N, s.mem_pct >= r.mem,
         () => `메모리 ${s.mem_pct}% 가 ${r.mem_minutes}분 이상 지속 (${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}, 기준 ${r.mem}%)`,
         { rule: 'mem', minutes: r.mem_minutes, threshold: r.mem, hold: s.mem_pct >= r.mem - 5, recoverMsg: () => `메모리 정상 복귀 (${s.mem_pct}%)` });
       // 디스크
       const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
-      for (const d of (r.disk_on ? (s.disks || []) : [])) {
+      for (const d of ((diskOn && diskNow) ? (s.disks || []) : [])) {   // 디스크는 지정 시각에 하루 한 번
         check(`${H}|disk|${d.mount}`, H, N, d.pct >= r.disk,
           () => `${d.mount} 드라이브 ${d.pct}% 사용 (${fmtBytes(d.used)} / ${fmtBytes(d.total)}, 기준 ${r.disk}%)`,
           { rule: 'disk', threshold: r.disk, hold: d.pct >= r.disk - 2, recoverMsg: () => `${d.mount} 드라이브 사용률 정상 (${d.pct}%)` });
@@ -218,8 +236,25 @@ function create({ settingsFile, logDir, log = console.log }) {
 
   return {
     evaluate,
-    forget(host) { for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key); if (settings.muted && settings.muted[host]) { delete settings.muted[host]; saveSettings(); } },
+    forget(host) {
+      for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key);
+      let changed = false;
+      if (settings.muted && settings.muted[host]) { delete settings.muted[host]; changed = true; }
+      if (settings.hostRules && settings.hostRules[host]) { delete settings.hostRules[host]; changed = true; }
+      if (changed) saveSettings();
+    },
     isMuted(host) { return !!(settings.muted && settings.muted[host]); },
+    getHostRules(host) { return (settings.hostRules && settings.hostRules[host]) || {}; },
+    setHostRules(host, rules) {
+      if (!settings.hostRules) settings.hostRules = {};
+      const cur = { ...(settings.hostRules[host] || {}) };
+      for (const k of ['cpu', 'mem', 'disk', 'offline']) if (rules && typeof rules[k] === 'boolean') { if (rules[k]) delete cur[k]; else cur[k] = false; }
+      if (Object.keys(cur).length) settings.hostRules[host] = cur; else delete settings.hostRules[host];
+      for (const k of Object.keys(cur)) { clearRule(host, k); if (k === 'disk') clearRule(host, 'full'); }
+      saveSettings();
+      return this.getHostRules(host);
+    },
+    diskCheckTime() { return settings.rules.disk_check_time || ''; },
     setMuted(host, muted) {
       if (!settings.muted) settings.muted = {};
       if (muted) settings.muted[host] = true; else delete settings.muted[host];

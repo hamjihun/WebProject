@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -115,9 +115,17 @@ function daysBetween(k1, k2) { return Math.round((new Date(k2 + 'T00:00:00') - n
 
 function recordDaily(entry, m) {
   if (!m.disks.length) return;
+  const key = dayKey(m.ts);
+  // 디스크 점검 시각이 설정돼 있으면 그 시각 이후 첫 값을 그날 값으로 고정 (새벽 백업 변동 제외)
+  const t = /^(\d{1,2}):(\d{2})$/.exec(alerter.diskCheckTime() || '');
+  if (t) {
+    const d = new Date(m.ts), cur = d.getHours() * 60 + d.getMinutes();
+    if (cur < Number(t[1]) * 60 + Number(t[2])) return;
+    if (entry.daily[key] && entry.daily[key].fixed) return;
+  }
   const disks = {};
   for (const d of m.disks) if (d.mount) disks[d.mount] = { used: d.used, total: d.total };
-  entry.daily[dayKey(m.ts)] = { ts: m.ts, disks };            // 그날의 마지막 값이 남음
+  entry.daily[key] = { ts: m.ts, disks, fixed: !!t };         // 점검 시각 미설정이면 그날의 마지막 값
   const keys = Object.keys(entry.daily);
   if (keys.length > DAILY_KEEP) { keys.sort(); for (const k of keys.slice(0, keys.length - DAILY_KEEP)) delete entry.daily[k]; }
 }
@@ -171,7 +179,7 @@ function serversView() {
   const now = Date.now();
   const list = [];
   for (const [host, e] of store) {
-    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host) });
+    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host) });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));
@@ -249,9 +257,11 @@ const server = http.createServer(async (req, res) => {
       const raw = JSON.parse((await readBody(req)) || '{}');
       const host = String(raw.host || '').trim();
       if (!host || !store.has(host)) return json(res, 404, { ok: false, error: 'unknown host' });
-      const muted = alerter.setMuted(host, !!raw.muted);
-      console.log(`[${new Date().toLocaleTimeString()}] 알림 ${muted ? '끔' : '켬'}: ${host}`);
-      return json(res, 200, { ok: true, host, muted });
+      let muted = alerter.isMuted(host);
+      if (typeof raw.muted === 'boolean') { muted = alerter.setMuted(host, raw.muted); console.log(`[${new Date().toLocaleTimeString()}] 알림 ${muted ? '끔' : '켬'}: ${host}`); }
+      let rules = alerter.getHostRules(host);
+      if (raw.rules && typeof raw.rules === 'object') { rules = alerter.setHostRules(host, raw.rules); console.log(`[${new Date().toLocaleTimeString()}] 서버별 규칙: ${host} ${JSON.stringify(rules)}`); }
+      return json(res, 200, { ok: true, host, muted, rules });
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 

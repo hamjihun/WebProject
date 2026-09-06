@@ -6,8 +6,8 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.7.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
-| `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별 끄기, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
+| `server.js` (v1.8.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 대시보드. `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `agent/win/` | Windows 에이전트 소스: `agent.ps1`(수집), `tray.ps1`(트레이), `service.ps1`(작업 등록), `start.ps1/.vbs`(바탕화면 실행), `installer.nsi`(NSIS), `make-icon.py`(아이콘) | 각 Windows 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` (v1.3.0) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
@@ -20,6 +20,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 - 에이전트 → `http://192.168.0.9:15138/api/metrics` 로 5초마다 POST. 토큰 기본값 `ilsan-mon-2026` (설치 파일과 `deploy/setup-collector.cmd` 에 기본값으로 들어 있음. 저장소가 Public 이라 사용자에게 Private 전환과 토큰 변경을 권고했음).
 - 현재 연결된 서버: 사용자 PC(DESKTOP-291F7VR), 그룹웨어 서버, MES 서버, ACE ERP 서버. 텔레그램 봇 연결 완료.
 - 업그레이드 절차: `monitor` 폴더 덮어쓰기(`data/` 유지) → `deploy\setup-collector.cmd` 재실행. 설치 스크립트가 기존 node.exe 를 종료함. 화면 오른쪽 위 "수집기 vX" 로 확인.
+- 디스크 일별 스냅샷(`recordDaily`)은 `disk_check_time` 이후 첫 값으로 고정(`fixed`). 사용자 서버는 새벽 백업으로 300GB 가 생기고 아침에 자동 삭제되므로 그 변동을 제외하려는 것.
 - 에이전트 업그레이드: 새 Setup.exe 를 다음만 눌러 재설치 (설정 유지). 제거 시 `/api/unregister` 호출로 화면에서 자동 삭제.
 
 ## 코드 규약
