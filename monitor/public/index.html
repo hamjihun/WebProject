@@ -89,7 +89,7 @@
   .growth .bad { color:var(--bad); font-weight:700; }
   .meta { color:var(--muted); font-size:12px; margin-top:8px; display:flex; gap:10px; align-items:center; }
   .meta .os { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .meta .up, .meta .age { flex:none; white-space:nowrap; }
+  .meta .uptm, .meta .age { flex:none; white-space:nowrap; color:var(--muted); }
   .empty { grid-column:1/-1; color:var(--muted); text-align:center; padding:60px 0; line-height:1.8; }
   .empty code { color:var(--accent); }
   /* 상세 팝업 */
@@ -281,7 +281,7 @@ function cardHtml(s) {
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
-    <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="up">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
+    <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="uptm">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
 
