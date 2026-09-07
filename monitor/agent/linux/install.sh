@@ -14,6 +14,8 @@ APP=ims-agent; DIR=/opt/ims-agent; CONF_DIR=/etc/ims-agent; CONF=$CONF_DIR/agent
 UNIT=/etc/systemd/system/$APP.service; BIN=/usr/local/bin/$APP; STATUS=/var/lib/ims-agent/status.json
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# 진짜 systemd 인지 확인 (시놀로지 DSM 은 흉내만 내는 systemctl 이 있어 --now 등이 안 됨)
+has_systemd() { [ ! -f /etc/synoinfo.conf ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; }
 need_root() { [ "$(id -u)" -eq 0 ] || { echo "root 권한이 필요합니다: sudo $0 $*" >&2; exit 1; }; }
 conf_get() { grep -E "^$1=" "$CONF" 2>/dev/null | head -1 | cut -d= -f2-; }
 conf_set() { mkdir -p "$CONF_DIR"; touch "$CONF"; if grep -qE "^$1=" "$CONF"; then sed -i "s|^$1=.*|$1=$2|" "$CONF"; else echo "$1=$2" >> "$CONF"; fi; }
@@ -28,7 +30,7 @@ cmd_install() {
   [ -z "$URL" ] && URL="$(conf_get URL)"; [ -z "$TOKEN" ] && TOKEN="$(conf_get TOKEN)"; [ -z "$NAME" ] && NAME="$(conf_get NAME)"; [ -z "$DISKS" ] && DISKS="$(conf_get DISKS)"
   [ -z "$URL" ] && { echo "--url 이 필요합니다. 예: --url http://192.168.0.9:15138/api/metrics" >&2; exit 1; }
   command -v curl >/dev/null || { echo "curl 이 필요합니다: apt install curl / yum install curl" >&2; exit 1; }
-  if ! command -v systemctl >/dev/null; then NOSYSTEMD=1; DIR=/usr/local/ims-agent; fi   # 시놀로지 DSM 등
+  if ! has_systemd; then NOSYSTEMD=1; DIR=/usr/local/ims-agent; fi   # 시놀로지 DSM 등
 
   mkdir -p "$DIR" "$CONF_DIR" /var/lib/ims-agent
   cp "$SRC_DIR/ims-agent.sh" "$DIR/ims-agent.sh"; chmod +x "$DIR/ims-agent.sh"
@@ -77,7 +79,7 @@ nosd_start() { nosd_stop; nohup "$DIR/ims-agent.sh" >> /var/log/ims-agent.log 2>
 nosd_stop() { if nosd_running; then kill "$(cat "$PIDF")" 2>/dev/null; fi; rm -f "$PIDF"; pkill -f "$DIR/ims-agent.sh" 2>/dev/null || true; }
 
 cmd_status() {
-  if command -v systemctl >/dev/null; then
+  if has_systemd; then
     if systemctl is-active --quiet $APP 2>/dev/null; then echo "서비스: 실행 중"; else echo "서비스: 중지됨"; fi
   else
     if nosd_running; then echo "에이전트: 실행 중 (PID $(cat "$PIDF"))"; else echo "에이전트: 중지됨 ('$BIN start' 로 시작)"; fi
@@ -95,7 +97,7 @@ cmd_uninstall() {
   if [ -n "$URL" ]; then
     curl -s -m 5 -X POST -H 'Content-Type: application/json' --data "{\"host\":\"$(hostname)\",\"token\":\"$TOKEN\"}" "${URL%/api/metrics}/api/unregister" >/dev/null 2>&1 && echo "수집기 목록에서 제거 요청 완료" || echo "수집기 알림 실패 (무시)"
   fi
-  if command -v systemctl >/dev/null; then systemctl disable --now $APP 2>/dev/null || true; rm -f "$UNIT"; systemctl daemon-reload; else nosd_stop; fi
+  if has_systemd; then systemctl disable --now $APP 2>/dev/null || true; rm -f "$UNIT"; systemctl daemon-reload; else nosd_stop; fi
   rm -rf "$DIR" "$CONF_DIR" /var/lib/ims-agent "$BIN"
   echo "제거 완료"
 }
@@ -107,9 +109,9 @@ case "${1:-}" in
   name) cmd_name "${2:-}";;
   disks) cmd_disks "${2:-}";;
   restart|stop|start) need_root
-    if command -v systemctl >/dev/null; then systemctl "$1" $APP && echo "$1 완료"
+    if has_systemd; then systemctl "$1" $APP && echo "$1 완료"
     else case "$1" in start|restart) nosd_start;; stop) nosd_stop;; esac; echo "$1 완료"; fi;;
-  log) if command -v systemctl >/dev/null; then journalctl -u $APP -f; else tail -f /var/log/ims-agent.log; fi;;
+  log) if has_systemd; then journalctl -u $APP -f; else tail -f /var/log/ims-agent.log; fi;;
   uninstall|remove) cmd_uninstall;;
   *) sed -n '2,12p' "$0"; exit 1;;
 esac
