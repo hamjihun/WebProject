@@ -29,7 +29,31 @@ DIR=$(find_dir) || exit 1; CONF=$DIR/agent.conf; PIDF=/var/run/ims-agent.pid; LO
 conf_get() { grep "^$1=" "$CONF" 2>/dev/null | head -1 | cut -d= -f2-; }
 conf_set() { touch "$CONF"; if grep -q "^$1=" "$CONF"; then sed -i "s|^$1=.*|$1=$2|" "$CONF"; else echo "$1=$2" >> "$CONF"; fi; }
 running() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
-start() { stop; nohup /bin/python "$DIR/ims-agent-esxi.py" >> "$LOG" 2>&1 & echo $! > "$PIDF"; sleep 3; }
+# ESXi 방화벽: 수집기 포트로 나가는 연결 허용 (기본은 80/443 만 허용). 규칙 파일은 재부팅 시 사라지므로 start 때마다 다시 넣는다
+fw_setup() {
+  url="$(conf_get URL)"; port=$(echo "$url" | sed -n 's|^[a-z]*://[^:/]*:\([0-9]*\).*|\1|p')
+  [ -z "$port" ] && { case "$url" in https://*) port=443;; *) port=80;; esac; }
+  cat > "$DIR/ims-agent-fw.xml" <<XML
+<ConfigRoot>
+  <service id="0100">
+    <id>imsAgent</id>
+    <rule id="0000">
+      <direction>outbound</direction>
+      <protocol>tcp</protocol>
+      <porttype>dst</porttype>
+      <port>$port</port>
+    </rule>
+    <enabled>true</enabled>
+    <required>false</required>
+  </service>
+</ConfigRoot>
+XML
+  cp "$DIR/ims-agent-fw.xml" /etc/vmware/firewall/imsagent.xml 2>/dev/null
+  esxcli network firewall refresh >/dev/null 2>&1
+  esxcli network firewall ruleset set -r imsAgent -e true >/dev/null 2>&1
+  if esxcli network firewall ruleset list 2>/dev/null | grep -q "imsAgent.*true"; then echo "방화벽: 아웃바운드 TCP $port 허용 (imsAgent)"; else echo "방화벽 규칙 등록 실패 - 수동 확인 필요: esxcli network firewall ruleset list" >&2; fi
+}
+start() { stop; fw_setup; nohup /bin/python "$DIR/ims-agent-esxi.py" >> "$LOG" 2>&1 & echo $! > "$PIDF"; sleep 3; }
 stop() { running && kill "$(cat "$PIDF")" 2>/dev/null; rm -f "$PIDF"; pkill -f ims-agent-esxi.py 2>/dev/null; true; }
 status() {
   if running; then echo "에이전트: 실행 중 (PID $(cat "$PIDF"))"; else echo "에이전트: 중지됨"; fi
@@ -69,6 +93,7 @@ u='${URL%/api/metrics}/api/unregister'
 try: urlopen(Request(u,data=json.dumps({'host':'$(hostname)','token':'$TOKEN'}).encode(),headers={'Content-Type':'application/json'}),timeout=5).read(); print('수집기 목록에서 제거 요청 완료')
 except Exception as e: print('수집기 알림 실패 (무시):',e)"
   stop
+  esxcli network firewall ruleset set -r imsAgent -e false >/dev/null 2>&1; rm -f /etc/vmware/firewall/imsagent.xml; esxcli network firewall refresh >/dev/null 2>&1
   sed -i "/$MARK/,+1d" "$LOCAL_SH" 2>/dev/null
   rm -rf "$DIR" /etc/ims-agent.dir
   echo "제거 완료"
