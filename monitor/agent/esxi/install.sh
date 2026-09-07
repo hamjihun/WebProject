@@ -1,6 +1,7 @@
 #!/bin/sh
 # IMS Monitoring Agent 설치 (VMware ESXi 호스트용). ESXi 셸(SSH)에서 root 로 실행.
 #   ./install.sh --url http://192.168.0.9:15138/api/metrics --token ilsan-mon-2026 --name "가상화 서버"
+#   (설치 폴더 직접 지정)  ./install.sh --dir /vmfs/volumes/datastore1 --url ... --token ... --name ...
 #   ./install.sh status | name "이름" | restart | stop | log | uninstall
 # 설치 위치: 첫 번째 VMFS 데이터스토어의 ims-agent 폴더 (재부팅 후에도 유지)
 # 부팅 시 자동 실행: /etc/rc.local.d/local.sh 에 시작 줄 추가
@@ -8,14 +9,23 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 LOCAL_SH=/etc/rc.local.d/local.sh
 MARK="# ims-agent"
 
+# --dir /vmfs/volumes/데이터스토어명  으로 설치 폴더를 직접 지정할 수 있음
+IMS_DIR=""; prev=""
+for a in "$@"; do [ "$prev" = "--dir" ] && IMS_DIR="$a/ims-agent"; prev="$a"; done
+writable() { mkdir -p "$1" 2>/dev/null && touch "$1/.w" 2>/dev/null && rm -f "$1/.w"; }
 find_dir() {
-  if [ -f /etc/ims-agent.dir ]; then cat /etc/ims-agent.dir; return; fi
-  ds=$(esxcli --formatter=csv --format-param=fields="Mount Point,Type" storage filesystem list 2>/dev/null | grep -i vmfs | head -1 | cut -d, -f1)
-  [ -z "$ds" ] && ds=$(ls -d /vmfs/volumes/datastore* 2>/dev/null | head -1)
-  [ -z "$ds" ] && { echo "데이터스토어를 찾지 못했습니다" >&2; exit 1; }
-  echo "$ds/ims-agent"
+  if [ -n "$IMS_DIR" ]; then writable "$IMS_DIR" || { echo "$IMS_DIR 에 쓸 수 없습니다" >&2; exit 1; }; echo "$IMS_DIR"; return; fi
+  if [ -f /etc/ims-agent.dir ]; then d=$(cat /etc/ims-agent.dir); if writable "$d"; then echo "$d"; return; fi; fi
+  # 실제 데이터스토어(VMFS-5/6, 마운트됨)만 후보로. OSDATA(VMFS-L) 등 시스템 볼륨 제외
+  for mp in $(esxcli --formatter=csv --format-param=fields="Mount Point,Type,Mounted" storage filesystem list 2>/dev/null | awk -F, 'NR>1 && $2 ~ /^VMFS-[56]/ && tolower($3)=="true" {print $1}') $(ls -d /vmfs/volumes/datastore* 2>/dev/null); do
+    d="$mp/ims-agent"
+    if writable "$d"; then echo "$d"; return; fi
+  done
+  echo "쓸 수 있는 데이터스토어를 찾지 못했습니다. ./install.sh --dir /vmfs/volumes/데이터스토어명 --url ... 으로 지정하세요" >&2
+  echo "데이터스토어 목록: $(ls /vmfs/volumes/ 2>/dev/null | tr '\n' ' ')" >&2
+  exit 1
 }
-DIR=$(find_dir); CONF=$DIR/agent.conf; PIDF=/var/run/ims-agent.pid; LOG=$DIR/agent.log
+DIR=$(find_dir) || exit 1; CONF=$DIR/agent.conf; PIDF=/var/run/ims-agent.pid; LOG=$DIR/agent.log
 conf_get() { grep "^$1=" "$CONF" 2>/dev/null | head -1 | cut -d= -f2-; }
 conf_set() { touch "$CONF"; if grep -q "^$1=" "$CONF"; then sed -i "s|^$1=.*|$1=$2|" "$CONF"; else echo "$1=$2" >> "$CONF"; fi; }
 running() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
@@ -29,7 +39,7 @@ status() {
 install() {
   URL=""; TOKEN=""; NAME=""; INTERVAL=5; INSECURE=0
   while [ $# -gt 0 ]; do case "$1" in
-    --url) URL="$2"; shift;; --token) TOKEN="$2"; shift;; --name) NAME="$2"; shift;; --interval) INTERVAL="$2"; shift;; --insecure) INSECURE=1;;
+    --url) URL="$2"; shift;; --token) TOKEN="$2"; shift;; --name) NAME="$2"; shift;; --interval) INTERVAL="$2"; shift;; --insecure) INSECURE=1;; --dir) shift;;
     *) echo "알 수 없는 옵션: $1" >&2; exit 1;; esac; shift; done
   [ -z "$URL" ] && URL="$(conf_get URL)"; [ -z "$TOKEN" ] && TOKEN="$(conf_get TOKEN)"; [ -z "$NAME" ] && NAME="$(conf_get NAME)"
   [ -z "$URL" ] && { echo "--url 이 필요합니다" >&2; exit 1; }
@@ -64,7 +74,7 @@ except Exception as e: print('수집기 알림 실패 (무시):',e)"
   echo "제거 완료"
 }
 case "${1:-}" in
-  ""|--url|--token|--name|--interval|--insecure) install "$@";;
+  ""|--url|--token|--name|--interval|--insecure|--dir) install "$@";;
   install) shift; install "$@";;
   status) status;;
   name) conf_set NAME "${2:-}"; echo "표시 이름: '${2:-(호스트명)}' - 5초 안에 화면 반영";;
