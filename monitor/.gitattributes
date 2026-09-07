@@ -4,3 +4,4 @@
 *.nsi -text
 *.exe binary
 *.ico binary
+*.pptx binary

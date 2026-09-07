@@ -15,6 +15,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 | `deploy/` | 수집기 설치 스크립트(`setup-collector.cmd` 더블클릭 → `install-collector-windows.ps1 -Public -Port 15138`), 프록시 예시, IMS iframe 예시 | IMS 서버 |
 | `agent/simulate.js` | 가짜 서버 3대 전송 (테스트용) | 개발 |
 | `SETUP-IMS.md`, `README.md` | 사용자용 구축 순서 / 참조 | |
+| `docs/IMS-Monitoring-설치매뉴얼.pptx` | 설치·삭제·관리 매뉴얼 PPT (16장). 생성 스크립트는 세션 스크래치에 있었으므로 수정 시 pptxgenjs 로 재작성 필요 | 배포용 |
 
 ## 운영 사실
 - 에이전트 → `http://192.168.0.9:15138/api/metrics` 로 5초마다 POST. 토큰 기본값 `ilsan-mon-2026` (설치 파일과 `deploy/setup-collector.cmd` 에 기본값으로 들어 있음. 저장소가 Public 이라 사용자에게 Private 전환과 토큰 변경을 권고했음).
