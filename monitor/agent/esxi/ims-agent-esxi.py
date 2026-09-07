@@ -98,21 +98,25 @@ def main():
     print('%s 에이전트 시작: %s -> %s (간격 %d초)' % (time.strftime('%F %T'), HOST, url, interval)); sys.stdout.flush()
     write_status(False, '시작 중', conf=conf)
     prev_rx, prev_tx, prev_t = 0, 0, time.time(); fail = 0
-    try:
-        prev_rx, prev_tx = net_bytes()
-    except Exception:
-        pass
+    use_net = conf.get('NET') == '1'      # esxcli NIC 통계는 느려서 기본은 끔 (agent.conf 에 NET=1 이면 수집)
+    if use_net:
+        try: prev_rx, prev_tx = net_bytes()
+        except Exception: pass
+    first = True
     while True:
-        time.sleep(interval)
+        if not first: time.sleep(interval)
+        first = False
         conf = load_conf()
         try:
             hs = host_summary()
             disks = datastores()
             now = time.time(); dt = max(1, now - prev_t)
-            try:
-                rx, tx = net_bytes(); net_rx = int((rx - prev_rx) / dt); net_tx = int((tx - prev_tx) / dt); prev_rx, prev_tx = rx, tx
-            except Exception:
-                net_rx = net_tx = 0
+            net_rx = net_tx = 0
+            if use_net:
+                try:
+                    rx, tx = net_bytes(); net_rx = int((rx - prev_rx) / dt); net_tx = int((tx - prev_tx) / dt); prev_rx, prev_tx = rx, tx
+                except Exception:
+                    pass
             prev_t = now
             body = {'host': HOST, 'name': conf.get('NAME', ''), 'os': hs['os'], 'token': conf.get('TOKEN', ''), 'cpu': hs['cpu'],
                     'mem_total': hs['mem_total'], 'mem_used': hs['mem_used'], 'uptime': hs['uptime'], 'net_rx': net_rx, 'net_tx': net_tx, 'disks': disks}
