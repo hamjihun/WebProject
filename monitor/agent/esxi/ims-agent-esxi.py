@@ -58,6 +58,7 @@ def datastores():
         if len(p) < 5: continue
         name, size, free, typ, mounted = p[0], p[1], p[2], p[3], p[4]
         if not typ.upper().startswith(('VMFS', 'NFS')) or mounted.lower() != 'true': continue
+        if name.upper().startswith(('OSDATA', 'LOCKER')) or typ.upper() == 'VMFS-L': continue   # ESXi 시스템 볼륨 제외
         try:
             size = int(size); free = int(free)
         except ValueError:

@@ -80,14 +80,16 @@
   .hostline { color:var(--muted); font-size:12px; margin:2px 0 8px 18px; }
   .badge { font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; background:var(--bad); color:#fff; flex:none; }
   .row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:13px; }
-  .row .lbl { width:52px; color:var(--muted); flex:none; }
+  .row .lbl { width:64px; color:var(--muted); flex:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bar { flex:1; height:10px; background:var(--barbg); border-radius:5px; overflow:hidden; }
   .bar > i { display:block; height:100%; background:var(--ok); border-radius:5px; transition:width .4s; }
   .bar > i.w { background:var(--warn); } .bar > i.b { background:var(--bad); }
-  .val { width:132px; text-align:right; font-variant-numeric:tabular-nums; flex:none; }
-  .growth { font-size:11px; margin:-2px 0 6px 60px; }
+  .val { width:128px; text-align:right; font-variant-numeric:tabular-nums; flex:none; white-space:nowrap; }
+  .growth { font-size:11px; margin:-2px 0 6px 72px; }
   .growth .bad { color:var(--bad); font-weight:700; }
-  .meta { color:var(--muted); font-size:12px; margin-top:8px; display:flex; justify-content:space-between; gap:8px; }
+  .meta { color:var(--muted); font-size:12px; margin-top:8px; display:flex; gap:10px; align-items:center; }
+  .meta .os { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta .up, .meta .age { flex:none; white-space:nowrap; }
   .empty { grid-column:1/-1; color:var(--muted); text-align:center; padding:60px 0; line-height:1.8; }
   .empty code { color:var(--accent); }
   /* 상세 팝업 */
@@ -212,7 +214,7 @@
 </div>
 
 <script>
-const UI_VERSION = '1.8.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.8.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -254,6 +256,13 @@ function bar(label, pct, text) {
   pct = Math.max(0, Math.min(100, pct || 0));
   return `<div class="row"><span class="lbl">${label}</span><div class="bar"><i class="${level(pct)}" style="width:${pct}%"></i></div><span class="val">${text}</span></div>`;
 }
+// OS 이름 정리: "Microsoft Windows Server 2016 Standard 10.0.14393" → "Windows Server 2016 Standard"
+function shortOs(os) {
+  return String(os || '')
+    .replace(/^Microsoft\s+/i, '').replace(/\s+\d+\.\d+\.\d+(\.\d+)?\s*$/, '')       // 빌드 번호
+    .replace(/\s+build-\d+/i, '').replace(/ProLiant\s+/i, '').replace(/\s*\(Core\)/i, '')
+    .replace(/Linux\s+[\d.]+\+?$/i, (m) => m).trim();
+}
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---------- 카드 ----------
@@ -262,7 +271,7 @@ function cardHtml(s) {
   const disks = (s.disks || []).map(d => {
     const g = gmap[d.mount];
     const warn = g && g.days_left != null && g.days_left < 90 ? `<div class="growth">${fmtLeft(g)}</div>` : '';
-    return bar(esc(d.mount), d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`) + warn;
+    return bar(`<span title="${esc(d.mount)}">${esc(d.mount)}</span>`, d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`) + warn;
   }).join('');
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
@@ -272,7 +281,7 @@ function cardHtml(s) {
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
-    <div class="meta"><span>${esc(s.os || '')}</span><span>가동 ${fmtUptime(s.uptime)}</span><span>${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
+    <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="up">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
 
