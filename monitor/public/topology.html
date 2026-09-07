@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>구성도</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; overflow:hidden; }
+  .bar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--card); flex-wrap:wrap; }
+  .bar button, .bar select { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:5px 10px; cursor:pointer; font-size:13px; font-family:inherit; }
+  .bar button:hover { border-color:var(--accent); } .bar button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  .bar button.danger { color:var(--bad); }
+  .bar .msg { font-size:12px; color:var(--muted); margin-left:auto; }
+  #stage { position:relative; width:100%; height:calc(100vh - 44px - 46px); overflow:auto; background-image:radial-gradient(var(--line) 1px, transparent 1px); background-size:24px 24px; }
+  #canvas { position:relative; width:2400px; height:1400px; transform-origin:0 0; }
+  svg#links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  svg#links line { stroke:#64748b; stroke-width:2.5; }
+  svg#links line.bad { stroke:var(--bad); stroke-dasharray:6 4; }
+  svg#links line.sel { stroke:var(--accent); stroke-width:4; }
+  svg#links text { fill:var(--muted); font-size:11px; }
+  .node { position:absolute; width:150px; background:var(--card); border:2px solid var(--line); border-radius:10px; padding:8px 10px; cursor:grab; user-select:none; box-shadow:0 4px 14px rgba(0,0,0,.35); }
+  .node.ok { border-color:var(--ok); } .node.warn { border-color:var(--warn); } .node.bad, .node.off { border-color:var(--bad); }
+  .node.off { background:rgba(239,68,68,.15); } .node.custom { border-style:dashed; border-color:#64748b; }
+  .node.sel { box-shadow:0 0 0 3px var(--accent); }
+  .node .t { font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .node .h { font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .node .m { font-size:11px; color:var(--text); margin-top:4px; display:flex; gap:6px; }
+  .node .m b { color:var(--muted); font-weight:600; }
+  .node .m .b { color:var(--bad); font-weight:700; }
+  .node .badge { position:absolute; top:-8px; right:-8px; background:var(--bad); color:#fff; font-size:10px; border-radius:8px; padding:1px 6px; }
+  .group { position:absolute; border:2px dashed #475569; border-radius:12px; background:rgba(148,163,184,.06); }
+  .group .gt { position:absolute; top:-12px; left:12px; background:var(--bg); padding:0 8px; font-size:12px; color:var(--muted); font-weight:700; }
+  .group .gh { position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:#475569; border-radius:3px; cursor:nwse-resize; }
+  body.edit .group { cursor:move; }
+  .note { position:absolute; font-size:12px; color:var(--muted); background:rgba(30,41,59,.85); padding:4px 8px; border-radius:6px; border:1px solid var(--line); cursor:move; white-space:pre; }
+  #side { position:fixed; right:0; top:44px; width:300px; height:calc(100vh - 44px); background:var(--card); border-left:1px solid var(--line); padding:16px; overflow:auto; transform:translateX(100%); transition:transform .15s; z-index:5; }
+  #side.open { transform:none; }
+  #side h3 { margin:0 0 4px; font-size:16px; } #side .sub { color:var(--muted); font-size:12px; margin-bottom:10px; }
+  #side .row { display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid var(--line); }
+  #side .row span:last-child { font-variant-numeric:tabular-nums; }
+  #side button { margin-top:12px; width:100%; background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:6px; cursor:pointer; font-family:inherit; }
+  .hint { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="bEdit">✎ 편집</button>
+  <span id="editTools" hidden>
+    <button id="bLink" title="두 서버를 차례로 클릭하면 선이 연결됩니다">연결 선 그리기</button>
+    <button id="bNode">+ 외부 장비</button>
+    <button id="bGroup">+ 그룹 상자</button>
+    <button id="bNote">+ 메모</button>
+    <button id="bDel" class="danger">선택 삭제</button>
+    <button id="bAuto">자동 배치</button>
+    <button id="bSave" class="on">저장</button>
+  </span>
+  <button id="bZoomOut">−</button><button id="bZoomIn">+</button>
+  <span class="msg" id="msg"></span>
+</div>
+<div id="stage"><div id="canvas"><svg id="links"></svg></div></div>
+<div id="side"></div>
+<script src="common.js"></script>
+<script>
+const { esc, fmtBytes, label, grade, shortOs } = MON;
+MON.renderNav('topology.html'); MON.pollNav();
+let topo = { nodes: {}, links: [], groups: [], notes: [] }, servers = [], active = [], edit = false, linkMode = false, linkFrom = null, sel = null, zoom = 1, dirty = false;
+const $c = document.getElementById('canvas'), $svg = document.getElementById('links'), $msg = document.getElementById('msg'), $side = document.getElementById('side');
+const msg = (t) => { $msg.textContent = t; };
+
+// ---------- 데이터 ----------
+async function load() {
+  const [t, s, a] = await Promise.all([fetch('api/topology').then(r => r.json()), fetch('api/servers').then(r => r.json()), fetch('api/alerts').then(r => r.json())]);
+  topo = { nodes: {}, links: [], groups: [], notes: [], ...t }; servers = s.servers; active = a.active || []; MON.setVersion(s.version);
+  // 구성도에 없는 새 서버는 기존 노드 아래 줄에 배치 (겹침 방지)
+  let i = 0; const ys = Object.values(topo.nodes).map(n => n.y + 120); const baseY = ys.length ? Math.max(...ys) : 120;
+  for (const sv of servers) if (!topo.nodes[sv.host]) { topo.nodes[sv.host] = { x: 80 + (i % 5) * 200, y: baseY + Math.floor(i / 5) * 160 }; i++; }
+  render();
+}
+async function refreshLive() {
+  if (dirty && edit) return;
+  try { const [s, a] = await Promise.all([fetch('api/servers').then(r => r.json()), fetch('api/alerts').then(r => r.json())]); servers = s.servers; active = a.active || []; render(); } catch (e) {}
+}
+async function save() {
+  try { await fetch('api/topology', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(topo) }); dirty = false; msg('저장했습니다'); }
+  catch (e) { msg('저장 실패: ' + e.message); }
+}
+
+// ---------- 렌더 ----------
+function nodeInfo(id) { const n = topo.nodes[id]; const s = servers.find(x => x.host === id); return { n, s }; }
+function render() {
+  for (const el of $c.querySelectorAll('.node,.group,.note')) el.remove();
+  for (const g of topo.groups) {
+    const el = document.createElement('div'); el.className = 'group'; el.dataset.id = g.id; Object.assign(el.style, { left: g.x + 'px', top: g.y + 'px', width: g.w + 'px', height: g.h + 'px' });
+    el.innerHTML = `<span class="gt">${esc(g.title)}</span>${edit ? '<span class="gh"></span>' : ''}`;
+    if (sel && sel.type === 'group' && sel.id === g.id) el.style.borderColor = 'var(--accent)';
+    $c.appendChild(el); bindDrag(el, g, 'group');
+  }
+  for (const nt of topo.notes) {
+    const el = document.createElement('div'); el.className = 'note'; el.dataset.id = nt.id; Object.assign(el.style, { left: nt.x + 'px', top: nt.y + 'px' }); el.textContent = nt.text;
+    if (sel && sel.type === 'note' && sel.id === nt.id) el.style.borderColor = 'var(--accent)';
+    $c.appendChild(el); bindDrag(el, nt, 'note');
+  }
+  for (const [id, n] of Object.entries(topo.nodes)) {
+    const s = servers.find(x => x.host === id);
+    const el = document.createElement('div'); el.dataset.id = id;
+    const gr = s ? grade(s, active) : 'custom';
+    el.className = `node ${n.custom ? 'custom' : gr} ${sel && sel.type === 'node' && sel.id === id ? 'sel' : ''}`;
+    Object.assign(el.style, { left: n.x + 'px', top: n.y + 'px' });
+    if (n.custom) el.innerHTML = `<div class="t">${esc(n.label || id)}</div><div class="h">외부 장비</div>`;
+    else if (!s) el.innerHTML = `<div class="t">${esc(id)}</div><div class="h">데이터 없음</div>`;
+    else {
+      const md = Math.max(0, ...(s.disks || []).map(d => d.pct || 0));
+      el.innerHTML = `<div class="t">${esc(label(s))}</div><div class="h">${esc(s.name ? s.host : shortOs(s.os))}</div>
+        <div class="m"><span><b>C</b> <span class="${s.cpu >= 90 ? 'b' : ''}">${s.cpu}%</span></span><span><b>M</b> <span class="${s.mem_pct >= 90 ? 'b' : ''}">${s.mem_pct}%</span></span><span><b>D</b> <span class="${md >= 90 ? 'b' : ''}">${md}%</span></span></div>
+        ${!s.online ? '<span class="badge">오프라인</span>' : (gr === 'bad' ? '<span class="badge">경고</span>' : '')}`;
+    }
+    $c.appendChild(el); bindDrag(el, n, 'node', id);
+  }
+  drawLinks();
+}
+function center(id) { const n = topo.nodes[id]; const el = $c.querySelector(`.node[data-id="${CSS.escape(id)}"]`); return n ? { x: n.x + (el ? el.offsetWidth : 150) / 2, y: n.y + (el ? el.offsetHeight : 60) / 2 } : null; }
+function drawLinks() {
+  $svg.innerHTML = '';
+  topo.links.forEach((l, i) => {
+    const a = center(l.a), b = center(l.b); if (!a || !b) return;
+    const sa = servers.find(x => x.host === l.a), sb = servers.find(x => x.host === l.b);
+    const bad = (sa && !sa.online) || (sb && !sb.online);
+    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ln.setAttribute('x1', a.x); ln.setAttribute('y1', a.y); ln.setAttribute('x2', b.x); ln.setAttribute('y2', b.y);
+    ln.setAttribute('class', (bad ? 'bad ' : '') + (sel && sel.type === 'link' && sel.i === i ? 'sel' : ''));
+    ln.style.pointerEvents = edit ? 'stroke' : 'none'; ln.style.cursor = 'pointer';
+    ln.onclick = (e) => { e.stopPropagation(); sel = { type: 'link', i }; render(); };
+    $svg.appendChild(ln);
+    if (l.label) { const t = document.createElementNS('http://www.w3.org/2000/svg', 'text'); t.setAttribute('x', (a.x + b.x) / 2 + 4); t.setAttribute('y', (a.y + b.y) / 2 - 4); t.textContent = l.label; $svg.appendChild(t); }
+  });
+}
+
+// ---------- 드래그 / 클릭 ----------
+function bindDrag(el, obj, type, id) {
+  let sx, sy, ox, oy, moved = false, resizing = false, ow, oh;
+  el.addEventListener('mousedown', (e) => {
+    if (!edit) return;
+    if (e.target.classList.contains('gh')) { resizing = true; ow = obj.w; oh = obj.h; }
+    sx = e.clientX; sy = e.clientY; ox = obj.x; oy = obj.y; moved = false;
+    const mv = (e) => {
+      const dx = (e.clientX - sx) / zoom, dy = (e.clientY - sy) / zoom; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
+      if (resizing) { obj.w = Math.max(120, Math.round(ow + dx)); obj.h = Math.max(80, Math.round(oh + dy)); el.style.width = obj.w + 'px'; el.style.height = obj.h + 'px'; }
+      else { obj.x = Math.max(0, Math.round((ox + dx) / 8) * 8); obj.y = Math.max(0, Math.round((oy + dy) / 8) * 8); el.style.left = obj.x + 'px'; el.style.top = obj.y + 'px'; if (type === 'node') drawLinks(); }
+      dirty = true;
+    };
+    const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); resizing = false; };
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+    e.preventDefault();
+  });
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (moved) return;
+    if (edit && linkMode && type === 'node') {
+      if (!linkFrom) { linkFrom = id; msg(`${id} 선택됨. 연결할 다른 서버를 클릭하세요`); sel = { type: 'node', id }; render(); return; }
+      if (linkFrom !== id && !topo.links.some(l => (l.a === linkFrom && l.b === id) || (l.a === id && l.b === linkFrom))) { topo.links.push({ a: linkFrom, b: id }); dirty = true; }
+      linkFrom = null; sel = null; msg('연결됨. 계속 연결하려면 다시 두 서버를 클릭, 끝내려면 "연결 선 그리기"를 다시 누르세요'); render(); return;
+    }
+    if (edit) { sel = { type, id: type === 'node' ? id : obj.id }; render(); if (type === 'group' || type === 'note') editText(type, obj); return; }
+    if (type === 'node') showSide(id);
+  });
+}
+function editText(type, obj) {
+  const v = prompt(type === 'group' ? '그룹 이름' : '메모 내용', type === 'group' ? obj.title : obj.text);
+  if (v !== null) { if (type === 'group') obj.title = v; else obj.text = v; dirty = true; render(); }
+}
+document.getElementById('stage').addEventListener('click', () => { sel = null; $side.classList.remove('open'); render(); });
+function showSide(id) {
+  const s = servers.find(x => x.host === id); if (!s) return;
+  $side.innerHTML = `<h3>${esc(label(s))}</h3><div class="sub">${esc(s.host)} · ${esc(s.ip || '')}<br>${esc(shortOs(s.os))}</div>
+    <div class="row"><span>상태</span><span>${s.online ? '<span style="color:var(--ok)">온라인</span>' : '<span style="color:var(--bad)">오프라인</span>'}</span></div>
+    <div class="row"><span>CPU</span><span>${s.cpu}%</span></div><div class="row"><span>메모리</span><span>${s.mem_pct}% (${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)})</span></div>
+    ${(s.disks || []).map(d => `<div class="row"><span>${esc(d.mount)}</span><span>${d.pct}% (${fmtBytes(d.used)} / ${fmtBytes(d.total)})</span></div>`).join('')}
+    <div class="row"><span>가동</span><span>${MON.fmtUptime(s.uptime)}</span></div>
+    ${active.filter(a => a.host === id).map(a => `<div class="row" style="color:var(--bad)"><span>경고</span><span>${esc(a.msg)}</span></div>`).join('')}
+    <button onclick="location.href='index.html'">서버 현황에서 자세히 보기</button>`;
+  $side.classList.add('open');
+}
+
+// ---------- 툴바 ----------
+const $tools = document.getElementById('editTools'), $bEdit = document.getElementById('bEdit'), $bLink = document.getElementById('bLink');
+$bEdit.onclick = () => {
+  if (edit && dirty && !confirm('저장하지 않은 변경이 있습니다. 편집을 끝낼까요? (변경 내용은 유지되지만 다른 PC에는 반영되지 않습니다)')) return;
+  edit = !edit; linkMode = false; linkFrom = null; sel = null; document.body.classList.toggle('edit', edit); $tools.hidden = !edit; $bEdit.classList.toggle('on', edit); $bLink.classList.remove('on');
+  msg(edit ? '편집 모드: 서버를 드래그해서 배치하세요' : ''); render();
+};
+$bLink.onclick = () => { linkMode = !linkMode; linkFrom = null; $bLink.classList.toggle('on', linkMode); msg(linkMode ? '첫 번째 서버를 클릭하세요' : ''); };
+document.getElementById('bNode').onclick = () => { const name = prompt('장비 이름 (예: 방화벽, L3 스위치, 인터넷)'); if (!name) return; const id = 'ext:' + Date.now(); topo.nodes[id] = { x: 100, y: 60, custom: true, label: name }; dirty = true; render(); };
+document.getElementById('bGroup').onclick = () => { const t = prompt('그룹 이름 (예: 전산실, 김해공장, 가상화 호스트)'); if (!t) return; topo.groups.push({ id: 'g' + Date.now(), x: 60, y: 60, w: 460, h: 260, title: t }); dirty = true; render(); };
+document.getElementById('bNote').onclick = () => { const t = prompt('메모 내용'); if (!t) return; topo.notes.push({ id: 'n' + Date.now(), x: 100, y: 40, text: t }); dirty = true; render(); };
+document.getElementById('bDel').onclick = () => {
+  if (!sel) { msg('삭제할 항목을 먼저 클릭하세요 (선, 외부 장비, 그룹, 메모)'); return; }
+  if (sel.type === 'link') topo.links.splice(sel.i, 1);
+  else if (sel.type === 'group') topo.groups = topo.groups.filter(g => g.id !== sel.id);
+  else if (sel.type === 'note') topo.notes = topo.notes.filter(n => n.id !== sel.id);
+  else if (sel.type === 'node') { const n = topo.nodes[sel.id]; if (!n || !n.custom) { msg('서버 노드는 삭제할 수 없습니다 (에이전트를 제거하면 사라짐). 연결 선을 클릭해 삭제하세요'); return; } delete topo.nodes[sel.id]; topo.links = topo.links.filter(l => l.a !== sel.id && l.b !== sel.id); }
+  sel = null; dirty = true; render();
+};
+document.getElementById('bAuto').onclick = () => { let i = 0; for (const id of Object.keys(topo.nodes)) { topo.nodes[id].x = 80 + (i % 5) * 200; topo.nodes[id].y = 120 + Math.floor(i / 5) * 160; i++; } dirty = true; render(); };
+document.getElementById('bSave').onclick = save;
+document.getElementById('bZoomIn').onclick = () => { zoom = Math.min(2, zoom + 0.1); $c.style.transform = `scale(${zoom})`; };
+document.getElementById('bZoomOut').onclick = () => { zoom = Math.max(0.4, zoom - 0.1); $c.style.transform = `scale(${zoom})`; };
+document.addEventListener('keydown', (e) => { if (e.key === 'Delete' && edit && sel) document.getElementById('bDel').onclick(); if (e.key === 'Escape') { sel = null; linkFrom = null; $side.classList.remove('open'); render(); } });
+window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+load().catch(e => msg('불러오기 실패: ' + e.message));
+setInterval(refreshLive, 5000);
+</script>
+</body>
+</html>

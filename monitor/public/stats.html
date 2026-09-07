@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>통계 · 리포트</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; }
+  main { padding:40px 20px; max-width:760px; margin:0 auto; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:28px; }
+  h1 { font-size:20px; margin:0 0 10px; } p { color:var(--muted); line-height:1.7; margin:6px 0; }
+  .n { font-size:32px; font-weight:700; color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <div class="box">
+    <h1>통계 · 리포트 (준비 중)</h1>
+    <p>서버별 CPU · 메모리 평균/최대 추이, 디스크 증가 추이, 알림 건수, 가동률을 기간별로 보고 엑셀 · PDF 로 내려받는 화면입니다.</p>
+    <p>이 화면을 위한 시간별 집계 데이터는 수집기 1.9.0 부터 쌓이고 있으며 1년간 보관됩니다.</p>
+    <p id="acc">집계 데이터 확인 중…</p>
+  </div>
+</main>
+<script src="common.js"></script>
+<script>
+MON.renderNav('stats.html'); MON.pollNav();
+fetch('api/hourly?days=400').then(r => r.json()).then(j => {
+  let n = 0, first = Infinity; for (const h in j.hosts) for (const r of j.hosts[h]) { n++; if (r.h < first) first = r.h; }
+  document.getElementById('acc').innerHTML = n ? `현재 <span class="n">${n}</span> 시간분 집계 (${new Date(first).toLocaleString('ko-KR')} 부터)` : '아직 집계된 데이터가 없습니다. 첫 정시가 지나면 쌓이기 시작합니다.';
+}).catch(() => {});
+fetch('api/health').then(r => r.json()).then(j => MON.setVersion(j.version)).catch(() => {});
+</script>
+</body>
+</html>

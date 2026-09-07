@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.8.1';
+const VERSION = '1.9.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -18,11 +18,56 @@ const LOG_FILE = process.env.LOG_FILE || '';            // 지정하면 JSON Lin
 const STATE_FILE = process.env.STATE_FILE === '' ? '' : (process.env.STATE_FILE || path.join(__dirname, 'data', 'state.json')); // 재시작 대비 스냅샷
 const SAVE_EVERY = Number(process.env.SAVE_EVERY || 30) * 1000;
 const DAILY_KEEP = Number(process.env.DAILY_KEEP || 400);
+const HOURLY_FILE = process.env.HOURLY_FILE === '' ? '' : (process.env.HOURLY_FILE || path.join(__dirname, 'data', 'hourly.json'));  // 시간별 집계 (통계용, 1년)
+const HOURLY_KEEP = Number(process.env.HOURLY_KEEP || 366 * 24);
 const SETTINGS_FILE = process.env.SETTINGS_FILE || path.join(__dirname, 'data', 'settings.json');   // 알림 설정
 const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
 const store = new Map();
+
+// ---- 시간별 집계 (통계·리포트용): host → [ { h: 시각(ms, 정시), n: 표본수, ca: cpu평균, cx: cpu최대, ma: 메모리평균, mx: 메모리최대, off: 오프라인초 } ] ----
+const hourly = {};            // 닫힌 시간대
+const hourCur = {};           // 진행 중인 시간대 { host: { h, n, cs, cx, ms, mx, off } }
+let hourlyDirty = false;
+function hourOf(ts) { const d = new Date(ts); d.setMinutes(0, 0, 0); return d.getTime(); }
+function closeHour(host) {
+  const b = hourCur[host]; if (!b) return;
+  (hourly[host] = hourly[host] || []).push({ h: b.h, n: b.n, ca: b.n ? Math.round(b.cs / b.n * 10) / 10 : null, cx: b.cx, ma: b.n ? Math.round(b.ms / b.n * 10) / 10 : null, mx: b.mx, off: b.off });
+  if (hourly[host].length > HOURLY_KEEP) hourly[host].splice(0, hourly[host].length - HOURLY_KEEP);
+  delete hourCur[host]; hourlyDirty = true;
+}
+function hourBucket(host, ts) {
+  const h = hourOf(ts);
+  if (hourCur[host] && hourCur[host].h !== h) closeHour(host);
+  if (!hourCur[host]) hourCur[host] = { h, n: 0, cs: 0, cx: 0, ms: 0, mx: 0, off: 0 };
+  return hourCur[host];
+}
+function recordHourly(m) {
+  const b = hourBucket(m.host, m.ts);
+  b.n++; b.cs += m.cpu; b.cx = Math.max(b.cx, m.cpu); b.ms += m.mem_pct; b.mx = Math.max(b.mx, m.mem_pct);
+}
+function loadHourly() {
+  if (!HOURLY_FILE) return;
+  try { const o = JSON.parse(fs.readFileSync(HOURLY_FILE, 'utf8')); Object.assign(hourly, o.hourly || {}); Object.assign(hourCur, o.cur || {}); } catch (e) { if (e.code !== 'ENOENT') console.warn('시간별 집계 읽기 실패:', e.message); }
+}
+function saveHourly(sync) {
+  if (!HOURLY_FILE || !hourlyDirty) return;
+  hourlyDirty = false;
+  const data = JSON.stringify({ hourly, cur: hourCur });
+  try {
+    fs.mkdirSync(path.dirname(HOURLY_FILE), { recursive: true });
+    if (sync) fs.writeFileSync(HOURLY_FILE, data); else fs.writeFile(HOURLY_FILE + '.tmp', data, (err) => { if (!err) fs.rename(HOURLY_FILE + '.tmp', HOURLY_FILE, () => {}); });
+  } catch (e) { console.warn('시간별 집계 저장 실패:', e.message); }
+}
+function hourlyView(host, days) {
+  const from = Date.now() - days * 86400000;
+  const rows = (hourly[host] || []).filter((r) => r.h >= from);
+  const c = hourCur[host]; if (c) rows.push({ h: c.h, n: c.n, ca: c.n ? Math.round(c.cs / c.n * 10) / 10 : null, cx: c.cx, ma: c.n ? Math.round(c.ms / c.n * 10) / 10 : null, mx: c.mx, off: c.off, open: true });
+  return rows;
+}
+
+let topology = { nodes: {}, links: [], groups: [], notes: [] };   // 구성도 (화면에서 편집)
 let order = [];   // 화면 카드 순서 (호스트명 배열). 화면에서 드래그하면 갱신됨
 
 // ---- 스냅샷 저장/복원 (재시작해도 이력 유지) ----
@@ -32,6 +77,7 @@ function loadState() {
     const obj = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     const hosts = obj.hosts || obj;                       // 구버전 파일은 호스트 맵 그대로
     if (Array.isArray(obj.order)) order = obj.order.filter((h) => typeof h === 'string');
+    if (obj.topology && typeof obj.topology === 'object') topology = { nodes: {}, links: [], groups: [], notes: [], ...obj.topology };
     alerter.importState(obj.alerts);
     for (const [host, e] of Object.entries(hosts)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY), daily: e.daily || {} });
     console.log(`스냅샷 복원: ${store.size}대 (${STATE_FILE})`);
@@ -42,7 +88,7 @@ function saveState(sync) {
   if (!STATE_FILE || !dirty) return;
   dirty = false;
   const hosts = {}; for (const [h, e] of store) hosts[h] = e;
-  const obj = { hosts, order, alerts: alerter.exportState() };
+  const obj = { hosts, order, topology, alerts: alerter.exportState() };
   const tmp = STATE_FILE + '.tmp';
   try {
     fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
@@ -168,6 +214,7 @@ function ingest(raw, remoteIp) {
   if (!entry) { entry = { latest: null, history: [], daily: {} }; store.set(m.host, entry); }
   entry.latest = m;
   recordDaily(entry, m);
+  recordHourly(m); hourlyDirty = true;
   entry.history.push({ ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx });
   if (entry.history.length > HISTORY) entry.history.splice(0, entry.history.length - HISTORY);
   dirty = true;
@@ -193,6 +240,8 @@ function serversView() {
 
 function removeHost(host) {
   const existed = store.delete(host);
+  delete hourly[host]; delete hourCur[host]; hourlyDirty = true;
+  if (topology.nodes[host] && !topology.nodes[host].custom) { delete topology.nodes[host]; topology.links = topology.links.filter((l) => l.a !== host && l.b !== host); }
   order = order.filter((h) => h !== host);
   alerter.forget(host);
   if (existed) dirty = true;
@@ -265,6 +314,24 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
+  // 시간별 집계 조회 (통계용): ?host=이름&days=30
+  if (req.method === 'GET' && url.pathname === '/api/hourly') {
+    const host = url.searchParams.get('host') || '', days = Math.min(400, Math.max(1, Number(url.searchParams.get('days') || 7)));
+    if (host) return json(res, 200, { host, rows: hourlyView(host, days) });
+    const all = {}; for (const h of store.keys()) all[h] = hourlyView(h, days);
+    return json(res, 200, { days, hosts: all });
+  }
+  // 구성도 저장/조회
+  if (req.method === 'GET' && url.pathname === '/api/topology') return json(res, 200, topology);
+  if (req.method === 'PUT' && url.pathname === '/api/topology') {
+    try {
+      const t = JSON.parse((await readBody(req)) || '{}');
+      topology = { nodes: t.nodes && typeof t.nodes === 'object' ? t.nodes : {}, links: Array.isArray(t.links) ? t.links : [], groups: Array.isArray(t.groups) ? t.groups : [], notes: Array.isArray(t.notes) ? t.notes : [] };
+      dirty = true; saveState(false);
+      return json(res, 200, { ok: true });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
   // 화면 카드 순서 저장
   if (req.method === 'PUT' && url.pathname === '/api/order') {
     try {
@@ -316,9 +383,15 @@ const server = http.createServer(async (req, res) => {
 });
 
 loadState();
+loadHourly();
 if (STATE_FILE) setInterval(() => saveState(false), SAVE_EVERY).unref();
-setInterval(() => { try { alerter.evaluate(serversView()); } catch (e) { console.error('알림 평가 오류:', e.message); } }, 10000).unref();
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); process.exit(0); });
+if (HOURLY_FILE) setInterval(() => saveHourly(false), 5 * 60000).unref();
+setInterval(() => {
+  const view = serversView();
+  try { alerter.evaluate(view); } catch (e) { console.error('알림 평가 오류:', e.message); }
+  for (const s of view) if (!s.online) { hourBucket(s.host, Date.now()).off += 10; hourlyDirty = true; }   // 오프라인 시간 누적 (가동률 통계용)
+}, 10000).unref();
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); saveHourly(true); process.exit(0); });
 
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') { console.error(`포트 ${PORT} 가 이미 사용 중입니다. 예전 수집기가 아직 실행 중일 수 있습니다. (설치 스크립트를 다시 실행하거나 node.exe 를 종료하세요)`); process.exit(2); }

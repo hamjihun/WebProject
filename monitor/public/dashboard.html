@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>대시보드</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0b1220; --card:#131c2e; --line:#243044; --text:#e2e8f0; --muted:#8b9bb4; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; }
+  body.alarm { animation: flash 2s infinite; }
+  @keyframes flash { 0%,100% { background:var(--bg); } 50% { background:#3b0f16; } }
+  .wrap { padding:18px 24px; display:grid; grid-template-columns: 1.15fr 1fr; grid-template-rows:auto auto 1fr; gap:16px; height:calc(100vh - 44px); }
+  body.tv .wrap { height:100vh; }
+  .head { grid-column:1/-1; display:flex; align-items:center; gap:24px; }
+  .head h1 { font-size:30px; margin:0; font-weight:700; }
+  .head .clock { margin-left:auto; font-size:30px; font-variant-numeric:tabular-nums; color:var(--muted); }
+  .head .date { font-size:16px; color:var(--muted); }
+  .tiles { grid-column:1/-1; display:grid; grid-template-columns:repeat(5,1fr); gap:16px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 18px; text-align:center; }
+  .tile .n { font-size:56px; font-weight:800; line-height:1.05; }
+  .tile .l { font-size:16px; color:var(--muted); margin-top:4px; }
+  .tile.ok .n { color:var(--ok); } .tile.warn .n { color:var(--warn); } .tile.bad .n { color:var(--bad); } .tile.off .n { color:var(--bad); }
+  .tile.bad.on, .tile.off.on { border-color:var(--bad); box-shadow:0 0 0 2px rgba(239,68,68,.35); }
+  .tile.warn.on { border-color:var(--warn); }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 20px; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+  .panel h2 { font-size:18px; margin:0 0 10px; color:var(--muted); font-weight:600; }
+  .allok { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--ok); font-size:34px; font-weight:800; gap:8px; }
+  .allok small { font-size:16px; color:var(--muted); font-weight:400; }
+  .alist { display:flex; flex-direction:column; gap:8px; overflow:auto; }
+  .aitem { display:flex; gap:12px; align-items:center; background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.4); border-radius:10px; padding:10px 14px; }
+  .aitem .who { font-size:20px; font-weight:700; white-space:nowrap; }
+  .aitem .what { font-size:16px; color:var(--text); }
+  .aitem .since { margin-left:auto; font-size:13px; color:var(--muted); white-space:nowrap; }
+  .right { display:grid; grid-template-rows:1fr 1fr 1fr; gap:16px; min-height:0; }
+  .rank { display:flex; flex-direction:column; gap:6px; }
+  .rrow { display:flex; align-items:center; gap:10px; font-size:16px; }
+  .rrow .nm { width:38%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rrow .bar { flex:1; height:12px; background:#0b1220; border-radius:6px; overflow:hidden; }
+  .rrow .bar i { display:block; height:100%; background:var(--ok); border-radius:6px; }
+  .rrow .bar i.w { background:var(--warn); } .rrow .bar i.b { background:var(--bad); }
+  .rrow .v { width:165px; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .rrow .v.b { color:var(--bad); font-weight:700; }
+  .foot { grid-column:1/-1; display:flex; gap:16px; font-size:14px; color:var(--muted); }
+  .foot b { color:var(--text); }
+  .recent { display:flex; gap:14px; overflow:hidden; flex:1; }
+  .recent span { white-space:nowrap; }
+  .k-alert { color:var(--bad); } .k-recovery { color:var(--ok); } .k-remind { color:var(--warn); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; overflow:auto; }
+  .srv { border-radius:10px; padding:8px 10px; background:#0b1220; border:1px solid var(--line); }
+  .srv .t { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .srv .m { font-size:12px; color:var(--muted); margin-top:2px; }
+  .srv.ok { border-color:rgba(34,197,94,.5); } .srv.warn { border-color:var(--warn); } .srv.bad, .srv.off { border-color:var(--bad); background:rgba(239,68,68,.15); }
+  .srv .d { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+  .srv.ok .d { background:var(--ok); } .srv.warn .d { background:var(--warn); } .srv.bad .d, .srv.off .d { background:var(--bad); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><h1>서버 상태 현황</h1><span class="date" id="date"></span><span class="clock" id="clock"></span></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="panel" id="left"></div>
+  <div class="right">
+    <div class="panel"><h2>CPU 상위</h2><div class="rank" id="rCpu"></div></div>
+    <div class="panel"><h2>메모리 상위</h2><div class="rank" id="rMem"></div></div>
+    <div class="panel"><h2>디스크 여유 부족 순</h2><div class="rank" id="rDisk"></div></div>
+  </div>
+  <div class="foot"><span>최근 24시간 알림 <b id="cnt24">0</b>건</span><div class="recent" id="recent"></div><span id="upd"></span></div>
+</div>
+<script src="common.js"></script>
+<script>
+const { esc, fmtBytes, label, grade, fmtTime } = MON;
+if (MON.params.get('tv') === '1') document.body.classList.add('tv');
+MON.renderNav('dashboard.html');
+function clock() { const d = new Date(); document.getElementById('clock').textContent = d.toLocaleTimeString('ko-KR', { hour12: false }); document.getElementById('date').textContent = d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }); }
+setInterval(clock, 1000); clock();
+
+function lvl(p) { return p >= 90 ? 'b' : p >= 75 ? 'w' : ''; }
+function rankRow(name, pct, text) { return `<div class="rrow"><span class="nm" title="${esc(name)}">${esc(name)}</span><div class="bar"><i class="${lvl(pct)}" style="width:${Math.min(100, pct)}%"></i></div><span class="v ${lvl(pct) === 'b' ? 'b' : ''}">${text}</span></div>`; }
+
+async function refresh() {
+  try {
+    const [sr, ar] = await Promise.all([fetch('api/servers'), fetch('api/alerts')]);
+    const sj = await sr.json(), aj = await ar.json();
+    const servers = sj.servers, active = aj.active || [], recent = aj.recent || [];
+    MON.setVersion(sj.version);
+    const g = {}; for (const s of servers) g[s.host] = grade(s, active);
+    const cnt = { total: servers.length, ok: 0, warn: 0, bad: 0, off: 0 };
+    for (const s of servers) cnt[g[s.host]]++;
+    document.getElementById('tiles').innerHTML =
+      `<div class="tile"><div class="n">${cnt.total}</div><div class="l">전체 서버</div></div>` +
+      `<div class="tile ok"><div class="n">${cnt.ok}</div><div class="l">정상</div></div>` +
+      `<div class="tile warn ${cnt.warn ? 'on' : ''}"><div class="n">${cnt.warn}</div><div class="l">주의 (75% 이상)</div></div>` +
+      `<div class="tile bad ${cnt.bad ? 'on' : ''}"><div class="n">${cnt.bad}</div><div class="l">위험 · 경고</div></div>` +
+      `<div class="tile off ${cnt.off ? 'on' : ''}"><div class="n">${cnt.off}</div><div class="l">오프라인</div></div>`;
+    document.body.classList.toggle('alarm', cnt.off > 0 || cnt.bad > 0);
+
+    // 왼쪽: 경고 목록 또는 전체 정상 + 서버 격자
+    const byHost = {}; for (const s of servers) byHost[s.host] = s;
+    const items = [];
+    for (const s of servers) if (!s.online) items.push({ who: label(s), what: '서버 응답 없음', since: s.ts });
+    for (const a of active) if (a.rule !== 'offline') items.push({ who: label(byHost[a.host] || { host: a.host }), what: a.msg, since: a.since });
+    // 알림 규칙과 별개로 90% 를 넘은 서버도 경고 목록에 (알림이 꺼져 있거나 판단 전이어도 화면에는 보이게)
+    for (const s of servers) {
+      if (!s.online || g[s.host] !== 'bad' || active.some(a => a.host === s.host)) continue;
+      const why = [];
+      if (s.cpu >= 90) why.push(`CPU ${s.cpu}%`); if (s.mem_pct >= 90) why.push(`메모리 ${s.mem_pct}%`);
+      for (const d of (s.disks || [])) if (d.pct >= 90) why.push(`${d.mount} ${d.pct}%`);
+      items.push({ who: label(s), what: why.join(' · ') + ' (90% 이상)', since: s.ts });
+    }
+    let left = `<h2>현재 경고 ${items.length ? items.length + '건' : ''}</h2>`;
+    left += items.length
+      ? `<div class="alist">${items.map(i => `<div class="aitem"><span class="who">${esc(i.who)}</span><span class="what">${esc(i.what)}</span><span class="since">${fmtTime(i.since)}부터</span></div>`).join('')}</div>`
+      : `<div class="allok">✓ 모든 서버 정상<small>${cnt.total}대 감시 중 · 5초마다 확인</small></div>`;
+    left += `<h2 style="margin-top:14px">서버 목록</h2><div class="grid">${servers.map(s => `<div class="srv ${g[s.host]}"><div class="t"><span class="d"></span>${esc(label(s))}</div><div class="m">CPU ${s.cpu}% · 메모리 ${s.mem_pct}%${s.online ? '' : ' · 오프라인'}</div></div>`).join('')}</div>`;
+    document.getElementById('left').innerHTML = left;
+
+    // 오른쪽 순위
+    const on = servers.filter(s => s.online);
+    document.getElementById('rCpu').innerHTML = on.slice().sort((a, b) => b.cpu - a.cpu).slice(0, 5).map(s => rankRow(label(s), s.cpu, s.cpu + '%')).join('') || '<span style="color:var(--muted)">데이터 없음</span>';
+    document.getElementById('rMem').innerHTML = on.slice().sort((a, b) => b.mem_pct - a.mem_pct).slice(0, 5).map(s => rankRow(label(s), s.mem_pct, `${s.mem_pct}% · ${fmtBytes(s.mem_used)}`)).join('') || '<span style="color:var(--muted)">데이터 없음</span>';
+    const disks = []; for (const s of on) for (const d of (s.disks || [])) disks.push({ name: `${label(s)} ${d.mount}`, pct: d.pct, free: d.total - d.used });
+    document.getElementById('rDisk').innerHTML = disks.sort((a, b) => b.pct - a.pct).slice(0, 5).map(d => rankRow(d.name, d.pct, `${d.pct}% · ${fmtBytes(d.free)} 남음`)).join('') || '<span style="color:var(--muted)">데이터 없음</span>';
+
+    // 하단 최근 알림
+    const day = Date.now() - 86400000;
+    document.getElementById('cnt24').textContent = recent.filter(e => e.time >= day && e.kind !== 'recovery').length;
+    document.getElementById('recent').innerHTML = recent.slice(0, 4).map(e => `<span class="k-${e.kind}">${fmtTime(e.time)} ${esc(label(byHost[e.host] || { host: e.host }))}: ${esc(e.msg)}</span>`).join('');
+    document.getElementById('upd').textContent = '갱신 ' + new Date().toLocaleTimeString('ko-KR');
+  } catch (e) { document.getElementById('upd').textContent = '수집 서버 연결 실패: ' + e.message; }
+}
+refresh(); setInterval(refresh, 5000);
+</script>
+</body>
+</html>
