@@ -64,6 +64,31 @@ function create({ settingsFile, logDir, log = console.log }) {
     try { return { month, text: fs.readFileSync(logFileFor(month), 'utf8') }; } catch { return { month, text: '' }; }
   }
 
+  // 기간 내 알림 로그 집계 (통계용): 월별 로그 파일을 읽어 서버별/일별/규칙별 경고 건수를 센다
+  function countEvents(fromTs, toTs) {
+    const out = { total: 0, byHost: {}, byDay: {}, byRule: { cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, etc: 0 }, events: [] };
+    const months = []; const d = new Date(fromTs); d.setDate(1); d.setHours(0, 0, 0, 0);
+    while (d.getTime() <= toTs) { months.push(monthKey(d)); d.setMonth(d.getMonth() + 1); }
+    const re = /^\uFEFF?\[(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\] ([^\t]+)\t([^\t]*)\t([^\t]*)/;
+    for (const mo of months) {
+      for (const line of readLog(mo).text.split(/\r?\n/)) {
+        const m = re.exec(line); if (!m) continue;
+        if (m[7] !== KIND_KO.alert) continue;                 // '경고' 만 집계 (계속/복귀 제외)
+        const t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+        if (t < fromTs || t > toTs) continue;
+        const label = m[8], msg = m[9];
+        const hm = /\(([^()]+)\)\s*$/.exec(label); const host = hm ? hm[1] : label;
+        const rule = /CPU/.test(msg) ? 'cpu' : /메모리/.test(msg) ? 'mem' : /가득 찰/.test(msg) ? 'full' : /드라이브|디스크/.test(msg) ? 'disk' : /응답 없음|오프라인/.test(msg) ? 'offline' : 'etc';
+        const day = `${m[1]}-${m[2]}-${m[3]}`;
+        out.total++;
+        const h = out.byHost[host] = out.byHost[host] || { total: 0, cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, etc: 0 };
+        h.total++; h[rule]++; out.byRule[rule]++; out.byDay[day] = (out.byDay[day] || 0) + 1;
+        if (out.events.length < 500) out.events.push({ time: t, host, name: hm ? label.slice(0, hm.index).trim() : '', rule, msg });
+      }
+    }
+    return out;
+  }
+
   let settings = { ...DEFAULTS };
   try { settings = deepMerge(DEFAULTS, JSON.parse(fs.readFileSync(settingsFile, 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') log('알림 설정 읽기 실패:', e.message); }
   function saveSettings() {
@@ -282,7 +307,7 @@ function create({ settingsFile, logDir, log = console.log }) {
       return { ok: true, message_id: r.message_id };
     },
     discoverChats,
-    listLogs, readLog,
+    listLogs, readLog, countEvents,
     exportState() { return { recent, states: [...states.entries()], seq }; },
     importState(st) {
       if (!st) return;

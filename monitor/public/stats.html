@@ -5,31 +5,274 @@
 <title>통계 · 리포트</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; }
-  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; }
-  main { padding:40px 20px; max-width:760px; margin:0 auto; }
-  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:28px; }
-  h1 { font-size:20px; margin:0 0 10px; } p { color:var(--muted); line-height:1.7; margin:6px 0; }
-  .n { font-size:32px; font-weight:700; color:var(--accent); }
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --warn:#fab219; --bad:#ef4444; --accent:#38bdf8;
+          --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#9085e9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; }
+  .wrap { padding:16px 20px 40px; max-width:1500px; margin:0 auto; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:14px; }
+  .bar .lb { color:var(--muted); margin-left:8px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { background:var(--card); color:var(--muted); border:0; padding:7px 13px; cursor:pointer; font:inherit; }
+  .seg button.on { background:var(--accent); color:#0f172a; font-weight:700; }
+  select, .btn { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; cursor:pointer; }
+  .btn.pri { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  .btn:hover { filter:brightness(1.15); }
+  .sp { flex:1; }
+  .range { color:var(--muted); }
+  .rt { display:none; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:14px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .kpi .l { color:var(--muted); font-size:12px; } .kpi .v { font-size:28px; font-weight:700; margin-top:4px; line-height:1.1; } .kpi .v small { font-size:13px; color:var(--muted); font-weight:400; margin-left:3px; }
+  .kpi .s { color:var(--muted); font-size:11px; margin-top:4px; }
+  .kpi.ok .v { color:var(--ok); } .kpi.warn .v { color:var(--warn); } .kpi.bad .v { color:var(--bad); }
+  .g2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  @media (max-width:900px) { .g2 { grid-template-columns:1fr; } }
+  .p { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; min-width:0; }
+  .g2 .p { margin:0; }
+  .p h2 { font-size:15px; margin:0 0 10px; display:flex; align-items:center; gap:8px; } .p h2 small { color:var(--muted); font-weight:400; font-size:12px; }
+  .chart { position:relative; width:100%; height:230px; }
+  .chart svg { width:100%; height:100%; display:block; overflow:visible; }
+  .ax { fill:var(--muted); font-size:11px; } .gl { stroke:var(--line); stroke-width:1; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:8px; font-size:12px; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:5px; } .legend i { width:14px; height:3px; border-radius:2px; display:inline-block; }
+  .tip { position:absolute; pointer-events:none; background:#0b1220; border:1px solid var(--line); border-radius:8px; padding:6px 9px; font-size:12px; white-space:nowrap; z-index:5; display:none; box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  .tip b { display:block; margin-bottom:2px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  th { color:var(--muted); font-weight:400; font-size:12px; }
+  th:first-child, td:first-child, .tl { text-align:left; }
+  tr.sel td { background:rgba(56,189,248,.1); } tbody tr { cursor:pointer; } tbody tr:hover td { background:rgba(148,163,184,.08); }
+  td .hn { display:block; color:var(--muted); font-size:11px; }
+  .pb { display:inline-block; width:70px; height:8px; background:var(--line); border-radius:4px; vertical-align:middle; margin-right:6px; overflow:hidden; } .pb i { display:block; height:100%; background:var(--ok); }
+  .pb.warn i { background:var(--warn); } .pb.bad i { background:var(--bad); }
+  .up { color:var(--bad); } .dn { color:var(--ok); }
+  .tag { display:inline-block; padding:1px 7px; border-radius:6px; font-size:11px; background:var(--line); color:var(--text); }
+  .tag.cpu { background:#3b2a12; color:#fbbf24; } .tag.mem { background:#2a1a3b; color:#c4b5fd; } .tag.disk, .tag.full { background:#122f3b; color:#67e8f9; } .tag.offline { background:#3b1219; color:#fca5a5; }
+  .empty { color:var(--muted); padding:24px; text-align:center; }
+  .tw { overflow-x:auto; }
+  .ub { display:flex; flex-direction:column; gap:6px; }
+  .ur { display:grid; grid-template-columns:150px 1fr 120px; align-items:center; gap:10px; }
+  .ur .n { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .ur .t { height:12px; background:var(--line); border-radius:6px; overflow:hidden; } .ur .t i { display:block; height:100%; }
+  .ur .v { color:var(--muted); font-size:12px; }
+  .note { color:var(--muted); font-size:12px; margin-top:8px; }
+  @media print {
+    :root { --bg:#fff; --card:#fff; --line:#cbd5e1; --text:#111; --muted:#555; }
+    @page { size:A4 landscape; margin:12mm; }
+    body { background:#fff; color:#111; font-size:11px; }
+    #topnav, .bar, .noprint { display:none !important; }
+    .wrap { padding:0; max-width:none; }
+    .rt { display:block; margin-bottom:10px; } .rt h1 { font-size:18px; margin:0 0 4px; } .rt div { color:#555; font-size:11px; }
+    .p, .kpi { break-inside:avoid; box-shadow:none; }
+    .kpi .v { font-size:20px; } .chart { height:190px; }
+    .tip { display:none !important; }
+    tbody tr:hover td, tr.sel td { background:none; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <div class="box">
-    <h1>통계 · 리포트 (준비 중)</h1>
-    <p>서버별 CPU · 메모리 평균/최대 추이, 디스크 증가 추이, 알림 건수, 가동률을 기간별로 보고 엑셀 · PDF 로 내려받는 화면입니다.</p>
-    <p>이 화면을 위한 시간별 집계 데이터는 수집기 1.9.0 부터 쌓이고 있으며 1년간 보관됩니다.</p>
-    <p id="acc">집계 데이터 확인 중…</p>
+<main class="wrap">
+  <div class="bar">
+    <span class="lb" style="margin-left:0">기간</span>
+    <span class="seg" id="seg">
+      <button data-d="1">오늘</button><button data-d="7" class="on">7일</button><button data-d="30">30일</button><button data-d="90">90일</button><button data-d="365">1년</button>
+    </span>
+    <select id="month"><option value="">월 선택…</option></select>
+    <span class="lb">서버</span>
+    <select id="host"><option value="">전체</option></select>
+    <span class="range" id="range"></span>
+    <span class="sp"></span>
+    <button class="btn" id="csv">⬇ 엑셀(CSV) 다운로드</button>
+    <button class="btn pri" id="pdf">🖨 PDF 저장 / 인쇄</button>
   </div>
+  <div class="rt"><h1>서버 모니터 리포트</h1><div id="rtsub"></div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="g2">
+    <div class="p"><h2>CPU 사용률 추이 <small id="cpuSub"></small></h2><div class="chart" id="cpuC"></div><div class="legend" id="cpuL"></div></div>
+    <div class="p"><h2>메모리 사용률 추이 <small id="memSub"></small></h2><div class="chart" id="memC"></div><div class="legend" id="memL"></div></div>
+  </div>
+  <div class="g2">
+    <div class="p"><h2>경고 발생 건수 <small>일별 · 텔레그램 경고 기준 (계속/복귀 제외)</small></h2><div class="chart" id="alC"></div></div>
+    <div class="p"><h2>서버별 가동률 <small>오프라인 시간 기준</small></h2><div class="ub" id="upB"></div></div>
+  </div>
+  <div class="p"><h2>서버별 요약 <small>행을 클릭하면 해당 서버만 표시</small></h2><div class="tw"><table id="sum"><thead><tr>
+    <th>서버</th><th>OS</th><th>CPU 평균</th><th>CPU 최대</th><th>메모리 평균</th><th>메모리 최대</th><th>가동률</th><th>오프라인</th><th>경고</th><th>CPU</th><th>메모리</th><th>디스크</th><th>오프라인</th>
+  </tr></thead><tbody></tbody></table></div></div>
+  <div class="p"><h2>디스크 사용량 증감 <small id="dkSub">기간 시작 시점 대비</small></h2>
+    <div class="chart" id="dkC" hidden></div><div class="legend" id="dkL"></div>
+    <div class="tw"><table id="dk"><thead><tr><th>서버</th><th>드라이브</th><th>전체</th><th>기간 시작</th><th>현재</th><th>증감</th><th>사용률</th></tr></thead><tbody></tbody></table></div>
+    <div class="note">디스크 값은 매일 점검 시각(알림 설정의 디스크 점검 시각)에 기록된 스냅샷 기준입니다.</div>
+  </div>
+  <div class="p"><h2>경고 이력 <small id="evSub"></small></h2><div class="tw"><table id="ev"><thead><tr><th>일시</th><th>서버</th><th>구분</th><th class="tl">내용</th></tr></thead><tbody></tbody></table></div></div>
 </main>
+<div class="tip" id="tip"></div>
 <script src="common.js"></script>
 <script>
-MON.renderNav('stats.html'); MON.pollNav();
-fetch('api/hourly?days=400').then(r => r.json()).then(j => {
-  let n = 0, first = Infinity; for (const h in j.hosts) for (const r of j.hosts[h]) { n++; if (r.h < first) first = r.h; }
-  document.getElementById('acc').innerHTML = n ? `현재 <span class="n">${n}</span> 시간분 집계 (${new Date(first).toLocaleString('ko-KR')} 부터)` : '아직 집계된 데이터가 없습니다. 첫 정시가 지나면 쌓이기 시작합니다.';
-}).catch(() => {});
-fetch('api/health').then(r => r.json()).then(j => MON.setVersion(j.version)).catch(() => {});
+MON.renderNav('stats.html'); MON.pollNav(); setInterval(MON.pollNav, 30000);
+const $ = (s) => document.querySelector(s), esc = MON.esc;
+const PAL = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'];
+const RULE = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진', offline: '오프라인', etc: '기타' };
+let state = { days: 7, month: '', host: '' }, data = null;
+const p2 = (n) => String(n).padStart(2, '0');
+const fmtDate = (t) => { const d = new Date(t); return `${d.getFullYear()}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
+const fmtDT = (t) => { const d = new Date(t); return `${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:00`; };
+const gb = (b) => b == null ? '-' : MON.fmtBytes(b);
+const pct = (v) => v == null ? '-' : v.toFixed(1) + '%';
+const hrs = (s) => s >= 3600 ? (s / 3600).toFixed(1) + '시간' : Math.round(s / 60) + '분';
+
+// 월 선택 목록 (최근 13개월)
+(function () { const d = new Date(); d.setDate(1); for (let i = 0; i < 13; i++) { const v = `${d.getFullYear()}-${p2(d.getMonth() + 1)}`; $('#month').insertAdjacentHTML('beforeend', `<option value="${v}">${d.getFullYear()}년 ${d.getMonth() + 1}월</option>`); d.setMonth(d.getMonth() - 1); } })();
+
+function query() { return state.month ? `month=${state.month}` : `days=${state.days}`; }
+async function load() {
+  const r = await fetch('api/stats?' + query()); data = await r.json();
+  const hs = $('#host'); const cur = hs.value;
+  const list = hostList();
+  hs.innerHTML = '<option value="">전체</option>' + list.map((h) => `<option value="${esc(h.host)}">${esc(h.name || h.host)}</option>`).join('');
+  hs.value = list.some((h) => h.host === state.host) ? state.host : ''; state.host = hs.value;
+  $('#range').textContent = `${fmtDate(data.from)} ~ ${fmtDate(data.to)} (${data.gran === 'hour' ? '시간별' : '일별'})`;
+  $('#rtsub').textContent = `기간 ${fmtDate(data.from)} ~ ${fmtDate(data.to)} · 생성 ${new Date().toLocaleString('ko-KR')} · 서버 ${list.length}대`;
+  render();
+}
+function hostList() {
+  const o = data.order || [];
+  return Object.values(data.hosts).sort((a, b) => ((o.indexOf(a.host) + 1) || 1e9) - ((o.indexOf(b.host) + 1) || 1e9) || (a.name || a.host).localeCompare(b.name || b.host, 'ko'));
+}
+function selHosts() { const l = hostList(); return state.host ? l.filter((h) => h.host === state.host) : l; }
+function colorOf(i) { return PAL[i % PAL.length]; }
+function dashOf(i) { return i >= PAL.length ? '5 4' : ''; }
+
+function render() {
+  const list = selHosts(), all = hostList(), ev = data.alerts;
+  // KPI
+  const w = (k) => { let s = 0, n = 0; for (const h of list) { if (h[k] != null && h.tracked_sec) { s += h[k] * h.tracked_sec; n += h.tracked_sec; } } return n ? s / n : null; };
+  const cpu = w('cpu_avg'), mem = w('mem_avg');
+  const off = list.reduce((a, h) => a + h.off_sec, 0), tr = list.reduce((a, h) => a + h.tracked_sec, 0);
+  const upr = tr ? (1 - off / tr) * 100 : null;
+  const br = state.host ? { cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, ...(ev.byHost[state.host] || {}) } : ev.byRule;
+  const alerts = state.host ? br.total || 0 : ev.total;
+  const dsum = list.reduce((a, h) => a + h.disks.reduce((b, d) => b + (d.delta || 0), 0), 0);
+  const g = (v, w1, b1) => v == null ? '' : v >= b1 ? 'bad' : v >= w1 ? 'warn' : 'ok';
+  $('#kpis').innerHTML = [
+    ['대상 서버', list.length, '대', list.filter((h) => h.online).length + '대 온라인', ''],
+    ['평균 CPU', cpu == null ? '-' : cpu.toFixed(1), '%', '최대 ' + pct(list.length ? Math.max(...list.map((h) => h.cpu_max ?? 0)) : null), g(cpu, 60, 80)],
+    ['평균 메모리', mem == null ? '-' : mem.toFixed(1), '%', '최대 ' + pct(list.length ? Math.max(...list.map((h) => h.mem_max ?? 0)) : null), g(mem, 75, 90)],
+    ['가동률', upr == null ? '-' : upr.toFixed(2), '%', '오프라인 누적 ' + hrs(off), upr == null ? '' : upr >= 99.5 ? 'ok' : upr >= 95 ? 'warn' : 'bad'],
+    ['경고 발생', alerts, '건', `CPU ${br.cpu} · 메모리 ${br.mem} · 디스크 ${br.disk + br.full} · 오프라인 ${br.offline}`, alerts ? (alerts >= 10 ? 'bad' : 'warn') : 'ok'],
+    ['디스크 증감 합계', (dsum >= 0 ? '+' : '-') + MON.fmtBytes(Math.abs(dsum)), '', '기간 시작 대비', dsum > 50 * 1024 ** 3 ? 'warn' : ''],
+  ].map(([l, v, u, s, c]) => `<div class="kpi ${c}"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div><div class="s">${esc(s)}</div></div>`).join('');
+
+  // 추이 그래프
+  const single = list.length === 1;
+  const mk = (ka, kx) => single
+    ? [{ name: '평균', color: PAL[0], area: true, pts: list[0].series.map((r) => [r.t, r[ka]]) }, { name: '최대', color: PAL[1], dash: '5 4', pts: list[0].series.map((r) => [r.t, r[kx]]) }]
+    : list.map((h, i) => ({ name: h.name || h.host, color: colorOf(i), dash: dashOf(i), pts: h.series.map((r) => [r.t, r[ka]]) }));
+  $('#cpuSub').textContent = $('#memSub').textContent = single ? '평균 · 최대 (%)' : '서버별 평균 (%)';
+  lineChart($('#cpuC'), $('#cpuL'), mk('ca', 'cx'), { ymax: 100, unit: '%' });
+  lineChart($('#memC'), $('#memL'), mk('ma', 'mx'), { ymax: 100, unit: '%' });
+
+  // 경고 일별 막대 (선택 서버가 있으면 이벤트 목록에서 다시 집계)
+  const byDay = {};
+  if (state.host) { for (const e of ev.events) if (e.host === state.host) { const k = fmtDate(e.time); byDay[k] = (byDay[k] || 0) + 1; } }
+  else for (const [k, v] of Object.entries(ev.byDay)) byDay[k.replace(/-/g, '.')] = v;
+  const days = []; for (let t = new Date(data.from).setHours(0, 0, 0, 0); t <= data.to; t += 86400000) days.push([t, byDay[fmtDate(t)] || 0]);
+  barChart($('#alC'), days);
+
+  // 가동률
+  $('#upB').innerHTML = all.map((h) => { const u = h.uptime; const c = u == null ? 'var(--line)' : u >= 99.5 ? 'var(--ok)' : u >= 95 ? 'var(--warn)' : 'var(--bad)';
+    return `<div class="ur"><span class="n" title="${esc(h.host)}">${esc(h.name || h.host)}</span><span class="t"><i style="width:${u ?? 0}%;background:${c}"></i></span><span class="v">${u == null ? '집계 없음' : u.toFixed(2) + '%'}${h.off_sec ? ' · ' + hrs(h.off_sec) : ''}</span></div>`; }).join('') || '<div class="empty">집계된 서버가 없습니다.</div>';
+
+  // 서버별 요약
+  $('#sum tbody').innerHTML = all.map((h) => { const a = ev.byHost[h.host] || {}; const u = h.uptime;
+    return `<tr data-h="${esc(h.host)}" class="${h.host === state.host ? 'sel' : ''}"><td>${esc(h.name || h.host)}${h.name ? `<span class="hn">${esc(h.host)}</span>` : ''}</td><td class="tl">${esc(MON.shortOs(h.os))}</td>
+      <td>${pct(h.cpu_avg)}</td><td>${pct(h.cpu_max)}</td><td>${pct(h.mem_avg)}</td><td>${pct(h.mem_max)}</td>
+      <td class="${u == null ? '' : u >= 99.5 ? 'dn' : u >= 95 ? '' : 'up'}">${u == null ? '-' : u.toFixed(2) + '%'}</td><td>${h.off_sec ? hrs(h.off_sec) : '-'}</td>
+      <td><b>${a.total || 0}</b></td><td>${a.cpu || 0}</td><td>${a.mem || 0}</td><td>${(a.disk || 0) + (a.full || 0)}</td><td>${a.offline || 0}</td></tr>`; }).join('') || '<tr><td colspan="13" class="empty">데이터 없음</td></tr>';
+  $('#sum tbody').onclick = (e) => { const tr = e.target.closest('tr[data-h]'); if (!tr) return; state.host = state.host === tr.dataset.h ? '' : tr.dataset.h; $('#host').value = state.host; render(); };
+
+  // 디스크
+  $('#dk tbody').innerHTML = list.flatMap((h) => h.disks.map((d) => { const c = d.pct >= 90 ? 'bad' : d.pct >= 75 ? 'warn' : '';
+    return `<tr data-h="${esc(h.host)}"><td>${esc(h.name || h.host)}</td><td class="tl">${esc(d.mount)}</td><td>${gb(d.total)}</td><td>${d.start == null ? '-' : gb(d.start)}</td><td>${gb(d.used)}</td>
+      <td class="${d.delta > 0 ? 'up' : d.delta < 0 ? 'dn' : ''}">${d.delta == null ? '-' : (d.delta >= 0 ? '+' : '-') + MON.fmtBytes(Math.abs(d.delta))}</td>
+      <td><span class="pb ${c}"><i style="width:${d.pct || 0}%"></i></span>${pct(d.pct)}</td></tr>`; })).join('') || '<tr><td colspan="7" class="empty">디스크 데이터 없음</td></tr>';
+  $('#dk tbody').onclick = (e) => { const tr = e.target.closest('tr[data-h]'); if (!tr || state.host) return; state.host = tr.dataset.h; $('#host').value = state.host; render(); };
+  const dkC = $('#dkC'); dkC.hidden = !single; $('#dkL').innerHTML = '';
+  if (single) { const h = list[0]; const mounts = h.disks.map((d) => d.mount);
+    const ser = mounts.map((m, i) => ({ name: m + ' 사용량', color: colorOf(i), pts: h.disk_series.filter((s) => s.disks[m]).map((s) => [new Date(s.date).getTime(), s.disks[m].used / 1024 ** 3]) })).filter((s) => s.pts.length);
+    $('#dkSub').textContent = `${h.name || h.host} · 일별 사용량 (GB)`;
+    if (ser.length) lineChart(dkC, $('#dkL'), ser, { unit: ' GB', ymax: null, day: true }); else dkC.innerHTML = '<div class="empty">아직 일별 스냅샷이 없습니다.</div>';
+  } else $('#dkSub').textContent = '기간 시작 시점 대비';
+
+  // 경고 이력
+  const evs = ev.events.filter((e) => !state.host || e.host === state.host).sort((a, b) => b.time - a.time).slice(0, 100);
+  $('#evSub').textContent = `${state.host ? '선택 서버' : '전체'} ${evs.length}건${ev.events.length >= 500 ? ' (최근 500건 중)' : ''} · 전체 로그는 서버 현황 › 알림 설정에서 월별 다운로드`;
+  $('#ev tbody').innerHTML = evs.map((e) => `<tr><td class="tl">${new Date(e.time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td><td class="tl">${esc(e.name || e.host)}</td><td class="tl"><span class="tag ${e.rule}">${RULE[e.rule] || e.rule}</span></td><td class="tl" style="white-space:normal">${esc(e.msg)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">기간 내 경고 없음</td></tr>';
+}
+
+// ---- 차트 (SVG 직접 그리기, 외부 라이브러리 없음) ----
+function xTicks(from, to, gran) {
+  const out = []; const span = to - from;
+  if (gran === 'hour' && span <= 86400000 * 1.5) { const d = new Date(from); d.setMinutes(0, 0, 0); for (let t = d.getTime(); t <= to; t += 3 * 3600000) out.push([t, `${p2(new Date(t).getHours())}시`]); }
+  else { const n = Math.max(1, Math.round(span / 86400000)); const step = n <= 8 ? 1 : n <= 35 ? 5 : n <= 100 ? 14 : 60; const d = new Date(from); d.setHours(0, 0, 0, 0); if (d.getTime() < from) d.setDate(d.getDate() + 1);
+    for (let t = d.getTime(); t <= to; t += step * 86400000) { const x = new Date(t); out.push([t, step >= 60 ? `${x.getFullYear()}.${p2(x.getMonth() + 1)}` : `${x.getMonth() + 1}/${x.getDate()}`]); } }
+  return out;
+}
+function lineChart(el, legendEl, series, opt) {
+  const W = el.clientWidth || 800, H = el.clientHeight || 230, L = 42, R = 10, T = 10, B = 26, from = opt.day ? Math.min(data.from, ...series.flatMap((s) => s.pts.map((p) => p[0]))) : data.from, to = data.to;
+  const vals = series.flatMap((s) => s.pts.map((p) => p[1])).filter((v) => v != null);
+  const ymax = opt.ymax != null ? opt.ymax : Math.max(1, Math.ceil(Math.max(...vals, 0) * 1.1));
+  const X = (t) => L + (t - from) / Math.max(1, to - from) * (W - L - R), Y = (v) => T + (1 - v / ymax) * (H - T - B);
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  for (let i = 0; i <= 4; i++) { const v = ymax * i / 4, y = Y(v); s += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 6}" y="${y + 4}" text-anchor="end">${opt.ymax ? Math.round(v) + '%' : Math.round(v)}</text>`; }
+  for (const [t, lb] of xTicks(from, to, data.gran)) s += `<text class="ax" x="${X(t)}" y="${H - 8}" text-anchor="middle">${lb}</text>`;
+  for (const ser of series) {
+    const pts = ser.pts.filter((p) => p[1] != null); if (!pts.length) continue;
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' ');
+    if (ser.area) s += `<path d="${d} L${X(pts[pts.length - 1][0]).toFixed(1)} ${Y(0)} L${X(pts[0][0]).toFixed(1)} ${Y(0)} Z" fill="${ser.color}" opacity=".15"/>`;
+    s += `<path d="${d}" fill="none" stroke="${ser.color}" stroke-width="2" ${ser.dash ? `stroke-dasharray="${ser.dash}"` : ''} vector-effect="non-scaling-stroke"/>`;
+    if (pts.length === 1) s += `<circle cx="${X(pts[0][0])}" cy="${Y(pts[0][1])}" r="3" fill="${ser.color}"/>`;
+  }
+  s += `<line id="cur" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="#94a3b8" stroke-dasharray="3 3" style="display:none"/></svg>`;
+  el.innerHTML = vals.length ? s : '<div class="empty">기간 내 집계 데이터가 없습니다. (수집기 1.9.0 이후부터 매 정시에 쌓입니다)</div>';
+  legendEl.innerHTML = series.map((x) => `<span><i style="background:${x.color};${x.dash ? 'height:0;border-top:2px dashed ' + x.color + ';background:none' : ''}"></i>${esc(x.name)}</span>`).join('');
+  if (!vals.length) return;
+  const svg = el.querySelector('svg'), tip = $('#tip');
+  el.onmousemove = (e) => {
+    const r = svg.getBoundingClientRect(); const t = from + (e.clientX - r.left) / r.width * W > L ? from + ((e.clientX - r.left) / r.width * W - L) / (W - L - R) * (to - from) : from;
+    const rows = series.map((ser) => { let best = null; for (const p of ser.pts) if (p[1] != null && (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t))) best = p; return best ? { ser, p: best } : null; }).filter(Boolean);
+    if (!rows.length) return;
+    const near = rows.reduce((a, b) => Math.abs(b.p[0] - t) < Math.abs(a.p[0] - t) ? b : a).p[0];
+    const show = rows.filter((x) => x.p[0] === near).sort((a, b) => b.p[1] - a.p[1]).slice(0, 12);
+    const cur = svg.querySelector('#cur'); cur.style.display = ''; cur.setAttribute('x1', X(near)); cur.setAttribute('x2', X(near));
+    tip.innerHTML = `<b>${data.gran === 'hour' && !opt.day ? fmtDT(near) : fmtDate(near)}</b>` + show.map((x) => `<div><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${x.ser.color};margin-right:5px"></i>${esc(x.ser.name)} ${x.p[1].toFixed(1)}${opt.unit}</div>`).join('');
+    tip.style.display = 'block'; tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, e.pageX + 14) + 'px'; tip.style.top = (e.pageY - 10) + 'px';
+  };
+  el.onmouseleave = () => { tip.style.display = 'none'; const c = svg.querySelector('#cur'); if (c) c.style.display = 'none'; };
+}
+function barChart(el, days) {
+  const W = el.clientWidth || 800, H = el.clientHeight || 230, L = 30, R = 10, T = 10, B = 26; const max = Math.max(1, ...days.map((d) => d[1]));
+  const bw = (W - L - R) / days.length, X = (i) => L + i * bw, Y = (v) => T + (1 - v / max) * (H - T - B);
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  const steps = Math.min(4, max);
+  for (let i = 0; i <= steps; i++) { const v = Math.round(max * i / steps), y = Y(v); s += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 6}" y="${y + 4}" text-anchor="end">${v}</text>`; }
+  const every = days.length <= 10 ? 1 : days.length <= 35 ? 5 : days.length <= 100 ? 14 : 60;
+  days.forEach(([t, v], i) => { const d = new Date(t);
+    if (i % every === 0) s += `<text class="ax" x="${X(i) + bw / 2}" y="${H - 8}" text-anchor="middle">${every >= 60 ? `${d.getFullYear()}.${p2(d.getMonth() + 1)}` : `${d.getMonth() + 1}/${d.getDate()}`}</text>`;
+    if (v) s += `<rect x="${X(i) + bw * 0.15}" y="${Y(v)}" width="${bw * 0.7}" height="${Y(0) - Y(v)}" rx="2" fill="${v >= 5 ? '#ef4444' : '#d95926'}"><title>${fmtDate(t)} ${v}건</title></rect>`; });
+  el.innerHTML = s + '</svg>';
+}
+
+// ---- 조작 ----
+$('#seg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; state.days = Number(b.dataset.d); state.month = ''; $('#month').value = ''; for (const x of $('#seg').children) x.classList.toggle('on', x === b); load(); };
+$('#month').onchange = (e) => { state.month = e.target.value; for (const x of $('#seg').children) x.classList.toggle('on', !state.month && Number(x.dataset.d) === state.days); load(); };
+$('#host').onchange = (e) => { state.host = e.target.value; render(); };
+$('#csv').onclick = () => { location.href = 'api/report.csv?' + query(); };
+$('#pdf').onclick = () => { document.title = `서버모니터-리포트-${fmtDate(data.from)}~${fmtDate(data.to)}`; window.print(); setTimeout(() => document.title = '통계 · 리포트', 1000); };
+fetch('api/health').then((r) => r.json()).then((j) => MON.setVersion(j.version)).catch(() => {});
+load().catch((e) => { $('#kpis').innerHTML = `<div class="empty">데이터를 불러오지 못했습니다: ${esc(e.message)}</div>`; });
+setInterval(() => load().catch(() => {}), 5 * 60000);
+let rsz; window.addEventListener('resize', () => { clearTimeout(rsz); rsz = setTimeout(() => data && render(), 200); });
+window.addEventListener('beforeprint', () => data && render()); window.addEventListener('afterprint', () => data && render());
 </script>
 </body>
 </html>

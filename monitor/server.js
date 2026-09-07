@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -65,6 +65,93 @@ function hourlyView(host, days) {
   const rows = (hourly[host] || []).filter((r) => r.h >= from);
   const c = hourCur[host]; if (c) rows.push({ h: c.h, n: c.n, ca: c.n ? Math.round(c.cs / c.n * 10) / 10 : null, cx: c.cx, ma: c.n ? Math.round(c.ms / c.n * 10) / 10 : null, mx: c.mx, off: c.off, open: true });
   return rows;
+}
+
+// ---- 통계 (기간별 집계) ----
+// gran: 'hour' | 'day'. 서버별로 { series:[{t,ca,cx,ma,mx,off,sec}], cpu_avg, cpu_max, mem_avg, mem_max, off_sec, tracked_sec, uptime, disks:[{mount,total,used,start,delta,pct}] }
+function statsView(from, to, gran) {
+  const now = Date.now();
+  const hosts = {};
+  const fromKey = dayKey(from), toKey = dayKey(to);
+  for (const [host, e] of store) {
+    const rows = hourlyView(host, 400).filter((r) => r.h >= from && r.h <= to);
+    const buckets = new Map();
+    let cs = 0, cn = 0, cx = 0, ms = 0, mn = 0, mx = 0, off = 0, tracked = 0;
+    for (const r of rows) {
+      const sec = r.open ? Math.max(0, Math.min(3600, (now - r.h) / 1000)) : 3600;
+      const o = Math.min(sec, r.off || 0);
+      off += o; tracked += sec;
+      if (r.ca != null) { cs += r.ca * r.n; cn += r.n; cx = Math.max(cx, r.cx || 0); }
+      if (r.ma != null) { ms += r.ma * r.n; mn += r.n; mx = Math.max(mx, r.mx || 0); }
+      const key = gran === 'hour' ? r.h : new Date(new Date(r.h).setHours(0, 0, 0, 0)).getTime();
+      const b = buckets.get(key) || { t: key, cs: 0, cn: 0, cx: 0, ms: 0, mn: 0, mx: 0, off: 0, sec: 0 };
+      b.sec += sec; b.off += o;
+      if (r.ca != null) { b.cs += r.ca * r.n; b.cn += r.n; b.cx = Math.max(b.cx, r.cx || 0); }
+      if (r.ma != null) { b.ms += r.ma * r.n; b.mn += r.n; b.mx = Math.max(b.mx, r.mx || 0); }
+      buckets.set(key, b);
+    }
+    const series = [...buckets.values()].sort((a, b) => a.t - b.t).map((b) => ({ t: b.t, ca: b.cn ? Math.round(b.cs / b.cn * 10) / 10 : null, cx: b.cn ? b.cx : null, ma: b.mn ? Math.round(b.ms / b.mn * 10) / 10 : null, mx: b.mn ? b.mx : null, off: Math.round(b.off), sec: Math.round(b.sec) }));
+    // 디스크: 기간 시작 시점 스냅샷 vs 최신
+    const daily = e.daily || {}; const keys = Object.keys(daily).sort();
+    let startKey = null; for (const k of keys) { if (k <= fromKey) startKey = k; else break; }
+    if (!startKey) startKey = keys.find((k) => k >= fromKey && k <= toKey) || null;
+    let endKey = null; for (const k of keys) if (k <= toKey) endKey = k;
+    const disks = [];
+    const cur = e.latest && e.latest.disks ? e.latest.disks : [];
+    const endSnap = endKey ? daily[endKey].disks : {};
+    const startSnap = startKey ? daily[startKey].disks : {};
+    for (const d of cur) {
+      const en = endSnap[d.mount] || d, st = startSnap[d.mount];
+      disks.push({ mount: d.mount, total: d.total, used: en.used, pct: d.total ? Math.round(en.used / d.total * 1000) / 10 : null, start: st ? st.used : null, delta: st ? en.used - st.used : null, start_date: st ? startKey : null, end_date: endKey });
+    }
+    const diskSeries = keys.filter((k) => k >= (startKey || fromKey) && k <= toKey).map((k) => ({ date: k, disks: daily[k].disks }));
+    hosts[host] = {
+      host, name: e.latest ? e.latest.name || '' : '', os: e.latest ? e.latest.os || '' : '', online: e.latest ? now - e.latest.ts < OFFLINE_AFTER : false,
+      cpu_avg: cn ? Math.round(cs / cn * 10) / 10 : null, cpu_max: cn ? cx : null, mem_avg: mn ? Math.round(ms / mn * 10) / 10 : null, mem_max: mn ? mx : null,
+      off_sec: Math.round(off), tracked_sec: Math.round(tracked), uptime: tracked ? Math.round((1 - off / tracked) * 10000) / 100 : null,
+      series, disks, disk_series: diskSeries,
+    };
+  }
+  return hosts;
+}
+function parseRange(url) {
+  const now = Date.now();
+  let from, to = now;
+  const days = Number(url.searchParams.get('days') || 0);
+  const month = url.searchParams.get('month') || '';
+  if (/^\d{4}-\d{2}$/.test(month)) { const [y, m] = month.split('-').map(Number); from = new Date(y, m - 1, 1).getTime(); to = Math.min(now, new Date(y, m, 1).getTime() - 1); }
+  else if (url.searchParams.get('from')) { from = new Date(url.searchParams.get('from')).getTime(); if (url.searchParams.get('to')) to = Math.min(now, new Date(url.searchParams.get('to')).setHours(23, 59, 59, 999)); }
+  else { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - Math.max(0, Math.min(400, days || 7) - 1)); from = d.getTime(); }
+  if (!(from > 0)) { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 6); from = d.getTime(); }
+  const gran = url.searchParams.get('gran') || (to - from <= 8 * 86400000 ? 'hour' : 'day');
+  return { from, to, gran };
+}
+function csvEscape(v) { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function reportCsv(from, to, gran) {
+  const hosts = statsView(from, to, gran), ev = alerter.countEvents(from, to);
+  const fmtD = (t) => { const d = new Date(t); const p = (n) => String(n).padStart(2, '0'); return gran === 'hour' ? `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:00` : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  const gb = (b) => b == null ? '' : (b / 1024 ** 3).toFixed(1);
+  const lines = [];
+  lines.push(['서버 모니터 리포트', `기간 ${fmtD(from)} ~ ${fmtD(to)}`, `생성 ${new Date().toLocaleString('ko-KR')}`]);
+  lines.push([]);
+  lines.push(['[서버별 요약]']);
+  lines.push(['서버', '호스트명', 'OS', 'CPU 평균(%)', 'CPU 최대(%)', '메모리 평균(%)', '메모리 최대(%)', '가동률(%)', '오프라인(시간)', '경고 건수', 'CPU 경고', '메모리 경고', '디스크 경고', '오프라인 경고']);
+  const list = Object.values(hosts).sort((a, b) => (order.indexOf(a.host) + 1 || 1e9) - (order.indexOf(b.host) + 1 || 1e9) || a.host.localeCompare(b.host));
+  for (const h of list) { const a = ev.byHost[h.host] || {}; lines.push([h.name || h.host, h.host, h.os, h.cpu_avg, h.cpu_max, h.mem_avg, h.mem_max, h.uptime, (h.off_sec / 3600).toFixed(1), a.total || 0, a.cpu || 0, a.mem || 0, (a.disk || 0) + (a.full || 0), a.offline || 0]); }
+  lines.push([]);
+  lines.push(['[디스크 증감]']);
+  lines.push(['서버', '드라이브', '전체(GB)', '기간 시작 사용(GB)', '현재 사용(GB)', '증감(GB)', '사용률(%)', '기준일']);
+  for (const h of list) for (const d of h.disks) lines.push([h.name || h.host, d.mount, gb(d.total), gb(d.start), gb(d.used), gb(d.delta), d.pct, d.start_date || '']);
+  lines.push([]);
+  lines.push([gran === 'hour' ? '[시간별 추이]' : '[일별 추이]']);
+  lines.push(['서버', gran === 'hour' ? '일시' : '날짜', 'CPU 평균(%)', 'CPU 최대(%)', '메모리 평균(%)', '메모리 최대(%)', '오프라인(분)']);
+  for (const h of list) for (const r of h.series) lines.push([h.name || h.host, fmtD(r.t), r.ca, r.cx, r.ma, r.mx, Math.round(r.off / 60)]);
+  lines.push([]);
+  lines.push(['[경고 이력]']);
+  lines.push(['일시', '서버', '구분', '내용']);
+  const RULE = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진', offline: '오프라인', etc: '기타' };
+  for (const e of ev.events) lines.push([new Date(e.time).toLocaleString('ko-KR'), e.name || e.host, RULE[e.rule] || e.rule, e.msg]);
+  return '﻿' + lines.map((l) => l.map(csvEscape).join(',')).join('\r\n') + '\r\n';
 }
 
 let topology = { nodes: {}, links: [], groups: [], notes: [] };   // 구성도 (화면에서 편집)
@@ -320,6 +407,17 @@ const server = http.createServer(async (req, res) => {
     if (host) return json(res, 200, { host, rows: hourlyView(host, days) });
     const all = {}; for (const h of store.keys()) all[h] = hourlyView(h, days);
     return json(res, 200, { days, hosts: all });
+  }
+  // 통계: ?days=30 | ?month=2026-09 | ?from=2026-01-01&to=2026-03-31, gran=hour|day
+  if (req.method === 'GET' && url.pathname === '/api/stats') {
+    const { from, to, gran } = parseRange(url);
+    return json(res, 200, { from, to, gran, hosts: statsView(from, to, gran), alerts: alerter.countEvents(from, to), order, months: alerter.listLogs() });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/report.csv') {
+    const { from, to, gran } = parseRange(url);
+    const k = (t) => dayKey(t).replace(/-/g, '');
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="report-${k(from)}-${k(to)}.csv"`, 'Cache-Control': 'no-store' });
+    return res.end(reportCsv(from, to, gran));
   }
   // 구성도 저장/조회
   if (req.method === 'GET' && url.pathname === '/api/topology') return json(res, 200, topology);
