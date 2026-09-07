@@ -28,7 +28,7 @@ cmd_install() {
   [ -z "$URL" ] && URL="$(conf_get URL)"; [ -z "$TOKEN" ] && TOKEN="$(conf_get TOKEN)"; [ -z "$NAME" ] && NAME="$(conf_get NAME)"; [ -z "$DISKS" ] && DISKS="$(conf_get DISKS)"
   [ -z "$URL" ] && { echo "--url 이 필요합니다. 예: --url http://192.168.0.9:15138/api/metrics" >&2; exit 1; }
   command -v curl >/dev/null || { echo "curl 이 필요합니다: apt install curl / yum install curl" >&2; exit 1; }
-  command -v systemctl >/dev/null || { echo "systemd 가 없는 시스템입니다. ims-agent.sh 를 직접 백그라운드로 실행하세요." >&2; exit 1; }
+  if ! command -v systemctl >/dev/null; then NOSYSTEMD=1; DIR=/usr/local/ims-agent; fi   # 시놀로지 DSM 등
 
   mkdir -p "$DIR" "$CONF_DIR" /var/lib/ims-agent
   cp "$SRC_DIR/ims-agent.sh" "$DIR/ims-agent.sh"; chmod +x "$DIR/ims-agent.sh"
@@ -36,6 +36,16 @@ cmd_install() {
   conf_set URL "$URL"; conf_set TOKEN "$TOKEN"; conf_set INTERVAL "$INTERVAL"; conf_set NAME "$NAME"; conf_set INSECURE "$INSECURE"; conf_set DISKS "$DISKS"
   chmod 600 "$CONF"
 
+  if [ -n "$NOSYSTEMD" ]; then
+    nosd_start
+    echo "설치 완료 (systemd 없음 → 백그라운드 실행). 전송 주소: $URL"
+    echo
+    echo "▶ 부팅 시 자동 실행 등록 (시놀로지 DSM):"
+    echo "  제어판 → 작업 스케줄러 → 생성 → 트리거된 작업 → 사용자 정의 스크립트"
+    echo "  이벤트: 부팅 / 사용자: root / 작업 설정 → 스크립트에 아래 한 줄:"
+    echo "    $BIN start"
+    cmd_status; return
+  fi
   cat > "$UNIT" <<UNIT
 [Unit]
 Description=IMS Monitoring Agent
@@ -59,8 +69,19 @@ UNIT
   cmd_status
 }
 
+# systemd 가 없을 때 (시놀로지 등): nohup 으로 실행
+[ -d /usr/local/ims-agent ] && [ ! -d /opt/ims-agent ] && DIR=/usr/local/ims-agent
+PIDF=/var/run/ims-agent.pid
+nosd_running() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+nosd_start() { nosd_stop; nohup "$DIR/ims-agent.sh" >> /var/log/ims-agent.log 2>&1 & echo $! > "$PIDF"; sleep 3; }
+nosd_stop() { if nosd_running; then kill "$(cat "$PIDF")" 2>/dev/null; fi; rm -f "$PIDF"; pkill -f "$DIR/ims-agent.sh" 2>/dev/null || true; }
+
 cmd_status() {
-  if systemctl is-active --quiet $APP 2>/dev/null; then echo "서비스: 실행 중"; else echo "서비스: 중지됨"; fi
+  if command -v systemctl >/dev/null; then
+    if systemctl is-active --quiet $APP 2>/dev/null; then echo "서비스: 실행 중"; else echo "서비스: 중지됨"; fi
+  else
+    if nosd_running; then echo "에이전트: 실행 중 (PID $(cat "$PIDF"))"; else echo "에이전트: 중지됨 ('$BIN start' 로 시작)"; fi
+  fi
   echo "설정: $CONF  (이름: '$(conf_get NAME)', 주소: $(conf_get URL))"
   if [ -f "$STATUS" ]; then
     echo "마지막 상태: $(cat "$STATUS")"
@@ -74,8 +95,7 @@ cmd_uninstall() {
   if [ -n "$URL" ]; then
     curl -s -m 5 -X POST -H 'Content-Type: application/json' --data "{\"host\":\"$(hostname)\",\"token\":\"$TOKEN\"}" "${URL%/api/metrics}/api/unregister" >/dev/null 2>&1 && echo "수집기 목록에서 제거 요청 완료" || echo "수집기 알림 실패 (무시)"
   fi
-  systemctl disable --now $APP 2>/dev/null || true
-  rm -f "$UNIT"; systemctl daemon-reload
+  if command -v systemctl >/dev/null; then systemctl disable --now $APP 2>/dev/null || true; rm -f "$UNIT"; systemctl daemon-reload; else nosd_stop; fi
   rm -rf "$DIR" "$CONF_DIR" /var/lib/ims-agent "$BIN"
   echo "제거 완료"
 }
@@ -86,8 +106,10 @@ case "${1:-}" in
   status) cmd_status;;
   name) cmd_name "${2:-}";;
   disks) cmd_disks "${2:-}";;
-  restart|stop|start) need_root; systemctl "$1" $APP && echo "$1 완료";;
-  log) journalctl -u $APP -f;;
+  restart|stop|start) need_root
+    if command -v systemctl >/dev/null; then systemctl "$1" $APP && echo "$1 완료"
+    else case "$1" in start|restart) nosd_start;; stop) nosd_stop;; esac; echo "$1 완료"; fi;;
+  log) if command -v systemctl >/dev/null; then journalctl -u $APP -f; else tail -f /var/log/ims-agent.log; fi;;
   uninstall|remove) cmd_uninstall;;
   *) sed -n '2,12p' "$0"; exit 1;;
 esac

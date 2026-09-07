@@ -116,6 +116,9 @@ sudo ./install.sh --url http://192.168.0.9:15138/api/metrics --token ilsan-mon-2
 ```
 `ims-agent` 서비스로 등록된다. 이후 `ims-agent status`, `sudo ims-agent name "이름"`, `sudo ims-agent disks "/,/data"`(화면에 보일 마운트, 기본은 시스템 파티션 자동 제외), `sudo ims-agent restart`, `ims-agent log`, `sudo ims-agent uninstall`(화면에서도 자동 제거). https 사설 인증서면 `--insecure` 추가.
 
+**시놀로지 NAS**: 제어판 → 터미널 및 SNMP 에서 SSH 를 켜고 위와 같이 설치한다. systemd 가 없으므로 스크립트가 백그라운드로 띄우고, 부팅 시 자동 실행은 스크립트가 안내하는 대로 DSM 작업 스케줄러(트리거된 작업 → 부팅 → root → `/usr/local/bin/ims-agent start`)에 등록한다. 볼륨(`/volume1` 등) 용량과 CPU/메모리가 서버와 같은 카드로 보인다. 물리 디스크 건강 상태는 이 방식으로는 안 보이므로 DSM 자체 알림을 함께 쓴다.
+**ipTIME NAS**: 전용 펌웨어라 에이전트를 설치할 수 없다. 다른 서버의 에이전트가 공유폴더 응답과 용량을 대신 읽어 올리는 방식으로 대체 가능 (미구현).
+
 확인: `http://192.168.0.9:15138/` 에 그 서버 카드가 뜬다. 서버를 재부팅해도 다시 뜨면 등록 완료.
 
 문제가 생기면 서버에서 직접 확인:

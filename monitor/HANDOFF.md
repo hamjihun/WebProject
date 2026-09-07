@@ -11,7 +11,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 | `public/index.html` | 대시보드. `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `agent/win/` | Windows 에이전트 소스: `agent.ps1`(수집), `tray.ps1`(트레이), `service.ps1`(작업 등록), `start.ps1/.vbs`(바탕화면 실행), `installer.nsi`(NSIS), `make-icon.py`(아이콘) | 각 Windows 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` (v1.3.0) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
-| `agent/linux/` | Linux 에이전트 `ims-agent.sh` + `install.sh`(설치/`ims-agent` 관리 명령: status/name/disks/restart/log/uninstall). 마운트는 DISKS 지정 또는 /boot·snap·docker·1GB 미만 자동 제외 | 각 Linux 서버 |
+| `agent/linux/` | Linux 에이전트 `ims-agent.sh` + `install.sh`(설치/`ims-agent` 관리 명령: status/name/disks/restart/log/uninstall). 마운트는 DISKS 지정 또는 /boot·snap·docker·1GB 미만 자동 제외. systemd 없는 시스템(시놀로지 DSM)은 /usr/local/ims-agent + nohup + DSM 작업 스케줄러 안내 | 각 Linux 서버, 시놀로지 |
 | `deploy/` | 수집기 설치 스크립트(`setup-collector.cmd` 더블클릭 → `install-collector-windows.ps1 -Public -Port 15138`), 프록시 예시, IMS iframe 예시 | IMS 서버 |
 | `agent/simulate.js` | 가짜 서버 3대 전송 (테스트용) | 개발 |
 | `SETUP-IMS.md`, `README.md` | 사용자용 구축 순서 / 참조 | |
@@ -34,4 +34,4 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover`
 
 ## 사용자가 언급한 다음 후보
-서비스(SQL Server 등) 생존 감시, 상위 프로세스 Top5, 이벤트 로그 오류 건수, 백업 파일 최신 시각, RAID 물리 디스크 상태(HP 서버, iLO 미연결 → AMS/WBEM 또는 iLO 케이블 연결), NAS 상태(제조사 미확인), IMS 앱 안으로 프록시 통합(15138 제거), 화면 비밀번호/방화벽 대역 제한.
+서비스(SQL Server 등) 생존 감시, 상위 프로세스 Top5, 이벤트 로그 오류 건수, 백업 파일 최신 시각, RAID 물리 디스크 상태(HP 서버, iLO 미연결 → AMS/WBEM 또는 iLO 케이블 연결), NAS: 시놀로지는 리눅스 에이전트로 가능(디스크 건강은 미지원), ipTIME 은 에이전트 불가 → Windows 에이전트에 SHARES(UNC 공유폴더 응답/용량을 별도 카드로 올림) 기능 추가가 후보, IMS 앱 안으로 프록시 통합(15138 제거), 화면 비밀번호/방화벽 대역 제한.
