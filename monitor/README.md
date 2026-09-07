@@ -84,6 +84,7 @@ systemd 서비스(`ims-agent`)로 등록되어 부팅 시 자동 시작되고 �
 ```
 ims-agent status               # 상태
 sudo ims-agent name "파일 서버"  # 화면 표시 이름 변경
+sudo ims-agent disks "/,/data"  # 화면에 보일 마운트 지정 (기본: /boot, snap 등 시스템 파티션과 1GB 미만은 자동 제외)
 sudo ims-agent restart         # 재시작
 ims-agent log                  # 실시간 로그
 sudo ims-agent uninstall       # 제거 (화면에서도 자동으로 빠짐)

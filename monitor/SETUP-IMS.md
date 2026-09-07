@@ -114,7 +114,7 @@ IMS 웹서버가 `/monitor/` 로 오는 요청만 내부 수집기(127.0.0.1:878
 chmod +x install.sh
 sudo ./install.sh --url http://192.168.0.9:15138/api/metrics --token ilsan-mon-2026 --name "리눅스 서버"
 ```
-`ims-agent` 서비스로 등록된다. 이후 `ims-agent status`, `sudo ims-agent name "이름"`, `sudo ims-agent restart`, `ims-agent log`, `sudo ims-agent uninstall`(화면에서도 자동 제거). https 사설 인증서면 `--insecure` 추가.
+`ims-agent` 서비스로 등록된다. 이후 `ims-agent status`, `sudo ims-agent name "이름"`, `sudo ims-agent disks "/,/data"`(화면에 보일 마운트, 기본은 시스템 파티션 자동 제외), `sudo ims-agent restart`, `ims-agent log`, `sudo ims-agent uninstall`(화면에서도 자동 제거). https 사설 인증서면 `--insecure` 추가.
 
 확인: `http://192.168.0.9:15138/` 에 그 서버 카드가 뜬다. 서버를 재부팅해도 다시 뜨면 등록 완료.
 

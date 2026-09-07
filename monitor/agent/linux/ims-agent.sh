@@ -8,11 +8,11 @@ STATE_DIR="${STATE_DIR:-/var/lib/ims-agent}"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
 load_conf() {
-  URL="${URL:-}"; TOKEN="${TOKEN:-}"; INTERVAL="${INTERVAL:-5}"; NAME="${NAME:-}"; INSECURE="${INSECURE:-0}"
+  URL="${URL:-}"; TOKEN="${TOKEN:-}"; INTERVAL="${INTERVAL:-5}"; NAME="${NAME:-}"; INSECURE="${INSECURE:-0}"; DISKS="${DISKS:-}"
   if [ -f "$CONF" ]; then
     while IFS='=' read -r k v; do
       k="$(echo "$k" | tr -d '[:space:]')"; v="${v%$'\r'}"
-      case "$k" in URL) URL="$v";; TOKEN) TOKEN="$v";; INTERVAL) INTERVAL="$v";; NAME) NAME="$v";; INSECURE) INSECURE="$v";; esac
+      case "$k" in URL) URL="$v";; TOKEN) TOKEN="$v";; INTERVAL) INTERVAL="$v";; NAME) NAME="$v";; INSECURE) INSECURE="$v";; DISKS) DISKS="$v";; esac
     done < "$CONF"
   fi
 }
@@ -58,8 +58,13 @@ while true; do
 
   load1=$(cut -d' ' -f1 /proc/loadavg)
   uptime=$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)
-  disks=$(df -P -B1 -x tmpfs -x devtmpfs -x squashfs -x overlay -x fuse.lxcfs 2>/dev/null | awk 'NR>1 && $1 ~ /^\// {
-      printf "%s{\"mount\":\"%s\",\"total\":%s,\"used\":%s}", (n++?",":""), $6, $2, $3 }')
+  # 디스크: DISKS=/,/data 처럼 지정하면 그것만. 미지정이면 /boot, /boot/efi, snap, docker 등 시스템 파티션과 1GB 미만은 제외
+  disks=$(df -P -B1 -x tmpfs -x devtmpfs -x squashfs -x overlay -x fuse.lxcfs 2>/dev/null | awk -v want="$DISKS" 'BEGIN{ n=split(want, w, ","); for(i=1;i<=n;i++){ gsub(/^ +| +$/,"",w[i]); if(w[i]!="") sel[w[i]]=1 } }
+      NR>1 && $1 ~ /^\// {
+        m=$6
+        if (n>0) { if (!(m in sel)) next }
+        else if (m=="/boot" || m ~ /^\/boot\// || m ~ /^\/snap(\/|$)/ || m ~ /^\/var\/lib\/docker/ || m ~ /^\/run\// || $2 < 1073741824) next
+        printf "%s{\"mount\":\"%s\",\"total\":%s,\"used\":%s}", (c++?",":""), m, $2, $3 }')
 
   body=$(printf '{"host":"%s","name":"%s","os":"%s","token":"%s","cpu":%s,"mem_total":%s,"mem_used":%s,"load1":%s,"uptime":%s,"net_rx":%s,"net_tx":%s,"disks":[%s]}' \
     "$(json_str "$HOST")" "$(json_str "$NAME")" "$(json_str "$OS")" "$(json_str "$TOKEN")" "$cpu" "$mem_total" "$mem_used" "$load1" "$uptime" "$net_rx" "$net_tx" "$disks")
