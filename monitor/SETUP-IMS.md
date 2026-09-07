@@ -117,6 +117,12 @@ sudo ./install.sh --url http://192.168.0.9:15138/api/metrics --token ilsan-mon-2
 `ims-agent` 서비스로 등록된다. 이후 `ims-agent status`, `sudo ims-agent name "이름"`, `sudo ims-agent disks "/,/data"`(화면에 보일 마운트, 기본은 시스템 파티션 자동 제외), `sudo ims-agent restart`, `ims-agent log`, `sudo ims-agent uninstall`(화면에서도 자동 제거). https 사설 인증서면 `--insecure` 추가.
 
 **시놀로지 NAS**: 제어판 → 터미널 및 SNMP 에서 SSH 를 켜고 위와 같이 설치한다. systemd 가 없으므로 스크립트가 백그라운드로 띄우고, 부팅 시 자동 실행은 스크립트가 안내하는 대로 DSM 작업 스케줄러(트리거된 작업 → 부팅 → root → `/usr/local/bin/ims-agent start`)에 등록한다. 볼륨(`/volume1` 등) 용량과 CPU/메모리가 서버와 같은 카드로 보인다. 물리 디스크 건강 상태는 이 방식으로는 안 보이므로 DSM 자체 알림을 함께 쓴다.
+**VMware ESXi 가상화 호스트**: 일반 리눅스가 아니라(bash · systemd · /proc 없음) `agent/esxi` 의 전용 에이전트를 쓴다. ESXi 내장 python 과 vim-cmd/esxcli 로 CPU · 메모리 · 데이터스토어 · 가동시간을 읽는다. ESXi 호스트 클라이언트에서 SSH 를 켠 뒤 `ims-agent-esxi.py`, `install.sh` 를 올리고:
+```
+cd /ims && chmod +x install.sh
+./install.sh --url http://192.168.0.9:15138/api/metrics --token ilsan-mon-2026 --name "가상화 서버"
+```
+첫 VMFS 데이터스토어의 `ims-agent` 폴더에 설치되고 `/etc/rc.local.d/local.sh` 로 부팅 시 자동 실행된다. 관리: `<데이터스토어>/ims-agent/ims-agent status|name|restart|log|uninstall`. 안의 가상 서버들은 각각 Windows/Linux 에이전트로 본다.
 **ipTIME NAS**: 전용 펌웨어라 에이전트를 설치할 수 없다. 다른 서버의 에이전트가 공유폴더 응답과 용량을 대신 읽어 올리는 방식으로 대체 가능 (미구현).
 
 확인: `http://192.168.0.9:15138/` 에 그 서버 카드가 뜬다. 서버를 재부팅해도 다시 뜨면 등록 완료.

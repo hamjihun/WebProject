@@ -12,6 +12,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 | `agent/win/` | Windows 에이전트 소스: `agent.ps1`(수집), `tray.ps1`(트레이), `service.ps1`(작업 등록), `start.ps1/.vbs`(바탕화면 실행), `installer.nsi`(NSIS), `make-icon.py`(아이콘) | 각 Windows 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` (v1.3.0) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
 | `agent/linux/` | Linux 에이전트 `ims-agent.sh` + `install.sh`(설치/`ims-agent` 관리 명령: status/name/disks/restart/log/uninstall). 마운트는 DISKS 지정 또는 /boot·snap·docker·1GB 미만 자동 제외. systemd 없는 시스템(시놀로지 DSM)은 /usr/local/ims-agent + nohup + DSM 작업 스케줄러 안내 | 각 Linux 서버, 시놀로지 |
+| `agent/esxi/` | ESXi 호스트 에이전트 `ims-agent-esxi.py`(vim-cmd hostsummary 정규식 파싱, esxcli 데이터스토어/NIC) + `install.sh`(busybox sh, 데이터스토어에 설치, local.sh 로 부팅 실행). 실기 검증 전 (2026-09-07) | ESXi 호스트 |
 | `deploy/` | 수집기 설치 스크립트(`setup-collector.cmd` 더블클릭 → `install-collector-windows.ps1 -Public -Port 15138`), 프록시 예시, IMS iframe 예시 | IMS 서버 |
 | `agent/simulate.js` | 가짜 서버 3대 전송 (테스트용) | 개발 |
 | `SETUP-IMS.md`, `README.md` | 사용자용 구축 순서 / 참조 | |

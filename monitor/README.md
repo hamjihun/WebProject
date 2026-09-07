@@ -18,6 +18,7 @@
 | `server.js` | 수집기. 데이터를 받아 메모리에 보관하고 화면을 제공 | 내 PC |
 | `alerts.js` | 알림 엔진. 임계치 감지, 재알림/복귀/조용 시간, 텔레그램 전송 | (수집기가 사용) |
 | `public/index.html` | 대시보드 화면 | (수집기가 서빙) |
+| `agent/esxi/install.sh`, `ims-agent-esxi.py` | VMware ESXi 호스트용 에이전트 (내장 python + vim-cmd/esxcli) | ESXi 호스트 |
 | `agent/linux/install.sh`, `ims-agent.sh` | Linux 에이전트 설치/관리 명령 + 에이전트 본체 (bash + curl, systemd) | 각 Linux 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` | **Windows 에이전트 설치 프로그램** (프로그램 추가/제거 등록, 트레이 아이콘) | 각 Windows 서버 |
 | `agent/win/` | 설치 프로그램 소스 (agent.ps1, tray.ps1, service.ps1, installer.nsi). `build.sh` 로 빌드 | 개발 참고 |
