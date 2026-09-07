@@ -11,7 +11,7 @@
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; }
   body.alarm { animation: flash 2s infinite; }
   @keyframes flash { 0%,100% { background:var(--bg); } 50% { background:#3b0f16; } }
-  .wrap { padding:14px 20px; display:grid; grid-template-columns:repeat(12,1fr); grid-template-rows:auto minmax(0,1.05fr) minmax(0,1fr) minmax(0,1.1fr); gap:14px; height:calc(100vh - 44px); }
+  .wrap { padding:14px 20px; display:grid; grid-template-columns:repeat(12,1fr); grid-template-rows:auto auto minmax(0,1fr) minmax(0,1.1fr); gap:14px; height:calc(100vh - 44px); }
   body.tv .wrap { height:100vh; }
   .head { grid-column:1/-1; display:flex; align-items:center; gap:18px; }
   .head h1 { font-size:26px; margin:0; font-weight:700; }
@@ -25,7 +25,7 @@
   .p h2 small { color:var(--muted); font-weight:400; font-size:12px; }
   .c3 { grid-column:span 3; } .c4 { grid-column:span 4; } .c6 { grid-column:span 6; } .c12 { grid-column:span 12; }
   /* 도넛 */
-  .donut { display:flex; align-items:center; gap:14px; flex:1; min-height:0; }
+  .donut { display:flex; align-items:center; gap:14px; flex:1; min-height:170px; }
   .donut svg { width:150px; height:150px; flex:none; }
   .donut .legend { flex:1; display:flex; flex-direction:column; gap:6px; font-size:13px; }
   .legend .li { display:flex; align-items:center; gap:8px; }
@@ -36,7 +36,7 @@
   .dwrap { position:relative; width:150px; height:150px; display:flex; align-items:center; justify-content:center; }
   .dwrap .tt { position:absolute; text-align:center; } .dwrap .tt b { display:block; font-size:30px; line-height:1; } .dwrap .tt span { font-size:11px; color:var(--muted); }
   /* 가로 막대 순위 */
-  .bars { display:flex; flex-direction:column; gap:7px; flex:1; justify-content:center; }
+  .bars { display:flex; flex-direction:column; gap:7px; flex:1; justify-content:center; min-height:170px; }
   .br { display:grid; grid-template-columns:38% 1fr 64px; align-items:center; gap:10px; font-size:13px; }
   .br .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .br .tr { height:10px; background:#0b1220; border-radius:5px; overflow:hidden; }
@@ -45,9 +45,10 @@
   .br .v { text-align:right; font-variant-numeric:tabular-nums; } .br.b .v { color:var(--bad); font-weight:700; }
   /* 점검 필요 */
   .chk { display:grid; grid-template-columns:1fr 1fr; gap:10px; flex:1; }
-  .chk .box { background:#0b1220; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+  .chk .box { background:#0b1220; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; min-width:0; }
   .chk .box h3 { margin:0 0 2px; font-size:12px; color:var(--muted); font-weight:600; }
-  .chk .kv { display:flex; justify-content:space-between; font-size:13px; align-items:center; }
+  .chk .kv { display:flex; justify-content:space-between; font-size:13px; align-items:center; gap:6px; }
+  .chk .kv > span:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .chk .kv b { font-size:20px; font-variant-numeric:tabular-nums; }
   .chk .kv.ok b { color:var(--ok); } .chk .kv.warn b { color:var(--warn); } .chk .kv.bad b { color:var(--bad); }
   .chk .kv .d { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
@@ -151,14 +152,14 @@ async function refresh() {
     document.getElementById('chk').innerHTML =
       `<div class="box"><h3>장애 현황</h3>
         <div class="kv bad"><span><span class="d"></span>오프라인</span><b>${cnt.off}</b></div>
-        <div class="kv bad"><span><span class="d"></span>위험 (90% 이상)</span><b>${cnt.bad}</b></div>
-        <div class="kv warn"><span><span class="d"></span>주의 (75% 이상)</span><b>${cnt.warn}</b></div>
+        <div class="kv bad"><span><span class="d"></span>위험 90%↑</span><b>${cnt.bad}</b></div>
+        <div class="kv warn"><span><span class="d"></span>주의 75%↑</span><b>${cnt.warn}</b></div>
         <div class="kv ok"><span><span class="d"></span>정상</span><b>${cnt.ok}</b></div></div>
        <div class="box"><h3>운영 상태</h3>
-        <div class="kv bad"><span><span class="d"></span>알림 발생 중</span><b>${nAlert}</b></div>
-        <div class="kv warn"><span><span class="d"></span>30일 내 디스크 소진</span><b>${nFull}</b></div>
-        <div class="kv warn"><span><span class="d"></span>수신 지연 (20초↑)</span><b>${stale}</b></div>
-        <div class="kv mute"><span><span class="d"></span>알림 꺼진 서버</span><b>${servers.filter(s => s.muted).length}</b></div></div>`;
+        <div class="kv bad"><span><span class="d"></span>알림 발생</span><b>${nAlert}</b></div>
+        <div class="kv warn"><span><span class="d"></span>디스크 소진 임박</span><b>${nFull}</b></div>
+        <div class="kv warn"><span><span class="d"></span>수신 지연</span><b>${stale}</b></div>
+        <div class="kv mute"><span><span class="d"></span>알림 꺼짐</span><b>${servers.filter(s => s.muted).length}</b></div></div>`;
     const needN = cnt.off + cnt.bad;
     const need = document.getElementById('need'); need.className = 'need ' + (needN ? 'bad' : 'ok'); need.textContent = needN ? `⚠ 점검 필요 ${needN}대` : '✓ 점검 필요 없음';
 
