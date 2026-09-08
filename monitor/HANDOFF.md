@@ -11,7 +11,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
 | `public/dashboard.html` | TV 대시보드 (`?tv=1` 탭 숨김, 위험 시 점멸) | 브라우저 |
-| `public/topology.html` | 구성도 편집기 (연결 관계 중심). 저장은 `PUT /api/topology` → state.json `topology` | 브라우저 |
+| `public/topology.html` | 구성도 편집기 v2. 장비 아이콘 18종(ICONS, stroke SVG), 영역 도형 6종(groups[].kind: rect/round/ellipse/diamond/hex/cloud, color/fill/dash/tpos/fs), 연결 선(links[]: style solid/dashed/dotted, route straight/elbow-v/elbow-h, arrow, width, color, label), 메모(color/bg/fs), 노드(icon/size s·m·l/label/sub/color/nometric), 상자 안 LED 상태등(grade), 속성 패널, 실행취소(undo 스택), 복제, 격자, 화면 끌기·Ctrl+휠 확대, 단축키. 저장은 `PUT /api/topology` → state.json `topology` (서버는 nodes/links/groups/notes 만 보존) | 브라우저 |
 | `public/stats.html` | 통계·리포트. 기간(오늘/7일/30일/90일/1년/월)·서버 선택, KPI, CPU·메모리 추이(SVG 직접 그림, 외부 라이브러리 없음), 일별 경고 건수, 가동률, 서버별 요약표, 디스크 증감표(+단일 서버 시 일별 사용량 그래프), 경고 이력. CSV 는 `GET /api/report.csv`, PDF 는 인쇄 스타일(`@media print`, A4 가로) + `window.print()`. 데이터: `data/hourly.json` (host→[{h,n,ca,cx,ma,mx,off}], 366일) 과 daily 스냅샷, 월별 알림 로그 | 브라우저 |
 | `agent/win/` | Windows 에이전트 소스: `agent.ps1`(수집), `tray.ps1`(트레이), `service.ps1`(작업 등록), `start.ps1/.vbs`(바탕화면 실행), `installer.nsi`(NSIS), `make-icon.py`(아이콘) | 각 Windows 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` (v1.3.0) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
