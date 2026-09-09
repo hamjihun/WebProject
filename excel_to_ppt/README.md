@@ -5,19 +5,27 @@
 
 ## 1. 준비 (최초 1회)
 
+### 방법 A. 실행 파일(exe) 로 쓰기 — Python 설치 불필요 (권장)
+
+1. GitHub 저장소의 **Actions** 탭 → "Build Windows exe" → 가장 최근 실행 → 아래 **Artifacts** 의 `MonthlyPPT-windows` 클릭해 zip 내려받기
+   (코드를 올릴 때마다 자동으로 새 exe 가 만들어집니다)
+2. 압축을 풀면 `MonthlyPPT.exe`, `mapping.json`, `README.md` 세 파일이 나옵니다. **세 파일을 같은 폴더**에 두세요.
+3. `MonthlyPPT.exe` 더블클릭. 바탕화면에 두려면 exe 를 마우스 오른쪽 → "바로 가기 만들기" 로 바로 가기를 만드세요.
+   - 처음 실행할 때 Windows 의 "PC 보호" 파란 창이 뜨면 **추가 정보 → 실행** 을 누르면 됩니다(서명 없는 프로그램이라 나오는 안내).
+   - 첫 실행은 압축을 푸느라 몇 초 걸립니다.
+
+### 방법 B. Python 으로 쓰기
+
 1. Python 3.9 이상 설치 (https://www.python.org/downloads/ → 설치 시 **"Add python.exe to PATH"** 체크)
 2. 이 폴더(`excel_to_ppt`)를 PC의 원하는 위치에 복사
 3. `실행.bat` 더블클릭 → 필요한 라이브러리(openpyxl, python-pptx, tkinterdnd2)가 자동 설치됩니다.
 
-수동 설치가 필요하면:
-```
-pip install -r requirements.txt
-```
+Python 이 있는 PC 에서 직접 exe 를 만들려면 `build_exe.bat` 을 더블클릭하세요. `dist\MonthlyPPT.exe` 가 만들어집니다.
 
 ## 2. 매월 사용 방법
 
 ### 화면 프로그램 (권장)
-1. `실행.bat` 더블클릭 (또는 `python gui.py`)
+1. `MonthlyPPT.exe` 더블클릭 (Python 으로 쓰는 경우 `실행.bat` 또는 `python gui.py`)
 2. **손익 엑셀 파일**과 **지난달 PPT** 를 창 안의 상자에 끌어다 놓습니다. (상자를 클릭해서 골라도 됩니다. 두 파일을 한꺼번에 창 아무 곳에나 놓아도 확장자로 알아서 구분합니다.) 파일을 읽는 동안 상자에 "읽는 중…" 이 표시되고, 잘못 넣었으면 상자 오른쪽 위 ✕ 로 뺄 수 있습니다.
 3. 엑셀을 놓으면 `N월 누적` 머리글을 읽어 **마감 월**이 자동으로 채워지고, 저장 파일 이름은 `기준PPT이름_N월.pptx` 로 제안됩니다.
    - 마감 월 = 실적이 확정된 달. 엑셀에 그 다음 달 값(예상치)이 있으면 표에는 `(괄호)`, 차트에는 점선으로 들어가고, 제목과 "누적" 머리글의 월도 이 값으로 바뀝니다.
@@ -118,6 +126,9 @@ python update_ppt.py --excel "26년 8월 손익.xlsx" --ppt "7월 경영실적.p
 |---|---|
 | `update_ppt.py` | 핵심 프로그램 (명령줄 실행 가능) |
 | `gui.py` | 화면 프로그램 (끌어놓기, 성공/실패 표시) |
+| `app.ico` / `app.png` | 프로그램 아이콘 |
+| `build_exe.bat` | Windows 실행 파일(MonthlyPPT.exe) 만들기 |
+| `../.github/workflows/build-exe.yml` | GitHub 에서 exe 자동 빌드 |
 | `mapping.json` | 표 매핑 설정 |
 | `실행.bat` | Windows 더블클릭 실행 |
 | `requirements.txt` | 필요한 라이브러리 |
