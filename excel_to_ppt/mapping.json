@@ -1,0 +1,297 @@
+{
+  "설명": [
+    "PPT 표 ↔ 엑셀 행 매핑 설정 파일입니다. 엑셀 시트 구조가 바뀌면 이 파일의 excel_row / month_col 만 고치면 됩니다.",
+    "slide     : PPT 슬라이드 번호(1부터)",
+    "shape     : PPT 표 이름(PowerPoint '선택 창'에서 확인, 예: '표 9')",
+    "sheet     : 값을 가져올 엑셀 시트 이름",
+    "month_col : 엑셀에서 '1월' 값이 있는 열. 이후 12개월 → 누적 → N월 누적 순서로 오른쪽 열을 차례로 읽습니다.",
+    "rows[].ppt_row   : PPT 표에서 채울 행 번호(머리글이 0행)",
+    "rows[].excel_row : 엑셀 행 번호",
+    "rows[].kind      : fixed = 전년/목표(12개월 전부 표시), actual = 실적/달성율(당월까지 표시, 다음 달은 (괄호)로 예상치), diff = 증감(당월까지만 표시)",
+    "rows[].label     : 엑셀 해당 행의 라벨(검증용, 다르면 경고만 출력)",
+    "rows[].fmt       : 생략하면 엑셀 셀 서식으로 판단(% 서식이면 백분율, 아니면 백만 단위). 강제하려면 'pct'(0.974→97.4%) / 'pct_plain'(97.4→97.4%) / 'amount'(백만 단위)",
+    "숫자 서식 : 금액은 백만 단위 정수(1,990), 비율은 소수 1자리(97.4%)",
+    "차트는 이 파일과 무관하게 PPT 차트가 참조하는 엑셀 셀 주소를 읽어 자동 갱신됩니다."
+  ],
+
+  "sheet_alias": {
+    "_설명": "PPT 차트가 참조하는 시트 이름과 실제 엑셀 시트 이름이 다를 때 여기에 적습니다. 예: \"유전체필터\": \"유전체 필터\""
+  },
+
+  "tables": [
+    {
+      "_설명": "슬라이드 2 : 일산 전체 매출액",
+      "slide": 2, "shape": "표 12", "sheet": "매출액, 영업이익", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 15, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 16, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 17, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 18, "kind": "actual", "label": "달성"},
+        {"ppt_row": 5, "excel_row": 19, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 2 : 일산 전체 영업이익",
+      "slide": 2, "shape": "표 10", "sheet": "매출액, 영업이익", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 37, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 38, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 39, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 40, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 5, "excel_row": 41, "kind": "actual", "label": "실적"},
+        {"ppt_row": 6, "excel_row": 42, "kind": "actual", "label": "금액"},
+        {"ppt_row": 7, "excel_row": 43, "kind": "actual", "label": "달성"},
+        {"ppt_row": 8, "excel_row": 44, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 3 : Insulation 매출액",
+      "slide": 3, "shape": "표 9", "sheet": "Insulation", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 16, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 17, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 18, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 19, "kind": "actual", "label": "달성"},
+        {"ppt_row": 5, "excel_row": 20, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 3 : Insulation 재료비율",
+      "slide": 3, "shape": "표 15", "sheet": "Insulation", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 34, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 35, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 36, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 37, "kind": "diff",   "label": "목표대비"},
+        {"ppt_row": 5, "excel_row": 38, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 3 : Insulation 영업이익",
+      "slide": 3, "shape": "표 26", "sheet": "Insulation", "month_col": "F",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 55, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 56, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 57, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 58, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 5, "excel_row": 59, "kind": "actual", "label": "실적"},
+        {"ppt_row": 6, "excel_row": 60, "kind": "actual", "label": "금액"},
+        {"ppt_row": 7, "excel_row": 61, "kind": "actual", "label": "달성"},
+        {"ppt_row": 8, "excel_row": 62, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 4 : 유전체필터 매출액 (엑셀 행 번호는 PPT 차트 참조에서 추정 → 첫 실행 시 경고 여부 확인)",
+      "slide": 4, "shape": "표 13", "sheet": "유전체필터", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 16, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 17, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 18, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 19, "kind": "actual", "label": "달성"},
+        {"ppt_row": 5, "excel_row": 20, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 4 : 유전체필터 재료비율",
+      "slide": 4, "shape": "표 15", "sheet": "유전체필터", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 37, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 38, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 39, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 40, "kind": "diff",   "label": "목표대비"},
+        {"ppt_row": 5, "excel_row": 41, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 4 : 유전체필터 영업이익",
+      "slide": 4, "shape": "표 16", "sheet": "유전체필터", "month_col": "F",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 56, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 57, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 58, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 59, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 5, "excel_row": 60, "kind": "actual", "label": "실적"},
+        {"ppt_row": 6, "excel_row": 61, "kind": "actual", "label": "금액"},
+        {"ppt_row": 7, "excel_row": 62, "kind": "actual", "label": "달성"},
+        {"ppt_row": 8, "excel_row": 63, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 5 : 탈취필터 매출액",
+      "slide": 5, "shape": "표 18", "sheet": "탈취필터", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 19, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 20, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 21, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 22, "kind": "actual", "label": "달성"},
+        {"ppt_row": 5, "excel_row": 23, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 5 : 탈취필터 재료비율",
+      "slide": 5, "shape": "표 20", "sheet": "탈취필터", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 43, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 44, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 45, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 46, "kind": "diff",   "label": "목표대비"},
+        {"ppt_row": 5, "excel_row": 47, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 5 : 탈취필터 영업이익",
+      "slide": 5, "shape": "표 28", "sheet": "탈취필터", "month_col": "F",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 70, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 71, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 72, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 73, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 5, "excel_row": 74, "kind": "actual", "label": "실적"},
+        {"ppt_row": 6, "excel_row": 75, "kind": "actual", "label": "금액"},
+        {"ppt_row": 7, "excel_row": 76, "kind": "actual", "label": "달성"},
+        {"ppt_row": 8, "excel_row": 77, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 6 : 밀레니얼 매출액",
+      "slide": 6, "shape": "표 18", "sheet": "밀레니얼", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 15, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 16, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 17, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 18, "kind": "actual", "label": "달성"},
+        {"ppt_row": 5, "excel_row": 19, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 6 : 밀레니얼 재료비율",
+      "slide": 6, "shape": "표 20", "sheet": "밀레니얼", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 40, "kind": "fixed"},
+        {"ppt_row": 2, "excel_row": 41, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 3, "excel_row": 42, "kind": "actual", "label": "실적"},
+        {"ppt_row": 4, "excel_row": 43, "kind": "diff",   "label": "목표대비"},
+        {"ppt_row": 5, "excel_row": 44, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 6 : 밀레니얼 영업이익",
+      "slide": 6, "shape": "표 24", "sheet": "밀레니얼", "month_col": "F",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 66, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 67, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 68, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 69, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 5, "excel_row": 70, "kind": "actual", "label": "실적"},
+        {"ppt_row": 6, "excel_row": 71, "kind": "actual", "label": "금액"},
+        {"ppt_row": 7, "excel_row": 72, "kind": "actual", "label": "달성"},
+        {"ppt_row": 8, "excel_row": 73, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 7 : Insulation 노무비",
+      "slide": 7, "shape": "표 20", "sheet": "인슐,유전체 노무비", "month_col": "D",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 15, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 16, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 17, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 18, "kind": "actual", "label": "실적"},
+        {"ppt_row": 5, "excel_row": 19, "kind": "actual", "label": "금액"},
+        {"ppt_row": 6, "excel_row": 20, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 7 : 유전체 노무비",
+      "slide": 7, "shape": "표 21", "sheet": "인슐,유전체 노무비", "month_col": "D",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 60, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 61, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 62, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 63, "kind": "actual", "label": "실적"},
+        {"ppt_row": 5, "excel_row": 64, "kind": "actual", "label": "금액"},
+        {"ppt_row": 6, "excel_row": 65, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 8 : 탈취필터 노무비",
+      "slide": 8, "shape": "표 11", "sheet": "탈취필터,밀레니얼 노무비", "month_col": "D",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 18, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 19, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 20, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 21, "kind": "actual", "label": "실적"},
+        {"ppt_row": 5, "excel_row": 22, "kind": "actual", "label": "금액"},
+        {"ppt_row": 6, "excel_row": 23, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 8 : 밀레니얼 노무비",
+      "slide": 8, "shape": "표 20", "sheet": "탈취필터,밀레니얼 노무비", "month_col": "D",
+      "rows": [
+        {"ppt_row": 1, "excel_row": 45, "kind": "fixed",  "label": "실적"},
+        {"ppt_row": 2, "excel_row": 46, "kind": "fixed",  "label": "금액"},
+        {"ppt_row": 3, "excel_row": 47, "kind": "fixed",  "label": "목표"},
+        {"ppt_row": 4, "excel_row": 48, "kind": "actual", "label": "실적"},
+        {"ppt_row": 5, "excel_row": 49, "kind": "actual", "label": "금액"},
+        {"ppt_row": 6, "excel_row": 50, "kind": "diff",   "label": "전년대비"}
+      ]
+    },
+
+    {
+      "_설명": "슬라이드 10 : 재고금액. 비율 2행은 차트 참조(3,4행)에서 확인됨. 금액 행은 '26년꺼' 시트에서 행 번호를 확인해 excel_row 에 넣으세요.",
+      "slide": 10, "shape": "표 19", "sheet": "26년꺼", "month_col": "E",
+      "rows": [
+        {"ppt_row": 1, "excel_row": null, "kind": "actual", "label": "매출", "fmt": "amount"},
+        {"ppt_row": 2, "excel_row": null, "kind": "actual", "label": "재고", "fmt": "amount"},
+        {"ppt_row": 3, "excel_row": 3,    "kind": "actual", "fmt": "pct_plain"},
+        {"ppt_row": 4, "excel_row": null, "kind": "actual", "label": "생산", "fmt": "amount"},
+        {"ppt_row": 5, "excel_row": null, "kind": "actual", "label": "자재", "fmt": "amount"},
+        {"ppt_row": 6, "excel_row": 4,    "kind": "actual", "fmt": "pct_plain"}
+      ]
+    }
+  ],
+
+  "summary_cells": [
+    {
+      "_설명": "슬라이드 9 요약표 - 매출 행 (25년 누적실적 / 26년 누적계획 / 26년 누적실적 / 전년대비 / 계획대비). 억 단위",
+      "slide": 9, "shape": "표 84", "sheet": "매출액, 영업이익",
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "R15", "name": "py",   "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "R16", "name": "plan", "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "R17", "name": "act",  "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 3, "calc": "act-py",   "fmt": "eok_diff"},
+        {"ppt_row": 0, "ppt_col": 4, "calc": "act-plan", "fmt": "eok_diff"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 영업이익 행(윗줄 금액 억 단위, 아랫줄 이익률 %)",
+      "slide": 9, "shape": "표 89", "sheet": "매출액, 영업이익",
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "R38", "name": "py",   "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "R40", "name": "plan", "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "R42", "name": "act",  "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 3, "calc": "act-py",   "fmt": "eok_diff"},
+        {"ppt_row": 0, "ppt_col": 4, "calc": "act-plan", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 0, "excel": "R37", "name": "py_r",   "fmt": "pct_paren"},
+        {"ppt_row": 1, "ppt_col": 1, "excel": "R39", "name": "plan_r", "fmt": "pct_paren"},
+        {"ppt_row": 1, "ppt_col": 2, "excel": "R41", "name": "act_r",  "fmt": "pct_paren"},
+        {"ppt_row": 1, "ppt_col": 3, "calc": "act_r-py_r",   "fmt": "pp_diff_paren"},
+        {"ppt_row": 1, "ppt_col": 4, "calc": "act_r-plan_r", "fmt": "pp_diff_paren"}
+      ]
+    }
+  ],
+
+  "manual_checklist": [
+    "슬라이드 1  : 사업부별 손익표(부분별손익 파일 자료) 전체",
+    "슬라이드 2~6: 오른쪽 상단/중간의 코멘트 상자(자작 금액, 판가·매입가 인상 요인 등)",
+    "슬라이드 9  : 재료비·노무비·제조경비·판관비·세전이익 행과 오른쪽 '상세 Review' 코멘트 (매출·영업이익 행은 자동)",
+    "슬라이드 10 : 재고금액 표의 금액 행(매핑 파일에 엑셀 행 번호를 넣으면 자동화 가능)",
+    "각 표의 '24년/25년' 같은 연도 라벨은 바꾸지 않으므로 연초에 한 번 확인"
+  ]
+}
