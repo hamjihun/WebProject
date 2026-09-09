@@ -178,6 +178,7 @@ class App(TkinterDnD.Tk if HAS_DND else tk.Tk):
         self.geometry("860x780")
         self.minsize(760, 660)
         self.configure(bg=BG)
+        self._set_icon()
         self._style()
         self.out_var, self.month_var = tk.StringVar(), tk.StringVar()
         self.result_path = None
@@ -187,6 +188,16 @@ class App(TkinterDnD.Tk if HAS_DND else tk.Tk):
             self.dnd_bind("<<Drop>>", self.on_drop_anywhere)
 
     # ---------------------------------------------------------------- UI
+    def _set_icon(self):
+        base = getattr(sys, "_MEIPASS", HERE)
+        try:
+            if sys.platform.startswith("win"):
+                self.iconbitmap(os.path.join(base, "app.ico"))
+            else:
+                self.iconphoto(True, tk.PhotoImage(file=os.path.join(base, "app.png")))
+        except Exception:  # noqa: BLE001
+            pass
+
     def _style(self):
         st = ttk.Style(self)
         try:

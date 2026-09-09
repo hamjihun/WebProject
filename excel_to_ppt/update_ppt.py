@@ -31,7 +31,22 @@ from pptx import Presentation
 from pptx.oxml.ns import qn
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_MAPPING = os.path.join(HERE, "mapping.json")
+
+
+def _default_mapping() -> str:
+    """mapping.json 위치. exe 로 만든 경우 exe 옆의 파일을 우선 쓰고(수정 가능), 없으면 exe 안에 담긴 것을 쓴다."""
+    candidates = []
+    if getattr(sys, "frozen", False):
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "mapping.json"))
+        candidates.append(os.path.join(getattr(sys, "_MEIPASS", HERE), "mapping.json"))
+    candidates.append(os.path.join(HERE, "mapping.json"))
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return candidates[-1]
+
+
+DEFAULT_MAPPING = _default_mapping()
 
 # 월 숫자를 바꿀 문구 패턴 (숫자 부분만 캡처)
 MONTH_TEXT_PATTERNS = [
