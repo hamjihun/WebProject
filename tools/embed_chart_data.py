@@ -119,25 +119,32 @@ def convert(src, dst):
             rid = ext.get("{%s}id" % NS["r"])
             rtree = etree.parse(rpath)
             rel = next((e for e in rtree.getroot() if e.get("Id") == rid), None)
-            if rel is None or rel.get("TargetMode") != "External":
-                print(f"{cf}: 이미 내장 데이터, 건너뜀")
+            if rel is None:
+                print(f"{cf}: 데이터 관계 없음, 건너뜀")
                 continue
             wb, written = build_workbook(root)
             if written == 0:
                 print(f"{cf}: 캐시 데이터 없음, 건너뜀")
                 continue
-            xlsx_name = f"Microsoft_Excel_Worksheet{n}.xlsx"
+            if rel.get("TargetMode") == "External":
+                # 외부 링크 -> 내장 워크북으로 교체
+                xlsx_name = f"Microsoft_Excel_Worksheet{n}.xlsx"
+                rel.set("Type", REL_PACKAGE)
+                rel.set("Target", f"../embeddings/{xlsx_name}")
+                del rel.attrib["TargetMode"]
+                rtree.write(rpath, xml_declaration=True, encoding="UTF-8", standalone=True)
+                how = "내장"
+            else:
+                # 이미 내장된 워크북 -> 현재 차트 값으로 다시 생성
+                xlsx_name = os.path.basename(rel.get("Target"))
+                how = "갱신"
             wb.save(os.path.join(emb_dir, xlsx_name))
-            rel.set("Type", REL_PACKAGE)
-            rel.set("Target", f"../embeddings/{xlsx_name}")
-            del rel.attrib["TargetMode"]
-            rtree.write(rpath, xml_declaration=True, encoding="UTF-8", standalone=True)
             auto = ext.find("c:autoUpdate", NS)
             if auto is not None:
                 auto.set("val", "0")
             tree.write(cpath, xml_declaration=True, encoding="UTF-8", standalone=True)
             added.append(f"ppt/embeddings/{xlsx_name}")
-            print(f"{cf}: {wb.sheetnames} 셀 {written}개 내장")
+            print(f"{cf}: {wb.sheetnames} 셀 {written}개 {how}")
 
         ct_path = os.path.join(work, "[Content_Types].xml")
         with open(ct_path, encoding="utf-8") as fh:
