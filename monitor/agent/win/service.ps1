@@ -4,6 +4,7 @@ param([switch]$Install, [switch]$Uninstall)
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TaskName = "IMSMonitoringAgent"
+$WatchTask = "IMSMonitoringAgentWatchdog"
 $LegacyTasks = @("ServerMonitorAgent")
 $RunKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
 $RunName = "IMSMonitoringAgentTray"
@@ -32,7 +33,7 @@ if ($Uninstall) {
     }
   } catch { Write-Host "수집기 알림 실패 (무시): $($_.Exception.Message)" }
 
-  foreach ($t in @($TaskName) + $LegacyTasks) {
+  foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) {
     try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}
     Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
   }
@@ -47,7 +48,7 @@ if ($Install) {
   # 트레이(일반 사용자)가 표시 이름을 저장할 수 있도록 Users 그룹에 수정 권한 (S-1-5-32-545 = Users)
   try { & icacls.exe "$DataDir" /grant "*S-1-5-32-545:(OI)(CI)M" /Q | Out-Null } catch {}
   # 이전 이름/수동 설치로 등록된 것이 있으면 정리
-  foreach ($t in @($TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
+  foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   foreach ($n in $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }
   Stop-AgentProcesses
 
@@ -58,7 +59,52 @@ if ($Install) {
   $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
   $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "IMS Monitoring Agent (CPU/메모리/디스크 전송)" | Out-Null
+
+  # Windows Server 2012/2012 R2 에서는 위 -ExecutionTimeLimit 0 이 무시되어 "3일 이상 실행되면 중지"가 남는 버그가 있다.
+  # 작업 XML 을 직접 고쳐 실행 시간 제한을 확실히 없앤다 (PT0S = 제한 없음).
+  try {
+    $xml = [string](Export-ScheduledTask -TaskName $TaskName)
+    if ($xml -notmatch '<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>') {
+      if ($xml -match '<ExecutionTimeLimit>') { $xml = $xml -replace '<ExecutionTimeLimit>[^<]*</ExecutionTimeLimit>', '<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>' }
+      else { $xml = $xml -replace '</Settings>', '<ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>' }
+      Register-ScheduledTask -TaskName $TaskName -Xml $xml -Force | Out-Null
+      Write-Host "실행 시간 제한 해제 (XML 재등록)"
+    }
+  } catch { Write-Host "실행 시간 제한 확인 실패 (무시): $($_.Exception.Message)" }
   Start-ScheduledTask -TaskName $TaskName
+
+  # 감시자: 5분마다 에이전트가 살아있는지 확인하고 죽었으면 다시 시작. XML 로 등록 (2012 포함 모든 버전에서 동일, 따옴표 문제 없음)
+  try {
+    $wdPath = [System.Security.SecurityElement]::Escape((Join-Path $Dir "watchdog.ps1"))
+    $wdXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>IMS Monitoring Agent 감시자 (5분마다 에이전트 생존 확인, 죽었으면 재시작)</Description></RegistrationInfo>
+  <Triggers>
+    <TimeTrigger>
+      <Repetition><Interval>PT5M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>
+      <StartBoundary>2026-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
+  </Triggers>
+  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$wdPath"</Arguments></Exec></Actions>
+</Task>
+"@
+    Register-ScheduledTask -TaskName $WatchTask -Xml $wdXml -Force | Out-Null
+    Write-Host "감시자 작업 등록: $WatchTask (5분마다)"
+  } catch { Write-Host "감시자 작업 등록 실패 (무시, 에이전트는 정상 등록됨): $($_.Exception.Message)" }
 
   Set-ItemProperty -Path $RunKey -Name $RunName -Value "wscript.exe `"$Dir\tray.vbs`""
   Write-Host "등록 완료: 작업 '$TaskName' 및 트레이 자동 실행"
