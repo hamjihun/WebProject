@@ -71,6 +71,16 @@ class ExcelReader:
         self.wb_fml = openpyxl.load_workbook(path, data_only=False, read_only=False)
         self._missing_sheets: set[str] = set()
         self._uncached_reported = False
+        self._find_warned: set = set()
+        # 병합 셀: 병합 범위 안의 셀은 왼쪽 위 셀 값을 쓴다 (엑셀 차트도 그렇게 표시)
+        self._merged: dict[str, dict[tuple, tuple]] = {}
+        for ws in self.wb_val.worksheets:
+            mp = {}
+            for rng in ws.merged_cells.ranges:
+                for r in range(rng.min_row, rng.max_row + 1):
+                    for c in range(rng.min_col, rng.max_col + 1):
+                        mp[(r, c)] = (rng.min_row, rng.min_col)
+            self._merged[ws.title] = mp
 
     def sheet_name(self, name: str) -> str | None:
         name = self.alias.get(name, name)
@@ -97,6 +107,7 @@ class ExcelReader:
             return None
         if isinstance(col, str):
             col = column_index_from_string(col)
+        row, col = self._merged.get(real, {}).get((row, col), (row, col))
         v = self.wb_val[real].cell(row=row, column=col).value
         if v is None:
             f = self.wb_fml[real].cell(row=row, column=col).value
@@ -127,6 +138,26 @@ class ExcelReader:
             if v is not None and str(v).strip():
                 out.append(str(v).strip())
         return out
+
+    def resolve_sheet(self, spec: dict, month: int | None, log: Log) -> str | None:
+        """spec 의 sheet / sheet_find 로 실제 시트 이름을 정한다.
+        sheet_find = {"cell": "G2", "contains": "{month}월 누적 실적"} 이면 그 셀에 해당 문구가 있는
+        시트를 전체에서 찾는다(시트 이름이 매달 바뀌는 경우용). 못 찾으면 sheet 이름으로 찾는다."""
+        find = spec.get("sheet_find")
+        if find and month is not None:
+            want = find["contains"].replace("{month}", str(month)).replace(" ", "")
+            m = re.match(r"([A-Z]+)(\d+)", find["cell"])
+            for ws in self.wb_val.worksheets:
+                v = ws.cell(row=int(m.group(2)), column=column_index_from_string(m.group(1))).value
+                if isinstance(v, str) and want in v.replace(" ", ""):
+                    return ws.title
+            key = (find["cell"], want, spec.get("sheet"))
+            if key not in self._find_warned:
+                self._find_warned.add(key)
+                log.warn(f"{find['cell']} 셀에 '{find['contains'].replace('{month}', str(month))}' 문구가 있는 시트를 찾지 못해 "
+                         f"'{spec.get('sheet')}' 시트를 사용합니다. 누적 시트가 {month}월 기준으로 갱신됐는지 확인하세요.")
+        name = spec.get("sheet")
+        return name if name and self.has_sheet(name) else None
 
     def find_month_header(self, sheet: str) -> int | None:
         """시트 안에서 'N월 누적' 이라는 머리글을 찾아 N을 돌려준다."""
@@ -192,9 +223,10 @@ def format_value(value, fmt: str, paren: bool = False) -> str:
             d = _q(Decimal(str(value)) * (100 if fmt == "pct" else 1), "0.1")
             if d == 0:
                 d = Decimal("0.0")
-            s = f"{d:.1f}%"
+            s = f"{d:,.1f}%"
         else:
-            d = _q(Decimal(str(value)) / Decimal(1_000_000), "1")
+            # amount: 원 단위 → 백만 / amount_plain: 엑셀 값이 이미 백만 단위
+            d = _q(Decimal(str(value)) / (Decimal(1_000_000) if fmt == "amount" else Decimal(1)), "1")
             if d == 0:
                 d = Decimal(0)
             s = f"{int(d):,}"
@@ -283,6 +315,52 @@ def set_cell_text(tc, text: str):
     t = r.makeelement(A_T, {})
     t.text = text
     r.append(t)
+
+
+def set_cell_lines(tc, lines: list[str]):
+    """셀에 여러 문단을 쓴다(예: '166.48억' / '' / '(72.9%)'). 기존 문단 서식을 재사용."""
+    txBody = tc.find(qn("a:txBody"))
+    paras = txBody.findall(A_P)
+    template = paras[0]
+    while len(paras) < len(lines):
+        clone = copy.deepcopy(paras[-1])
+        paras[-1].addnext(clone)
+        paras = txBody.findall(A_P)
+    for extra in paras[len(lines):]:
+        txBody.remove(extra)
+    paras = txBody.findall(A_P)
+    for p, text in zip(paras, lines):
+        # 문단 하나짜리 임시 셀처럼 다뤄 글자만 교체
+        runs = p.findall(A_R)
+        end = p.find(A_ENDPARARPR)
+        if text == "":
+            if runs and end is None:
+                rpr = runs[0].find(A_RPR)
+                if rpr is not None:
+                    e = copy.deepcopy(rpr); e.tag = A_ENDPARARPR; p.append(e)
+            for r in runs:
+                p.remove(r)
+            continue
+        if runs:
+            runs[0].find(A_T).text = text
+            for r in runs[1:]:
+                p.remove(r)
+            continue
+        src = end
+        if src is None:  # 이 문단에 서식이 없으면 첫 문단의 것을 빌린다
+            for cand in (template.find(A_ENDPARARPR), (template.find(A_R).find(A_RPR) if template.find(A_R) is not None else None)):
+                if cand is not None:
+                    src = cand
+                    break
+        r = p.makeelement(A_R, {})
+        if src is not None:
+            rpr = copy.deepcopy(src); rpr.tag = A_RPR
+            r.append(rpr)
+        t = r.makeelement(A_T, {}); t.text = text; r.append(t)
+        if end is not None:
+            end.addprevious(r)
+        else:
+            p.append(r)
 
 
 def set_cell_color(tc, negative: bool):
@@ -672,6 +750,10 @@ def update_table(prs, spec: dict, xl: ExcelReader, month: int, log: Log):
                     text = ""
                 else:
                     text = format_value(v, fmt)
+            elif k == 12 and kind in ("actual", "diff") and not spec.get("show_year_total", False):
+                text = ""  # 26년 실적/증감 행의 연간 '누적' 칸은 연말 전까지 비워 두는 관례
+            elif kind == "actual" and isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0:
+                text = ""  # 값이 아직 없어 수식이 0 이 된 칸
             else:
                 text = format_value(v, fmt)
             tc = table.cell(prow, ci)._tc
@@ -682,8 +764,23 @@ def update_table(prs, spec: dict, xl: ExcelReader, month: int, log: Log):
     log.info(f"{where} '{spec['shape']}' 표: {len(spec['rows'])}행 반영 ({sheet})")
 
 
-def update_summary_cells(prs, spec: dict, xl: ExcelReader, log: Log):
-    """슬라이드 9 처럼 개별 셀에 값을 넣는 항목."""
+def _summary_value(xl, sheet, item, values):
+    src = item.get("excel")
+    if src:
+        m = re.match(r"([A-Z]+)(\d+)", src)
+        v = xl.cell(sheet, m.group(1), int(m.group(2)))
+    elif item.get("calc"):  # "a-b" 형태로 같은 spec 안의 이름 참조
+        a, b = [values.get(x.strip()) for x in item["calc"].split("-")]
+        v = None if a is None or b is None else a - b
+    else:
+        return item.get("text", ""), None
+    if item.get("name"):
+        values[item["name"]] = v
+    return format_summary(v, item.get("fmt", "eok")), v
+
+
+def update_summary_cells(prs, spec: dict, xl: ExcelReader, log: Log, month: int | None = None):
+    """슬라이드 9 처럼 개별 셀에 값을 넣는 항목. cells[].lines 가 있으면 여러 줄로 쓴다."""
     slide, where = find_slide(prs, spec, log)
     shape = _find_table_shape(slide, spec["shape"]) if slide is not None else None
     if shape is None:
@@ -692,25 +789,54 @@ def update_summary_cells(prs, spec: dict, xl: ExcelReader, log: Log):
         else:
             log.info(f"{where} 문구가 있는 슬라이드가 이 PPT 에 없어 '{spec['shape']}' 요약표는 건너뜁니다.")
         return
-    sheet = spec["sheet"]
-    if not xl.has_sheet(sheet):
+    sheet = xl.resolve_sheet(spec, month, log)
+    if sheet is None:
         return
     table = shape.table
     values = {}
     for item in spec["cells"]:
-        r, c = item["ppt_row"], item["ppt_col"]
-        src = item.get("excel")
-        if src:
-            col = re.match(r"([A-Z]+)(\d+)", src)
-            v = xl.cell(sheet, col.group(1), int(col.group(2)))
-        else:  # 계산식: "a-b" 형태로 같은 spec 안의 셀 이름 참조
-            expr = item["calc"]
-            a, b = [values.get(x.strip()) for x in expr.split("-")]
-            v = None if a is None or b is None else a - b
-        values[item.get("name", f"{r},{c}")] = v
+        tc = table.cell(item["ppt_row"], item["ppt_col"])._tc
         # 요약표는 템플릿의 글자색 규칙(%p 증감은 빨강 등)을 그대로 유지
-        set_cell_text(table.cell(r, c)._tc, format_summary(v, item.get("fmt", "eok")))
+        if "lines" in item:
+            set_cell_lines(tc, [_summary_value(xl, sheet, ln, values)[0] for ln in item["lines"]])
+        else:
+            set_cell_text(tc, _summary_value(xl, sheet, item, values)[0])
     log.info(f"{where} '{spec['shape']}' 요약 셀 반영 ({sheet})")
+
+
+def update_block(prs, spec: dict, xl: ExcelReader, log: Log):
+    """엑셀의 직사각형 범위를 PPT 표의 같은 모양 범위에 그대로 복사 (사업부별 손익표용).
+    서식은 엑셀 셀 서식으로 판단(% → 백분율, 그 외 → 백만 단위). 문자('-')는 그대로."""
+    slide, where = find_slide(prs, spec, log)
+    shape = _find_table_shape(slide, spec["shape"]) if slide is not None else None
+    if shape is None:
+        if slide is not None:
+            log.warn(f"{where} 에 '{spec['shape']}' 표가 없습니다.")
+        else:
+            log.info(f"{where} 문구가 있는 슬라이드가 이 PPT 에 없어 '{spec['shape']}' 표는 건너뜁니다.")
+        return
+    sheet = spec["sheet"]
+    if not xl.has_sheet(sheet):
+        return
+    table = shape.table
+    m = re.match(r"([A-Z]+)(\d+)", spec["excel_top_left"])
+    ec0, er0 = column_index_from_string(m.group(1)), int(m.group(2))
+    pr0, pc0 = spec["ppt_top_left"]
+    n_rows, n_cols = spec["rows"], spec["cols"]
+    skip = set(spec.get("skip_ppt_rows", []))
+    for i in range(n_rows):
+        if pr0 + i in skip:
+            continue
+        for j in range(n_cols):
+            er, ec = er0 + i, ec0 + j
+            v = xl.cell(sheet, ec, er)
+            fmt = "pct" if is_pct_format(xl.number_format(sheet, ec, er)) else "amount"
+            text = format_value(v, fmt)
+            tc = table.cell(pr0 + i, pc0 + j)._tc
+            set_cell_text(tc, text)
+            if text and spec.get("red_negative", True):
+                set_cell_color(tc, isinstance(v, (int, float)) and not isinstance(v, bool) and v < 0)
+    log.info(f"{where} '{spec['shape']}' 표: {n_rows}행 x {n_cols}열 반영 ({sheet})")
 
 
 # ---------------------------------------------------------------------------
@@ -780,9 +906,12 @@ def run(excel: str, ppt: str, out: str | None = None, month: int | None = None,
     for spec in mapping["tables"]:
         if spec.get("enabled", True):
             update_table(prs, spec, xl, month, log)
+    for spec in mapping.get("blocks", []):
+        if spec.get("enabled", True):
+            update_block(prs, spec, xl, log)
     for spec in mapping.get("summary_cells", []):
         if spec.get("enabled", True):
-            update_summary_cells(prs, spec, xl, log)
+            update_summary_cells(prs, spec, xl, log, month)
 
     # 3) 월 문구
     update_month_text(prs, month, log)

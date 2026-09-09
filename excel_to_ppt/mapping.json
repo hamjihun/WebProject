@@ -9,8 +9,11 @@
     "rows[].excel_row : 엑셀 행 번호",
     "rows[].kind      : fixed = 전년/목표(12개월 전부 표시), actual = 실적/달성율(당월까지 표시, 다음 달은 (괄호)로 예상치), diff = 증감(당월까지만 표시)",
     "rows[].label     : 엑셀 해당 행의 라벨(검증용, 다르면 경고만 출력)",
-    "rows[].fmt       : 생략하면 엑셀 셀 서식으로 판단(% 서식이면 백분율, 아니면 백만 단위). 강제하려면 'pct'(0.974→97.4%) / 'pct_plain'(97.4→97.4%) / 'amount'(백만 단위)",
+    "rows[].fmt       : 생략하면 엑셀 셀 서식으로 판단(% 서식이면 백분율, 아니면 원→백만 단위). 강제하려면 'pct'(0.974→97.4%) / 'pct_plain'(97.4→97.4%) / 'amount'(원→백만) / 'amount_plain'(이미 백만 단위)",
+    "show_year_total  : 표 단위 옵션. 기본은 26년 실적/증감 행의 연간 '누적' 칸을 비워 둠(원본 관례). true 면 엑셀 값을 그대로 표시",
     "숫자 서식 : 금액은 백만 단위 정수(1,990), 비율은 소수 1자리(97.4%)",
+    "blocks    : 엑셀 직사각형 범위를 PPT 표에 그대로 복사(사업부별 손익표). summary_cells : 셀 하나씩 지정(누적 요약표)",
+    "sheet_find: {cell, contains} 를 주면 그 셀에 문구가 있는 시트를 자동으로 찾습니다. {month} 는 당월로 바뀝니다.",
     "차트는 이 파일과 무관하게 PPT 차트가 참조하는 엑셀 셀 주소를 읽어 자동 갱신됩니다."
   ],
 
@@ -244,54 +247,154 @@
     },
 
     {
-      "_설명": "슬라이드 10 : 재고금액. 비율 2행은 차트 참조(3,4행)에서 확인됨. 금액 행은 '26년꺼' 시트에서 행 번호를 확인해 excel_row 에 넣으세요.",
-      "slide": "재고금액", "shape": "표 19", "sheet": "26년꺼", "month_col": "E",
+      "_설명": "슬라이드 10 : 재고금액. '26년꺼' 시트 9~14행(금액은 이미 백만 단위)",
+      "slide": "재고금액", "shape": "표 19", "sheet": "26년꺼", "month_col": "E", "show_year_total": true,
       "rows": [
-        {"ppt_row": 1, "excel_row": null, "kind": "actual", "label": "매출", "fmt": "amount"},
-        {"ppt_row": 2, "excel_row": null, "kind": "actual", "label": "재고", "fmt": "amount"},
-        {"ppt_row": 3, "excel_row": 3,    "kind": "actual", "fmt": "pct_plain"},
-        {"ppt_row": 4, "excel_row": null, "kind": "actual", "label": "생산", "fmt": "amount"},
-        {"ppt_row": 5, "excel_row": null, "kind": "actual", "label": "자재", "fmt": "amount"},
-        {"ppt_row": 6, "excel_row": 4,    "kind": "actual", "fmt": "pct_plain"}
+        {"ppt_row": 1, "excel_row": 9,  "kind": "actual", "label": "매출", "fmt": "amount_plain"},
+        {"ppt_row": 2, "excel_row": 10, "kind": "actual", "label": "금액", "fmt": "amount_plain"},
+        {"ppt_row": 3, "excel_row": 11, "kind": "actual", "label": "비율", "fmt": "pct"},
+        {"ppt_row": 4, "excel_row": 12, "kind": "actual", "label": "생산", "fmt": "amount_plain"},
+        {"ppt_row": 5, "excel_row": 13, "kind": "actual", "label": "금액", "fmt": "amount_plain"},
+        {"ppt_row": 6, "excel_row": 14, "kind": "actual", "label": "비율", "fmt": "pct"}
       ]
+    }
+  ],
+
+  "blocks": [
+    {
+      "_설명": "슬라이드 1 : 사업부별 손익표. '그래프양식' 시트 E7:N27 (21행 x 10열) 을 PPT 표 4 의 1행 2열부터 그대로 복사. 17행(빈 줄)은 건너뜀",
+      "slide": "원화 단위", "shape": "표 4", "sheet": "그래프양식",
+      "excel_top_left": "E7", "ppt_top_left": [1, 2], "rows": 21, "cols": 10,
+      "skip_ppt_rows": [17], "red_negative": false
     }
   ],
 
   "summary_cells": [
     {
-      "_설명": "슬라이드 9 요약표 - 매출 행 (25년 누적실적 / 26년 누적계획 / 26년 누적실적 / 전년대비 / 계획대비). 억 단위",
-      "slide": "상세 Review", "shape": "표 84", "sheet": "매출액, 영업이익",
+      "_설명": "슬라이드 9 요약표. 엑셀 누적 시트(G2 셀에 'N월 누적 실적' 문구가 있는 시트를 자동으로 찾음)의 3~9행. 열: C 25년 누적실적 / E 26년 누적계획 / G 26년 누적실적 / I 전년대비 / K 계획대비, D·F·H·J·L 은 비율. 이 항목은 설명용",
+      "slide": "-", "shape": "-", "sheet": "-", "cells": [], "enabled": false
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 매출 (3행)",
+      "slide": "상세 Review", "shape": "표 84",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
       "cells": [
-        {"ppt_row": 0, "ppt_col": 0, "excel": "R15", "name": "py",   "fmt": "eok"},
-        {"ppt_row": 0, "ppt_col": 1, "excel": "R16", "name": "plan", "fmt": "eok"},
-        {"ppt_row": 0, "ppt_col": 2, "excel": "R17", "name": "act",  "fmt": "eok"},
-        {"ppt_row": 0, "ppt_col": 3, "calc": "act-py",   "fmt": "eok_diff"},
-        {"ppt_row": 0, "ppt_col": 4, "calc": "act-plan", "fmt": "eok_diff"}
+        {"ppt_row": 0, "ppt_col": 0, "excel": "C3", "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "E3", "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "G3", "fmt": "eok"},
+        {"ppt_row": 0, "ppt_col": 3, "excel": "I3", "fmt": "eok_diff"},
+        {"ppt_row": 0, "ppt_col": 4, "excel": "K3", "fmt": "eok_diff"}
       ]
     },
     {
-      "_설명": "슬라이드 9 요약표 - 영업이익 행(윗줄 금액 억 단위, 아랫줄 이익률 %)",
-      "slide": "상세 Review", "shape": "표 89", "sheet": "매출액, 영업이익",
+      "_설명": "슬라이드 9 요약표 - 재료비 (4행) - 한 칸에 금액/빈줄/비율 세 줄",
+      "slide": "상세 Review", "shape": "표 85",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
       "cells": [
-        {"ppt_row": 0, "ppt_col": 0, "excel": "R38", "name": "py",   "fmt": "eok"},
-        {"ppt_row": 0, "ppt_col": 1, "excel": "R40", "name": "plan", "fmt": "eok"},
-        {"ppt_row": 0, "ppt_col": 2, "excel": "R42", "name": "act",  "fmt": "eok"},
-        {"ppt_row": 0, "ppt_col": 3, "calc": "act-py",   "fmt": "eok_diff"},
-        {"ppt_row": 0, "ppt_col": 4, "calc": "act-plan", "fmt": "eok_diff"},
-        {"ppt_row": 1, "ppt_col": 0, "excel": "R37", "name": "py_r",   "fmt": "pct_paren"},
-        {"ppt_row": 1, "ppt_col": 1, "excel": "R39", "name": "plan_r", "fmt": "pct_paren"},
-        {"ppt_row": 1, "ppt_col": 2, "excel": "R41", "name": "act_r",  "fmt": "pct_paren"},
-        {"ppt_row": 1, "ppt_col": 3, "calc": "act_r-py_r",   "fmt": "pp_diff_paren"},
-        {"ppt_row": 1, "ppt_col": 4, "calc": "act_r-plan_r", "fmt": "pp_diff_paren"}
+        {"ppt_row": 0, "ppt_col": 0, "lines": [{"excel": "C4", "fmt": "eok"}, {"text": ""}, {"excel": "D4", "fmt": "pct_paren"}]},
+        {"ppt_row": 0, "ppt_col": 1, "lines": [{"excel": "E4", "fmt": "eok"}, {"text": ""}, {"excel": "F4", "fmt": "pct_paren"}]},
+        {"ppt_row": 0, "ppt_col": 2, "lines": [{"excel": "G4", "fmt": "eok"}, {"text": ""}, {"excel": "H4", "fmt": "pct_paren"}]},
+        {"ppt_row": 0, "ppt_col": 3, "lines": [{"excel": "I4", "fmt": "eok_diff"}, {"text": ""}, {"excel": "J4", "fmt": "pp_diff_paren"}]},
+        {"ppt_row": 0, "ppt_col": 4, "lines": [{"excel": "K4", "fmt": "eok_diff"}, {"text": ""}, {"excel": "L4", "fmt": "pp_diff_paren"}]}
+      ]
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 노무비 (5행)",
+      "slide": "상세 Review", "shape": "표 86",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "C5", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 0, "excel": "D5", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "E5", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 1, "excel": "F5", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "G5", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 2, "excel": "H5", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 3, "excel": "I5", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 3, "excel": "J5", "fmt": "pp_diff_paren"},
+        {"ppt_row": 0, "ppt_col": 4, "excel": "K5", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 4, "excel": "L5", "fmt": "pp_diff_paren"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 제조경비 (6행)",
+      "slide": "상세 Review", "shape": "표 87",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "C6", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 0, "excel": "D6", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "E6", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 1, "excel": "F6", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "G6", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 2, "excel": "H6", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 3, "excel": "I6", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 3, "excel": "J6", "fmt": "pp_diff_paren"},
+        {"ppt_row": 0, "ppt_col": 4, "excel": "K6", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 4, "excel": "L6", "fmt": "pp_diff_paren"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 판관비 (7행)",
+      "slide": "상세 Review", "shape": "표 88",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "C7", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 0, "excel": "D7", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "E7", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 1, "excel": "F7", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "G7", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 2, "excel": "H7", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 3, "excel": "I7", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 3, "excel": "J7", "fmt": "pp_diff_paren"},
+        {"ppt_row": 0, "ppt_col": 4, "excel": "K7", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 4, "excel": "L7", "fmt": "pp_diff_paren"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 영업이익 (8행)",
+      "slide": "상세 Review", "shape": "표 89",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "C8", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 0, "excel": "D8", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 1, "excel": "E8", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 1, "excel": "F8", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "G8", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 2, "excel": "H8", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 3, "excel": "I8", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 3, "excel": "J8", "fmt": "pp_diff_paren"},
+        {"ppt_row": 0, "ppt_col": 4, "excel": "K8", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 4, "excel": "L8", "fmt": "pp_diff_paren"}
+      ]
+    },
+    {
+      "_설명": "슬라이드 9 요약표 - 세전이익 (9행, 계획 없음)",
+      "slide": "상세 Review", "shape": "표 91",
+      "sheet": "누적 26년 4월 기준",
+      "sheet_find": {"cell": "G2", "contains": "{month}월 누적 실적"},
+      "cells": [
+        {"ppt_row": 0, "ppt_col": 0, "excel": "C9", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 0, "excel": "D9", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 1, "text": ""},
+        {"ppt_row": 1, "ppt_col": 1, "text": ""},
+        {"ppt_row": 0, "ppt_col": 2, "excel": "G9", "fmt": "eok"},
+        {"ppt_row": 1, "ppt_col": 2, "excel": "H9", "fmt": "pct_paren"},
+        {"ppt_row": 0, "ppt_col": 3, "excel": "I9", "fmt": "eok_diff"},
+        {"ppt_row": 1, "ppt_col": 3, "excel": "J9", "fmt": "pp_diff_paren"},
+        {"ppt_row": 0, "ppt_col": 4, "text": ""},
+        {"ppt_row": 1, "ppt_col": 4, "text": ""}
       ]
     }
   ],
 
   "manual_checklist": [
-    "사업부별 손익표 슬라이드(N월 경영실적_일산) : 부분별손익 파일 자료 전체",
     "각 사업부 슬라이드 오른쪽의 코멘트 상자 : 자작 금액, 판가·매입가 인상 요인 등",
-    "누적 요약 슬라이드(상세 Review) : 재료비·노무비·제조경비·판관비·세전이익 행과 코멘트 (매출·영업이익 행은 자동)",
-    "재고금액 슬라이드 : 금액 행 (mapping.json 에 엑셀 행 번호를 넣으면 자동화 가능)",
+    "누적 요약 슬라이드(상세 Review) : 오른쪽 '상세 Review' 코멘트 (표는 누적 시트에서 자동)",
     "각 표의 '24년/25년' 같은 연도 라벨은 바꾸지 않으므로 연초에 한 번 확인"
   ]
 }
