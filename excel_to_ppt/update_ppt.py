@@ -579,6 +579,41 @@ def _find_table_shape(slide, name: str):
     return None
 
 
+def _slide_text(slide) -> str:
+    parts = []
+    for sh in slide.shapes:
+        if sh.has_text_frame:
+            parts.append(sh.text_frame.text)
+        if sh.has_table:
+            for row in sh.table.rows:
+                for c in row.cells:
+                    parts.append(c.text)
+    return "\n".join(parts)
+
+
+def find_slide(prs, spec: dict, log: Log):
+    """spec['slide'] 가 숫자면 그 번호의 슬라이드, 문자열이면 그 문구가 들어 있고
+    spec['shape'] 표가 있는 슬라이드를 찾는다. (한 장짜리 PPT 든 전체 PPT 든 같은 설정으로 동작)"""
+    key = spec["slide"]
+    where = f"'{key}'"
+    if isinstance(key, int):
+        if 1 <= key <= len(prs.slides):
+            return prs.slides[key - 1], f"슬라이드 {key}"
+        log.warn(f"슬라이드 {key} 이(가) 없습니다(총 {len(prs.slides)}장).")
+        return None, where
+    key_n = str(key).replace(" ", "")
+    hits = []
+    for i, slide in enumerate(prs.slides, 1):
+        if key_n in _slide_text(slide).replace(" ", "") and _find_table_shape(slide, spec["shape"]) is not None:
+            hits.append((i, slide))
+    if not hits:
+        return None, where
+    if len(hits) > 1:
+        log.warn(f"'{key}' 문구와 '{spec['shape']}' 표가 있는 슬라이드가 {[i for i, _ in hits]} 여러 장입니다. 첫 번째를 사용합니다.")
+    i, slide = hits[0]
+    return slide, f"슬라이드 {i}({key})"
+
+
 def _month_col_start(table) -> int | None:
     """머리글 행에서 '1월' 이 있는 열 번호."""
     for ci, cell in enumerate(table.rows[0].cells):
@@ -588,11 +623,14 @@ def _month_col_start(table) -> int | None:
 
 
 def update_table(prs, spec: dict, xl: ExcelReader, month: int, log: Log):
-    slide = prs.slides[spec["slide"] - 1]
-    shape = _find_table_shape(slide, spec["shape"])
+    slide, where = find_slide(prs, spec, log)
+    shape = _find_table_shape(slide, spec["shape"]) if slide is not None else None
     if shape is None:
-        names = [s.name for s in slide.shapes if s.has_table]
-        log.warn(f"슬라이드 {spec['slide']} 에 '{spec['shape']}' 표가 없습니다. (있는 표: {names})")
+        if slide is not None:
+            names = [s.name for s in slide.shapes if s.has_table]
+            log.warn(f"{where} 에 '{spec['shape']}' 표가 없습니다. (있는 표: {names})")
+        else:
+            log.info(f"{where} 문구가 있는 슬라이드가 이 PPT 에 없어 '{spec['shape']}' 표는 건너뜁니다.")
         return
     sheet = spec["sheet"]
     if not xl.has_sheet(sheet):
@@ -600,7 +638,7 @@ def update_table(prs, spec: dict, xl: ExcelReader, month: int, log: Log):
     table = shape.table
     c0 = _month_col_start(table)
     if c0 is None:
-        log.warn(f"슬라이드 {spec['slide']} '{spec['shape']}' 표에서 '1월' 머리글을 찾지 못했습니다.")
+        log.warn(f"{where} '{spec['shape']}' 표에서 '1월' 머리글을 찾지 못했습니다.")
         return
     ncols = len(table.columns)
     excel_c0 = column_index_from_string(spec["month_col"])
@@ -608,7 +646,7 @@ def update_table(prs, spec: dict, xl: ExcelReader, month: int, log: Log):
     for rs in spec["rows"]:
         prow, erow = rs["ppt_row"], rs.get("excel_row")
         if erow is None:
-            log.warn(f"슬라이드 {spec['slide']} '{spec['shape']}' {prow}행: mapping.json 에 엑셀 행(excel_row)이 비어 있어 건너뜁니다.")
+            log.warn(f"{where} '{spec['shape']}' {prow}행: mapping.json 에 엑셀 행(excel_row)이 비어 있어 건너뜁니다.")
             continue
         kind = rs.get("kind", "fixed")
         row_excel_c0 = column_index_from_string(rs["month_col"]) if rs.get("month_col") else excel_c0
@@ -641,15 +679,18 @@ def update_table(prs, spec: dict, xl: ExcelReader, month: int, log: Log):
             if text:
                 set_cell_color(tc, isinstance(v, (int, float)) and not isinstance(v, bool) and v < 0)
             filled += 1
-    log.info(f"슬라이드 {spec['slide']} '{spec['shape']}' 표: {len(spec['rows'])}행 반영 ({sheet})")
+    log.info(f"{where} '{spec['shape']}' 표: {len(spec['rows'])}행 반영 ({sheet})")
 
 
 def update_summary_cells(prs, spec: dict, xl: ExcelReader, log: Log):
     """슬라이드 9 처럼 개별 셀에 값을 넣는 항목."""
-    slide = prs.slides[spec["slide"] - 1]
-    shape = _find_table_shape(slide, spec["shape"])
+    slide, where = find_slide(prs, spec, log)
+    shape = _find_table_shape(slide, spec["shape"]) if slide is not None else None
     if shape is None:
-        log.warn(f"슬라이드 {spec['slide']} 에 '{spec['shape']}' 표가 없습니다.")
+        if slide is not None:
+            log.warn(f"{where} 에 '{spec['shape']}' 표가 없습니다.")
+        else:
+            log.info(f"{where} 문구가 있는 슬라이드가 이 PPT 에 없어 '{spec['shape']}' 요약표는 건너뜁니다.")
         return
     sheet = spec["sheet"]
     if not xl.has_sheet(sheet):
@@ -669,7 +710,7 @@ def update_summary_cells(prs, spec: dict, xl: ExcelReader, log: Log):
         values[item.get("name", f"{r},{c}")] = v
         # 요약표는 템플릿의 글자색 규칙(%p 증감은 빨강 등)을 그대로 유지
         set_cell_text(table.cell(r, c)._tc, format_summary(v, item.get("fmt", "eok")))
-    log.info(f"슬라이드 {spec['slide']} '{spec['shape']}' 요약 셀 반영 ({sheet})")
+    log.info(f"{where} '{spec['shape']}' 요약 셀 반영 ({sheet})")
 
 
 # ---------------------------------------------------------------------------
@@ -722,7 +763,8 @@ def run(excel: str, ppt: str, out: str | None = None, month: int | None = None,
     if not 1 <= month <= 12:
         raise SystemExit("월은 1~12 사이여야 합니다.")
     tmpl_month = detect_template_month(prs)
-    log.info(f"PPT 원본: {tmpl_month}월 자료 → {month}월 자료로 갱신")
+    log.info(f"PPT 원본: {tmpl_month}월 자료 → {month}월 자료로 갱신 (슬라이드 {len(prs.slides)}장)"
+             if tmpl_month else f"PPT {len(prs.slides)}장을 {month}월 자료로 갱신")
 
     # 1) 차트
     n_chart = 0
