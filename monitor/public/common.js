@@ -28,7 +28,7 @@
     nav.id = 'topnav';
     nav.innerHTML = `<div class="brand">서버 모니터</div>` +
       PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}">${t}</a>`).join('') +
-      `<span class="spacer"></span><span class="ver" id="navver"></span><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
+      `<span class="spacer"></span><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
     st.textContent = `#topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:44px;background:var(--card,#1e293b);border-bottom:1px solid var(--line,#334155);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
@@ -44,6 +44,9 @@
 @keyframes sndblink{50%{opacity:.5}}`;
     document.head.appendChild(st);
     sndInit();
+    const fs = document.getElementById('navfs');
+    if (fs) { fs.onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
+      document.addEventListener('fullscreenchange', () => { fs.textContent = document.fullscreenElement ? '⛶ 전체화면 해제' : '⛶ 전체화면'; }); }
   }
   async function pollNav() {
     try {
@@ -55,7 +58,20 @@
   if (embed) document.addEventListener('DOMContentLoaded', sndInit);
   // ---- 알림 소리 (브라우저별 설정, localStorage) ----
   const SND_KEY = 'mon_sound';
-  const sndDef = { on: false, mode: 'beep', dur: 15, vol: 0.6, quietOn: false, quietFrom: '22:00', quietTo: '07:00', remind: false };
+  const sndDef = { on: false, mode: 'beep', dur: 15, vol: 0.6, quietOn: false, quietFrom: '22:00', quietTo: '07:00', remind: false, dict: '' };
+  // 음성용 발음 변환: 영문 약자를 한글로 (한국어 TTS 가 ERP 를 "이앒"처럼 읽는 것 방지). 사용자 사전(snd.dict, "ERP=이알피" 한 줄씩)이 우선
+  const LETTER = { A: '에이', B: '비', C: '씨', D: '디', E: '이', F: '에프', G: '지', H: '에이치', I: '아이', J: '제이', K: '케이', L: '엘', M: '엠', N: '엔', O: '오', P: '피', Q: '큐', R: '알', S: '에스', T: '티', U: '유', V: '브이', W: '더블유', X: '엑스', Y: '와이', Z: '지' };
+  const WORDS = { ACE: '에이스', ERP: '이알피', MES: '엠이에스', CPU: '씨피유', NAS: '나스', DB: '디비', PC: '피씨', VM: '브이엠', ESXI: '이에스엑스아이', IMS: '아이엠에스', SQL: '에스큐엘', WEB: '웹', DNS: '디엔에스', AD: '에이디', SRV: '서버', SERVER: '서버', FILE: '파일', DEV: '개발', TEST: '테스트', BACKUP: '백업', WIN: '윈', APP: '앱', API: '에이피아이', GW: '지더블유', VPN: '브이피엔', HR: '에이치알', ILSAN: '일산', V3: '브이쓰리', NAS1: '나스 원', OLD: '올드', NEW: '뉴', MAIN: '메인', SUB: '서브', PROD: '운영', ADMIN: '어드민', WATCHING: '워칭' };
+  function toSpeech(text) {
+    let t = String(text || '');
+    for (const line of (snd.dict || '').split(/\n/)) { const m = /^\s*([^=]+?)\s*=\s*(.+?)\s*$/.exec(line); if (m) t = t.replace(new RegExp('\\b' + m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), m[2]); }
+    return t.replace(/[A-Za-z][A-Za-z0-9]*/g, (w) => {
+      const u = w.toUpperCase();
+      if (WORDS[u]) return WORDS[u];
+      if (/^[A-Z0-9]{1,6}$/.test(w) || /^[A-Z]{2,}$/.test(u) && w.length <= 6) return u.split('').map((c) => LETTER[c] || c).join(' ');
+      return w;   // 긴 이름은 그대로 (TTS 가 단어처럼 읽음)
+    });
+  }
   const RULE_KO = { cpu: 'CPU 경고', mem: '메모리 경고', disk: '디스크 경고', full: '디스크 소진 예상', offline: '오프라인' };
   let snd = { ...sndDef }; try { snd = { ...sndDef, ...JSON.parse(localStorage.getItem(SND_KEY) || '{}') }; } catch (e) {}
   let actx = null, ringTimer = null, ringUntil = 0, lastEvId = null, ringing = false, phrases = [], tick = 0;
@@ -71,7 +87,7 @@
   function koVoice() { try { const vs = speechSynthesis.getVoices(); return vs.find(v => /ko/i.test(v.lang) && /Heami|Google|Natural|Sun/i.test(v.name)) || vs.find(v => /ko/i.test(v.lang)) || null; } catch (e) { return null; } }
   function speak(text) {
     if (!('speechSynthesis' in window) || !text) return;
-    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = snd.vol; u.rate = 0.95; const v = koVoice(); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {}
+    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(toSpeech(text)); u.lang = 'ko-KR'; u.volume = snd.vol; u.rate = 0.95; const v = koVoice(); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {}
   }
   function sndStop() { ringing = false; clearInterval(ringTimer); ringTimer = null; try { speechSynthesis.cancel(); } catch (e) {} sndBtn(); }
   // text: 음성으로 읽을 문장 (없으면 알림음만)
@@ -123,18 +139,20 @@
 <div class="f"><span>"계속" 알림에도 소리</span><button class="sw ${snd.remind ? 'on' : ''}" id="sndRemind"></button></div>
 <div class="f"><span>방해 금지 시간</span><button class="sw ${snd.quietOn ? 'on' : ''}" id="sndQuiet"></button></div>
 <div class="f"><span></span><span><input type="time" id="sndFrom" value="${snd.quietFrom}"> ~ <input type="time" id="sndTo" value="${snd.quietTo}"></span></div>
+<div class="f" style="flex-direction:column;align-items:stretch"><span>음성 발음 바꾸기 (한 줄에 하나, 예: ERP=이알피)</span><textarea id="sndDict" rows="3" style="background:var(--bg,#0f172a);color:var(--text,#e2e8f0);border:1px solid var(--line,#334155);border-radius:6px;padding:5px;font-family:inherit;font-size:12px;resize:vertical">${snd.dict || ''}</textarea></div>
 <div style="display:flex;gap:6px"><button id="sndTest">🔔 소리 테스트</button><button id="sndClose">닫기</button></div>
-<div class="note">새 경고(텔레그램으로 나가는 "경고")가 생기면 울립니다. 복귀는 울리지 않습니다. 음성은 예: "ACE ERP 서버 오프라인", "MES 서버 메모리 경고".<br>브라우저 정책상 페이지를 연 뒤 한 번은 클릭해야 소리가 납니다. 이 설정은 PC·브라우저마다 따로 저장됩니다.</div>`;
+<div class="note">새 경고(텔레그램으로 나가는 "경고")가 생기면 울립니다. 복귀는 울리지 않습니다. 음성은 예: "ACE ERP 서버 오프라인", "MES 서버 메모리 경고".<br>브라우저 정책상 페이지를 연 뒤 한 번은 클릭해야 소리가 납니다. 이 설정은 PC·브라우저마다 따로 저장됩니다. 영문 약자(ERP, MES, CPU 등)는 자동으로 한글 발음으로 읽고, 어색한 것은 위 칸에서 바꿉니다.</div>`;
     document.body.appendChild(p);
     const q = (id) => p.querySelector('#' + id);
     const sw = (id, key) => { q(id).onclick = () => { snd[key] = !snd[key]; q(id).classList.toggle('on', snd[key]); sndSave(); if (key === 'on' && snd.on) ctx(); }; };
     sw('sndOn', 'on'); sw('sndRemind', 'remind'); sw('sndQuiet', 'quietOn');
     q('sndDur').onchange = (e) => { snd.dur = Number(e.target.value); sndSave(); };
     q('sndMode').onchange = (e) => { snd.mode = e.target.value; sndSave(); };
+    q('sndDict').onchange = (e) => { snd.dict = e.target.value; sndSave(); };
     q('sndVol').oninput = (e) => { snd.vol = Number(e.target.value); sndSave(); };
     q('sndFrom').onchange = (e) => { snd.quietFrom = e.target.value || '22:00'; sndSave(); };
     q('sndTo').onchange = (e) => { snd.quietTo = e.target.value || '07:00'; sndSave(); };
-    q('sndTest').onclick = () => { ctx(); if (ringing) sndStop(); else { const d = snd.dur; snd.dur = Math.min(d || 6, 6); sndStart(true, 'ACE ERP 서버 오프라인'); snd.dur = d; } };
+    q('sndTest').onclick = () => { ctx(); if (ringing) sndStop(); else { const d = snd.dur; snd.dur = Math.min(d || 6, 6); sndStart(true, 'ACE ERP 서버 오프라인. MES 서버 메모리 경고'); snd.dur = d; } };
     q('sndClose').onclick = () => p.remove();
   }
   function sndInit() {

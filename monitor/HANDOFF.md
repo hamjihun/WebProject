@@ -40,6 +40,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-10 (3): 상단 탭에 ⛶ 전체화면 버튼(requestFullscreen), 음성 알림 발음 변환 `toSpeech`(WORDS 약자 사전 + 알파벳 낱자 한글, 사용자 사전 `snd.dict` "ERP=이알피" 줄 단위, 🔊 패널 텍스트 영역).
 - 2026-09-10 (2): 오프라인 유예 `rules.offline_grace`(분; check() opts.grace → 이벤트 delivery 'held', 유예 내 복구면 skipped+이력, 지나면 새 id 로 재푸시 후 전송), 알림 소리 종류 `snd.mode` beep/voice/both(speechSynthesis ko-KR, "서버이름 규칙" 읽기, held 이벤트는 무음), 에이전트 1.3.2 수집 지연 로그(30초↑ 또는 전송 3초↑ 시 단계별 초). ACE ERP 서버 새벽 3:55~4:20 응답 없음 원인은 메모리 95% + 새벽 작업으로 WMI 수집 지연으로 판단.
 - 2026-09-10: 브라우저 알림 소리(지속 시간·방해 금지) 추가, 에이전트 1.3.1(감시자·2012 시간제한 버그), 구성도 편집기 v2, 통계·리포트 완료. 사용자에게 제안한 다음 후보: 서비스·포트 감시, 백업 확인, 아침 요약 텔레그램, 보안 이벤트(원격 접속/로그인 실패/미끼 파일/섀도 복사본 삭제/레지스트리 스냅샷).
 4개 탭(대시보드·구성도·서버 현황·통계·리포트) 모두 구현 완료 (2026-09-07, v1.10.0). 통계 화면은 실서버 데이터가 며칠 쌓인 뒤 사용자 검토 예정. 테스트 데이터 생성 스크립트 예: hourly.json 에 host→[{h,n,ca,cx,ma,mx,off}] 60일치, `alerts-YYYY-MM.log` 에 `[YYYY-MM-DD HH:MM:SS] 경고\t이름 (host)\t메시지\t텔레그램 전송` 줄을 넣고 `STATE_FILE/HOURLY_FILE/SETTINGS_FILE` 환경변수로 수집기를 띄운다.
