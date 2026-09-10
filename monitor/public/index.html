@@ -138,6 +138,7 @@
       <label class="chk"><input type="checkbox" id="rMemOn"> 메모리 알림</label>
       <label class="chk"><input type="checkbox" id="rDiskOn"> 디스크 알림 (사용률 + 소진 예상)</label>
       <label class="chk"><input type="checkbox" id="rOffline"> 오프라인 알림</label>
+      <label>오프라인 유예 (분, 0=즉시)<input type="number" id="rOffGrace" min="0" max="60" title="이 시간 안에 응답이 복구되면 텔레그램을 보내지 않고 이력에만 남깁니다 (새벽 백업 중 잠깐 끊기는 서버용)"></label>
     </div>
 
     <h3>텔레그램 전송</h3>
@@ -217,7 +218,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.10.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.10.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -476,7 +477,7 @@ function renderAlertLists(j) {
   $a.innerHTML = (j.active || []).length
     ? `<table class="ev">${j.active.map(a => `<tr><td class="t">${fmtTime(a.since)}부터</td><td><b>${esc(hostLabel(a.host))}</b></td><td>${esc(a.msg || RULE_KO[a.rule])}</td></tr>`).join('')}</table>`
     : '없음';
-  const dl = (ev) => ev.delivery === 'telegram' ? '텔레그램 전송' : ev.delivery === 'quiet' ? '조용 시간(미전송)' : ev.delivery === 'error' ? `전송 실패: ${esc(ev.error || '')}` : ev.delivery === 'off' ? '텔레그램 꺼짐' : ev.delivery === 'skipped' ? '이력만 기록' : '';
+  const dl = (ev) => ev.delivery === 'telegram' ? '텔레그램 전송' : ev.delivery === 'quiet' ? '조용 시간(미전송)' : ev.delivery === 'error' ? `전송 실패: ${esc(ev.error || '')}` : ev.delivery === 'off' ? '텔레그램 꺼짐' : ev.delivery === 'skipped' ? '이력만 기록' : ev.delivery === 'held' ? '유예 중 (복구되면 미전송)' : '';
   const $sel = document.getElementById('logMonth');
   if (j.months && $sel.options.length !== (j.months.length || 1)) {
     $sel.innerHTML = (j.months.length ? j.months : [new Date().toISOString().slice(0, 7)]).map(m => `<option value="${m}">${m.replace('-', '년 ')}월</option>`).join('');
@@ -494,7 +495,7 @@ async function loadSettings() {
   F('tgChat').value = c.telegram.chatId || ''; F('aTitle').value = c.title || '';
   F('rCpu').value = c.rules.cpu; F('rCpuMin').value = c.rules.cpu_minutes; F('rMem').value = c.rules.mem; F('rMemMin').value = c.rules.mem_minutes;
   F('rDisk').value = c.rules.disk; F('rDays').value = c.rules.days_left; F('rRemind').value = c.remind_min; F('rDiskTime').value = c.rules.disk_check_time || '';
-  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery;
+  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0;
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
@@ -507,7 +508,7 @@ function collectSettings() {
     telegram: { enabled: F('tgEnabled').checked, chatId: F('tgChat').value.trim() },
     title: F('aTitle').value.trim() || 'IMS 모니터',
     enabled: F('aEnabled').checked,
-    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked,
+    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0),
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '' },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },

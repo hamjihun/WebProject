@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.10.0';
+  const UI_VERSION = '1.10.1';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -55,9 +55,10 @@
   if (embed) document.addEventListener('DOMContentLoaded', sndInit);
   // ---- 알림 소리 (브라우저별 설정, localStorage) ----
   const SND_KEY = 'mon_sound';
-  const sndDef = { on: false, dur: 15, vol: 0.6, quietOn: false, quietFrom: '22:00', quietTo: '07:00', remind: false };
+  const sndDef = { on: false, mode: 'beep', dur: 15, vol: 0.6, quietOn: false, quietFrom: '22:00', quietTo: '07:00', remind: false };
+  const RULE_KO = { cpu: 'CPU 경고', mem: '메모리 경고', disk: '디스크 경고', full: '디스크 소진 예상', offline: '오프라인' };
   let snd = { ...sndDef }; try { snd = { ...sndDef, ...JSON.parse(localStorage.getItem(SND_KEY) || '{}') }; } catch (e) {}
-  let actx = null, ringTimer = null, ringUntil = 0, lastEvId = null, ringing = false;
+  let actx = null, ringTimer = null, ringUntil = 0, lastEvId = null, ringing = false, phrases = [], tick = 0;
   function sndSave() { try { localStorage.setItem(SND_KEY, JSON.stringify(snd)); } catch (e) {} sndBtn(); }
   function inQuiet() {
     if (!snd.quietOn) return false;
@@ -67,21 +68,40 @@
   function ctx() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (actx.state === 'suspended') actx.resume().catch(() => {}); return actx; }
   function tone(freq, at, len) { const c = ctx(); if (!c) return; const o = c.createOscillator(), g = c.createGain(); o.type = 'square'; o.frequency.value = freq; g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(snd.vol * 0.3, at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, at + len); o.connect(g).connect(c.destination); o.start(at); o.stop(at + len + 0.05); }
   function beepOnce() { const c = ctx(); if (!c) return; const t = c.currentTime; tone(880, t, 0.18); tone(660, t + 0.22, 0.18); tone(880, t + 0.44, 0.18); }
-  function sndStop() { ringing = false; clearInterval(ringTimer); ringTimer = null; sndBtn(); }
-  function sndStart(force) {
+  function koVoice() { try { const vs = speechSynthesis.getVoices(); return vs.find(v => /ko/i.test(v.lang) && /Heami|Google|Natural|Sun/i.test(v.name)) || vs.find(v => /ko/i.test(v.lang)) || null; } catch (e) { return null; } }
+  function speak(text) {
+    if (!('speechSynthesis' in window) || !text) return;
+    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = snd.vol; u.rate = 0.95; const v = koVoice(); if (v) u.voice = v; speechSynthesis.speak(u); } catch (e) {}
+  }
+  function sndStop() { ringing = false; clearInterval(ringTimer); ringTimer = null; try { speechSynthesis.cancel(); } catch (e) {} sndBtn(); }
+  // text: 음성으로 읽을 문장 (없으면 알림음만)
+  function sndStart(force, text) {
     if (!force && (!snd.on || inQuiet())) return;
     ringUntil = snd.dur > 0 ? Date.now() + snd.dur * 1000 : Infinity;
-    if (ringing) return;
-    ringing = true; beepOnce(); sndBtn();
-    ringTimer = setInterval(() => { if (Date.now() > ringUntil) return sndStop(); beepOnce(); }, 1000);
+    if (text) phrases = [text]; else if (!ringing) phrases = [];
+    const useBeep = snd.mode !== 'voice', useVoice = snd.mode !== 'beep' && phrases.length;
+    if (ringing) { if (useVoice) speak(phrases.join('. ')); return; }
+    ringing = true; tick = 0; sndBtn();
+    if (useBeep) beepOnce();
+    if (useVoice) setTimeout(() => speak(phrases.join('. ')), useBeep ? 700 : 0);
+    ringTimer = setInterval(() => {
+      if (Date.now() > ringUntil) return sndStop();
+      tick++;
+      if (useBeep && (!useVoice || tick % 8 < 5)) beepOnce();       // 음성과 같이 쓰면 말하는 동안은 비프 잠깐 쉼
+      if (useVoice && tick % 8 === 5) speak(phrases.join('. '));      // 8초마다 다시 읽기
+    }, 1000);
   }
   // 최근 이벤트 목록(api/alerts 의 recent, 최신이 앞)에서 새 경고가 있으면 소리
   function sndCheck(recent) {
     if (!Array.isArray(recent) || !recent.length) return;
     if (lastEvId !== null) {
-      let hit = false;
-      for (const ev of recent) { if (ev.id <= lastEvId) break; if (ev.kind === 'alert' || (ev.kind === 'remind' && snd.remind)) hit = true; }
-      if (hit) sndStart(false);
+      const say = [];
+      for (const ev of recent) {
+        if (ev.id <= lastEvId) break;
+        if (ev.delivery === 'held') continue;                        // 오프라인 유예 중이면 아직 조용히
+        if (ev.kind === 'alert' || (ev.kind === 'remind' && snd.remind)) say.push(`${ev.name || ev.host} ${RULE_KO[ev.rule] || '경고'}`);
+      }
+      if (say.length) sndStart(false, say.slice(0, 3).join('. '));
     }
     lastEvId = recent[0].id;
   }
@@ -97,22 +117,24 @@
 #sndpanel .note{font-size:11px;color:var(--muted,#94a3b8);margin-top:8px;line-height:1.5}#sndpanel .sw{width:40px;height:22px;border-radius:11px;background:#475569;position:relative;cursor:pointer;border:0;padding:0;margin:0}#sndpanel .sw.on{background:#22c55e}#sndpanel .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}#sndpanel .sw.on::after{left:21px}</style>
 <h4>알림 소리 (이 PC 브라우저)</h4>
 <div class="f"><span>소리 알림</span><button class="sw ${snd.on ? 'on' : ''}" id="sndOn"></button></div>
+<div class="f"><span>소리 종류</span><select id="sndMode">${[['beep', '알림음'], ['voice', '음성 (서버 이름 + 내용)'], ['both', '알림음 + 음성']].map(([v, t]) => `<option value="${v}" ${snd.mode === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
 <div class="f"><span>지속 시간</span><select id="sndDur">${[[5, '5초'], [15, '15초'], [30, '30초'], [60, '1분'], [180, '3분'], [0, '끌 때까지 계속']].map(([v, t]) => `<option value="${v}" ${snd.dur === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
 <div class="f"><span>볼륨</span><input type="range" id="sndVol" min="0.1" max="1" step="0.1" value="${snd.vol}"></div>
 <div class="f"><span>"계속" 알림에도 소리</span><button class="sw ${snd.remind ? 'on' : ''}" id="sndRemind"></button></div>
 <div class="f"><span>방해 금지 시간</span><button class="sw ${snd.quietOn ? 'on' : ''}" id="sndQuiet"></button></div>
 <div class="f"><span></span><span><input type="time" id="sndFrom" value="${snd.quietFrom}"> ~ <input type="time" id="sndTo" value="${snd.quietTo}"></span></div>
 <div style="display:flex;gap:6px"><button id="sndTest">🔔 소리 테스트</button><button id="sndClose">닫기</button></div>
-<div class="note">새 경고(텔레그램으로 나가는 "경고")가 생기면 울립니다. 복귀는 울리지 않습니다.<br>브라우저 정책상 페이지를 연 뒤 한 번은 클릭해야 소리가 납니다. 이 설정은 PC·브라우저마다 따로 저장됩니다.</div>`;
+<div class="note">새 경고(텔레그램으로 나가는 "경고")가 생기면 울립니다. 복귀는 울리지 않습니다. 음성은 예: "ACE ERP 서버 오프라인", "MES 서버 메모리 경고".<br>브라우저 정책상 페이지를 연 뒤 한 번은 클릭해야 소리가 납니다. 이 설정은 PC·브라우저마다 따로 저장됩니다.</div>`;
     document.body.appendChild(p);
     const q = (id) => p.querySelector('#' + id);
     const sw = (id, key) => { q(id).onclick = () => { snd[key] = !snd[key]; q(id).classList.toggle('on', snd[key]); sndSave(); if (key === 'on' && snd.on) ctx(); }; };
     sw('sndOn', 'on'); sw('sndRemind', 'remind'); sw('sndQuiet', 'quietOn');
     q('sndDur').onchange = (e) => { snd.dur = Number(e.target.value); sndSave(); };
+    q('sndMode').onchange = (e) => { snd.mode = e.target.value; sndSave(); };
     q('sndVol').oninput = (e) => { snd.vol = Number(e.target.value); sndSave(); };
     q('sndFrom').onchange = (e) => { snd.quietFrom = e.target.value || '22:00'; sndSave(); };
     q('sndTo').onchange = (e) => { snd.quietTo = e.target.value || '07:00'; sndSave(); };
-    q('sndTest').onclick = () => { ctx(); if (ringing) sndStop(); else { const d = snd.dur; snd.dur = Math.min(d || 5, 5); sndStart(true); snd.dur = d; } };
+    q('sndTest').onclick = () => { ctx(); if (ringing) sndStop(); else { const d = snd.dur; snd.dur = Math.min(d || 6, 6); sndStart(true, 'ACE ERP 서버 오프라인'); snd.dur = d; } };
     q('sndClose').onclick = () => p.remove();
   }
   function sndInit() {

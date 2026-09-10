@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.10.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.10.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade)·**알림 소리**(MON.sound: localStorage `mon_sound` {on,dur,vol,quietOn,quietFrom,quietTo,remind}, Web Audio 비프, 🔊 버튼 패널, TV 모드는 오른쪽 아래 버튼, `sound.check(recent)` 를 index/dashboard/pollNav 가 호출). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
@@ -14,7 +14,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 | `public/topology.html` | 구성도 편집기 v2. 장비 아이콘 18종(ICONS, stroke SVG), 영역 도형 6종(groups[].kind: rect/round/ellipse/diamond/hex/cloud, color/fill/dash/tpos/fs), 연결 선(links[]: style solid/dashed/dotted, route straight/elbow-v/elbow-h, arrow, width, color, label), 메모(color/bg/fs), 노드(icon/size s·m·l/label/sub/color/nometric), 상자 안 LED 상태등(grade), 속성 패널, 실행취소(undo 스택), 복제, 격자, 화면 끌기·Ctrl+휠 확대, 단축키. 저장은 `PUT /api/topology` → state.json `topology` (서버는 nodes/links/groups/notes 만 보존) | 브라우저 |
 | `public/stats.html` | 통계·리포트. 기간(오늘/7일/30일/90일/1년/월)·서버 선택, KPI, CPU·메모리 추이(SVG 직접 그림, 외부 라이브러리 없음), 일별 경고 건수, 가동률, 서버별 요약표, 디스크 증감표(+단일 서버 시 일별 사용량 그래프), 경고 이력. CSV 는 `GET /api/report.csv`, PDF 는 인쇄 스타일(`@media print`, A4 가로) + `window.print()`. 데이터: `data/hourly.json` (host→[{h,n,ca,cx,ma,mx,off}], 366일) 과 daily 스냅샷, 월별 알림 로그 | 브라우저 |
 | `agent/win/` | Windows 에이전트 소스: `agent.ps1`(수집), `tray.ps1`(트레이), `service.ps1`(작업 등록; 2012 의 ExecutionTimeLimit 0 무시 버그를 XML 재등록으로 우회, 감시자 작업 `IMSMonitoringAgentWatchdog` 5분마다 XML 등록), `watchdog.ps1`(agent.ps1 프로세스 없거나 status.json 3분 이상 미갱신이면 재시작, agent.log 에 [감시자] 기록), `start.ps1/.vbs`(바탕화면 실행), `installer.nsi`(NSIS), `make-icon.py`(아이콘) | 각 Windows 서버 |
-| `dist/IMS-Monitoring-Agent-Setup.exe` (v1.3.1) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
+| `dist/IMS-Monitoring-Agent-Setup.exe` (v1.3.2) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
 | `agent/linux/` | Linux 에이전트 `ims-agent.sh` + `install.sh`(설치/`ims-agent` 관리 명령: status/name/disks/restart/log/uninstall). 마운트는 DISKS 지정 또는 /boot·snap·docker·1GB 미만 자동 제외. systemd 없는 시스템(시놀로지 DSM)은 /usr/local/ims-agent + nohup + DSM 작업 스케줄러 안내 | 각 Linux 서버, 시놀로지 |
 | `agent/esxi/` | ESXi 호스트 에이전트 `ims-agent-esxi.py`(vim-cmd hostsummary 정규식 파싱, esxcli 데이터스토어/NIC) + `install.sh`(busybox sh, 데이터스토어에 설치, local.sh 로 부팅 실행). 실기 검증 전 (2026-09-07) | ESXi 호스트 |
 | `deploy/` | 수집기 설치 스크립트(`setup-collector.cmd` 더블클릭 → `install-collector-windows.ps1 -Public -Port 15138`), 프록시 예시, IMS iframe 예시 | IMS 서버 |
@@ -40,6 +40,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-10 (2): 오프라인 유예 `rules.offline_grace`(분; check() opts.grace → 이벤트 delivery 'held', 유예 내 복구면 skipped+이력, 지나면 새 id 로 재푸시 후 전송), 알림 소리 종류 `snd.mode` beep/voice/both(speechSynthesis ko-KR, "서버이름 규칙" 읽기, held 이벤트는 무음), 에이전트 1.3.2 수집 지연 로그(30초↑ 또는 전송 3초↑ 시 단계별 초). ACE ERP 서버 새벽 3:55~4:20 응답 없음 원인은 메모리 95% + 새벽 작업으로 WMI 수집 지연으로 판단.
 - 2026-09-10: 브라우저 알림 소리(지속 시간·방해 금지) 추가, 에이전트 1.3.1(감시자·2012 시간제한 버그), 구성도 편집기 v2, 통계·리포트 완료. 사용자에게 제안한 다음 후보: 서비스·포트 감시, 백업 확인, 아침 요약 텔레그램, 보안 이벤트(원격 접속/로그인 실패/미끼 파일/섀도 복사본 삭제/레지스트리 스냅샷).
 4개 탭(대시보드·구성도·서버 현황·통계·리포트) 모두 구현 완료 (2026-09-07, v1.10.0). 통계 화면은 실서버 데이터가 며칠 쌓인 뒤 사용자 검토 예정. 테스트 데이터 생성 스크립트 예: hourly.json 에 host→[{h,n,ca,cx,ma,mx,off}] 60일치, `alerts-YYYY-MM.log` 에 `[YYYY-MM-DD HH:MM:SS] 경고\t이름 (host)\t메시지\t텔레그램 전송` 줄을 넣고 `STATE_FILE/HOURLY_FILE/SETTINGS_FILE` 환경변수로 수집기를 띄운다.
 

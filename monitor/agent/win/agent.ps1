@@ -113,13 +113,15 @@ Get-CpuPercent | Out-Null   # 첫 샘플
 while ($true) {
   Start-Sleep -Seconds $Interval
   try {
-    $cpu = Get-CpuPercent
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $tm = @{}
+    $cpu = Get-CpuPercent; $tm.cpu = $sw.Elapsed.TotalSeconds
     $os = Get-CimInstance Win32_OperatingSystem
     $memTotal = [int64]$os.TotalVisibleMemorySize * 1024
     $memUsed = $memTotal - ([int64]$os.FreePhysicalMemory * 1024)
     $memPct = [int][math]::Round($memUsed * 100 / $memTotal)
     if (((Get-Date) - $startChecked).TotalMinutes -ge 10) { $startTime = Get-StartTime; $startChecked = Get-Date }
     $uptime = [int]((Get-Date) - $startTime).TotalSeconds
+    $tm.mem = $sw.Elapsed.TotalSeconds - $tm.cpu
 
     $now = Get-Date
     $dt = [math]::Max(1, ($now - $prevT).TotalSeconds)
@@ -127,10 +129,13 @@ while ($true) {
     $netRx = [int64](($net.rx - $prevNet.rx) / $dt)
     $netTx = [int64](($net.tx - $prevNet.tx) / $dt)
     $prevNet = $net; $prevT = $now
+    $tm.net = $sw.Elapsed.TotalSeconds - $tm.cpu - $tm.mem
 
     $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
       @{ mount = $_.DeviceID; total = [int64]$_.Size; used = [int64]$_.Size - [int64]$_.FreeSpace }
     }
+    $tm.disk = $sw.Elapsed.TotalSeconds - $tm.cpu - $tm.mem - $tm.net
+    $collectSec = $sw.Elapsed.TotalSeconds
     $body = @{
       host = $HostName; name = (Get-DisplayName); os = $osName; token = $Token
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
@@ -140,6 +145,11 @@ while ($true) {
 
     Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
       -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null
+    $sendSec = $sw.Elapsed.TotalSeconds - $collectSec
+    if ($collectSec -ge 30 -or $sendSec -ge 3) {
+      # 수집이 오래 걸리면 서버가 그 시간에 매우 느렸다는 뜻 (백업/메모리 부족). 어느 단계가 느렸는지 남긴다
+      Log ("수집 지연 {0:N0}초 (cpu {1:N0}s, 메모리 {2:N0}s, 네트워크 {3:N0}s, 디스크 {4:N0}s, 전송 {5:N1}s) mem={6}%" -f $collectSec, $tm.cpu, $tm.mem, $tm.net, $tm.disk, $sendSec, $memPct)
+    }
     WriteStatus $true "" $cpu $memPct
     if ($failStreak -gt 0) { Log "전송 복구 (cpu=$cpu% mem=$memPct%)" }
     $failStreak = 0

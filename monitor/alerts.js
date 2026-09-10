@@ -14,6 +14,7 @@ const DEFAULTS = {
     disk: 90, disk_on: true,                    // 디스크 사용률 90% 이상 / 소진 예상
     days_left: 30,                              // 예상 소진 30일 이내
     offline: true,                              // 오프라인 알림
+    offline_grace: 0,                           // 오프라인 유예(분): 이 시간 안에 복구되면 텔레그램 생략, 이력만 기록 (0=즉시 전송)
     disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
@@ -42,7 +43,7 @@ function create({ settingsFile, logDir, log = console.log }) {
   // ---- 알림 로그 파일 (월별, data/alerts-YYYY-MM.log) ----
   logDir = logDir || path.dirname(settingsFile);
   const KIND_KO = { alert: '경고', remind: '계속', recovery: '복귀' };
-  const DELIV_KO = { telegram: '텔레그램 전송', quiet: '조용 시간(미전송)', error: '전송 실패', off: '텔레그램 꺼짐', skipped: '이력만 기록', pending: '' };
+  const DELIV_KO = { telegram: '텔레그램 전송', quiet: '조용 시간(미전송)', error: '전송 실패', off: '텔레그램 꺼짐', skipped: '이력만 기록', held: '유예 중 (복구되면 미전송)', pending: '' };
   function logFileFor(month) { return path.join(logDir, `alerts-${month}.log`); }
   function monthKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
   function writeLog(ev) {
@@ -180,8 +181,14 @@ function create({ settingsFile, logDir, log = console.log }) {
       const sustainMs = (opts.minutes || 0) * 60000;
       if (!st.active && now - st.since >= sustainMs) {
         st.active = true; st.notified = true; st.lastSent = now; st.msg = msgFn();
-        deliver(push({ kind: 'alert', host, name, rule: opts.rule, msg: st.msg }), opts.critical);
-      } else if (st.active && settings.remind_min > 0 && now - st.lastSent >= settings.remind_min * 60000) {
+        const ev = push({ kind: 'alert', host, name, rule: opts.rule, msg: st.msg, delivery: opts.grace ? 'held' : undefined });
+        if (opts.grace) st.held = ev; else deliver(ev, opts.critical);
+      } else if (st.active && st.held && now - st.since >= opts.grace) {
+        // 유예 시간이 지나도 계속 오프라인 → 이제 전송 (새 id 로 앞에 올려 화면 소리/알림이 이때 울리도록)
+        const ev = st.held; st.held = null; st.lastSent = now; ev.msg = msgFn();
+        const i = recent.indexOf(ev); if (i >= 0) recent.splice(i, 1); ev.delivery = undefined; push(ev);
+        deliver(ev, opts.critical);
+      } else if (st.active && !st.held && settings.remind_min > 0 && now - st.lastSent >= settings.remind_min * 60000) {
         st.lastSent = now; st.msg = msgFn();
         deliver(push({ kind: 'remind', host, name, rule: opts.rule, msg: '(계속) ' + st.msg }), opts.critical);
       }
@@ -189,7 +196,12 @@ function create({ settingsFile, logDir, log = console.log }) {
       st.since = null;
       if (st.active) {
         st.active = false;
-        if (st.notified && settings.recovery) deliver(push({ kind: 'recovery', host, name, rule: opts.rule, msg: opts.recoverMsg ? opts.recoverMsg() : '정상 복귀' }), opts.critical);
+        if (st.held) {
+          // 유예 시간 안에 복구 → 텔레그램 생략, 이력에만 남김
+          const mins = Math.max(1, Math.round((now - (st.held.time || now)) / 60000));
+          st.held.delivery = 'skipped'; st.held.msg += ` — ${mins}분 내 복구, 알림 생략`; writeLog(st.held); st.held = null;
+          writeLog(push({ kind: 'recovery', host, name, rule: opts.rule, msg: (opts.recoverMsg ? opts.recoverMsg() : '정상 복귀') + ' (유예 내)', delivery: 'skipped' }));
+        } else if (st.notified && settings.recovery) deliver(push({ kind: 'recovery', host, name, rule: opts.rule, msg: opts.recoverMsg ? opts.recoverMsg() : '정상 복귀' }), opts.critical);
         st.notified = false;
       }
     }
@@ -232,7 +244,7 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (!offOn) clearRule(H, 'offline');
       // 오프라인
       if (offOn) check(`${H}|offline`, H, N, !s.online,
-        () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)`, { rule: 'offline', critical: true, recoverMsg: () => '서버 응답 복구' });
+        () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)`, { rule: 'offline', critical: true, grace: Math.max(0, Number(r.offline_grace) || 0) * 60000, recoverMsg: () => '서버 응답 복구' });
       if (!s.online) {   // 오프라인이면 다른 규칙은 판단 보류 (값이 오래된 것)
         for (const k of ['cpu', 'mem']) { const st = states.get(`${H}|${k}`); if (st) st.since = null; }
         continue;
