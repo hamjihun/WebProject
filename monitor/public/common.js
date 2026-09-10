@@ -28,7 +28,7 @@
     nav.id = 'topnav';
     nav.innerHTML = `<div class="brand">서버 모니터</div>` +
       PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}">${t}</a>`).join('') +
-      `<span class="spacer"></span><span class="ver" id="navver"></span><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
+      `<span class="spacer"></span><span class="ver" id="navver"></span><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
     st.textContent = `#topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:44px;background:var(--card,#1e293b);border-bottom:1px solid var(--line,#334155);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
@@ -38,15 +38,96 @@
 #topnav a.on{color:#fff;background:var(--accent,#38bdf8);font-weight:700}
 :root[data-theme="light"] #topnav a.on{color:#0f172a}
 #topnav .spacer{flex:1}#topnav .ver{font-size:11px;color:var(--muted,#94a3b8);margin-right:8px}
-#topnav .bell b{background:#ef4444;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:4px}`;
+#topnav .bell b{background:#ef4444;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:4px}
+#topnav .snd{background:none;border:1px solid var(--line,#334155);color:var(--muted,#94a3b8);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;margin-right:6px;font-family:inherit}
+#topnav .snd.on{color:var(--text,#e2e8f0)}#topnav .snd.ring{background:#ef4444;color:#fff;border-color:#ef4444;animation:sndblink 1s infinite}
+@keyframes sndblink{50%{opacity:.5}}`;
     document.head.appendChild(st);
+    sndInit();
   }
   async function pollNav() {
     try {
       const r = await fetch('api/alerts'); const j = await r.json();
       const c = document.getElementById('navcnt'); if (c) { c.hidden = !(j.active || []).length; c.textContent = (j.active || []).length; }
+      sndCheck(j.recent);
     } catch (e) {}
   }
-  window.MON = { UI_VERSION, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
+  if (embed) document.addEventListener('DOMContentLoaded', sndInit);
+  // ---- 알림 소리 (브라우저별 설정, localStorage) ----
+  const SND_KEY = 'mon_sound';
+  const sndDef = { on: false, dur: 15, vol: 0.6, quietOn: false, quietFrom: '22:00', quietTo: '07:00', remind: false };
+  let snd = { ...sndDef }; try { snd = { ...sndDef, ...JSON.parse(localStorage.getItem(SND_KEY) || '{}') }; } catch (e) {}
+  let actx = null, ringTimer = null, ringUntil = 0, lastEvId = null, ringing = false;
+  function sndSave() { try { localStorage.setItem(SND_KEY, JSON.stringify(snd)); } catch (e) {} sndBtn(); }
+  function inQuiet() {
+    if (!snd.quietOn) return false;
+    const d = new Date(), cur = d.getHours() * 60 + d.getMinutes(), [fh, fm] = snd.quietFrom.split(':').map(Number), [th, tm] = snd.quietTo.split(':').map(Number), f = fh * 60 + fm, t = th * 60 + tm;
+    return f <= t ? (cur >= f && cur < t) : (cur >= f || cur < t);
+  }
+  function ctx() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (actx.state === 'suspended') actx.resume().catch(() => {}); return actx; }
+  function tone(freq, at, len) { const c = ctx(); if (!c) return; const o = c.createOscillator(), g = c.createGain(); o.type = 'square'; o.frequency.value = freq; g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(snd.vol * 0.3, at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, at + len); o.connect(g).connect(c.destination); o.start(at); o.stop(at + len + 0.05); }
+  function beepOnce() { const c = ctx(); if (!c) return; const t = c.currentTime; tone(880, t, 0.18); tone(660, t + 0.22, 0.18); tone(880, t + 0.44, 0.18); }
+  function sndStop() { ringing = false; clearInterval(ringTimer); ringTimer = null; sndBtn(); }
+  function sndStart(force) {
+    if (!force && (!snd.on || inQuiet())) return;
+    ringUntil = snd.dur > 0 ? Date.now() + snd.dur * 1000 : Infinity;
+    if (ringing) return;
+    ringing = true; beepOnce(); sndBtn();
+    ringTimer = setInterval(() => { if (Date.now() > ringUntil) return sndStop(); beepOnce(); }, 1000);
+  }
+  // 최근 이벤트 목록(api/alerts 의 recent, 최신이 앞)에서 새 경고가 있으면 소리
+  function sndCheck(recent) {
+    if (!Array.isArray(recent) || !recent.length) return;
+    if (lastEvId !== null) {
+      let hit = false;
+      for (const ev of recent) { if (ev.id <= lastEvId) break; if (ev.kind === 'alert' || (ev.kind === 'remind' && snd.remind)) hit = true; }
+      if (hit) sndStart(false);
+    }
+    lastEvId = recent[0].id;
+  }
+  function sndBtn() { const b = document.getElementById('navsnd'); if (!b) return; b.classList.toggle('on', snd.on); b.classList.toggle('ring', ringing); b.textContent = ringing ? '🔕 소리 끄기' : (snd.on ? '🔊' : '🔇'); b.title = ringing ? '클릭하면 소리가 멈춥니다' : ('알림 소리 ' + (snd.on ? '켜짐' : '꺼짐') + ' · 클릭해서 설정'); }
+  function sndPanel() {
+    let p = document.getElementById('sndpanel');
+    if (p) { p.remove(); return; }
+    p = document.createElement('div'); p.id = 'sndpanel';
+    p.innerHTML = `<style>#sndpanel{position:fixed;top:48px;right:12px;width:290px;background:var(--card,#1e293b);border:1px solid var(--line,#334155);border-radius:10px;padding:14px;z-index:50;font-size:13px;color:var(--text,#e2e8f0);box-shadow:0 10px 30px rgba(0,0,0,.5);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+#sndpanel h4{margin:0 0 8px;font-size:14px}#sndpanel .f{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;color:var(--muted,#94a3b8)}
+#sndpanel select,#sndpanel input[type=time]{background:var(--bg,#0f172a);color:var(--text,#e2e8f0);border:1px solid var(--line,#334155);border-radius:6px;padding:4px 6px;font-family:inherit;font-size:12px}
+#sndpanel input[type=range]{width:120px}#sndpanel button{background:none;border:1px solid var(--line,#334155);color:var(--text,#e2e8f0);border-radius:6px;padding:5px 10px;cursor:pointer;font-family:inherit;font-size:12px;margin-top:6px}
+#sndpanel .note{font-size:11px;color:var(--muted,#94a3b8);margin-top:8px;line-height:1.5}#sndpanel .sw{width:40px;height:22px;border-radius:11px;background:#475569;position:relative;cursor:pointer;border:0;padding:0;margin:0}#sndpanel .sw.on{background:#22c55e}#sndpanel .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}#sndpanel .sw.on::after{left:21px}</style>
+<h4>알림 소리 (이 PC 브라우저)</h4>
+<div class="f"><span>소리 알림</span><button class="sw ${snd.on ? 'on' : ''}" id="sndOn"></button></div>
+<div class="f"><span>지속 시간</span><select id="sndDur">${[[5, '5초'], [15, '15초'], [30, '30초'], [60, '1분'], [180, '3분'], [0, '끌 때까지 계속']].map(([v, t]) => `<option value="${v}" ${snd.dur === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+<div class="f"><span>볼륨</span><input type="range" id="sndVol" min="0.1" max="1" step="0.1" value="${snd.vol}"></div>
+<div class="f"><span>"계속" 알림에도 소리</span><button class="sw ${snd.remind ? 'on' : ''}" id="sndRemind"></button></div>
+<div class="f"><span>방해 금지 시간</span><button class="sw ${snd.quietOn ? 'on' : ''}" id="sndQuiet"></button></div>
+<div class="f"><span></span><span><input type="time" id="sndFrom" value="${snd.quietFrom}"> ~ <input type="time" id="sndTo" value="${snd.quietTo}"></span></div>
+<div style="display:flex;gap:6px"><button id="sndTest">🔔 소리 테스트</button><button id="sndClose">닫기</button></div>
+<div class="note">새 경고(텔레그램으로 나가는 "경고")가 생기면 울립니다. 복귀는 울리지 않습니다.<br>브라우저 정책상 페이지를 연 뒤 한 번은 클릭해야 소리가 납니다. 이 설정은 PC·브라우저마다 따로 저장됩니다.</div>`;
+    document.body.appendChild(p);
+    const q = (id) => p.querySelector('#' + id);
+    const sw = (id, key) => { q(id).onclick = () => { snd[key] = !snd[key]; q(id).classList.toggle('on', snd[key]); sndSave(); if (key === 'on' && snd.on) ctx(); }; };
+    sw('sndOn', 'on'); sw('sndRemind', 'remind'); sw('sndQuiet', 'quietOn');
+    q('sndDur').onchange = (e) => { snd.dur = Number(e.target.value); sndSave(); };
+    q('sndVol').oninput = (e) => { snd.vol = Number(e.target.value); sndSave(); };
+    q('sndFrom').onchange = (e) => { snd.quietFrom = e.target.value || '22:00'; sndSave(); };
+    q('sndTo').onchange = (e) => { snd.quietTo = e.target.value || '07:00'; sndSave(); };
+    q('sndTest').onclick = () => { ctx(); if (ringing) sndStop(); else { const d = snd.dur; snd.dur = Math.min(d || 5, 5); sndStart(true); snd.dur = d; } };
+    q('sndClose').onclick = () => p.remove();
+  }
+  function sndInit() {
+    if (embed) { // TV 모드: 상단 탭이 없으므로 오른쪽 아래 작은 버튼
+      const b = document.createElement('button'); b.id = 'navsnd'; b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:40;background:rgba(30,41,59,.9);border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:14px;font-family:inherit';
+      document.body.appendChild(b);
+      const st = document.createElement('style'); st.textContent = '#navsnd.ring{background:#ef4444!important;color:#fff!important;animation:sndblink 1s infinite}@keyframes sndblink{50%{opacity:.5}}'; document.head.appendChild(st);
+    }
+    const b = document.getElementById('navsnd'); if (!b) return;
+    b.onclick = (e) => { e.preventDefault(); ctx(); if (ringing) { sndStop(); return; } sndPanel(); };
+    sndBtn();
+    document.addEventListener('click', () => { if (snd.on) ctx(); }, { capture: true });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ringing) sndStop(); });
+  }
+
+  window.MON = { UI_VERSION, sound: { check: sndCheck, start: sndStart, stop: sndStop, init: sndInit, settings: () => snd }, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
     setVersion(v) { const e = document.getElementById('navver'); if (e) e.textContent = v ? '수집기 v' + v : ''; } };
 })();

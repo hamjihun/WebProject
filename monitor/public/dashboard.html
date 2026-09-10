@@ -130,6 +130,7 @@ async function refresh() {
     const [sr, ar] = await Promise.all([fetch('api/servers'), fetch('api/alerts?n=12')]);
     const sj = await sr.json(), aj = await ar.json();
     const servers = sj.servers, active = aj.active || [], recent = aj.recent || [];
+    if (MON.sound) MON.sound.check(recent);
     MON.setVersion(sj.version);
     const byHost = {}; for (const s of servers) byHost[s.host] = s;
     const g = {}; for (const s of servers) g[s.host] = grade(s, active);

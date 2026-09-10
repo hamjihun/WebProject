@@ -176,7 +176,7 @@
 
     <div class="btns">
       <button class="primary" id="bSave">설정 저장</button>
-      <button id="bNotify">이 브라우저 알림 켜기</button>
+      <button id="bNotify">이 브라우저 알림 켜기</button> <span style="font-size:12px;color:var(--muted)">소리 알림(지속 시간·방해 금지 시간)은 상단 🔊 버튼에서</span>
       <span class="msg" id="saveMsg"></span>
     </div>
 
@@ -453,8 +453,9 @@ async function loadAlerts() {
     const r = await fetch('api/alerts'); const j = await r.json();
     activeAlerts = j.active || [];
     renderBanner();
-    // 새 이벤트 → 브라우저 알림
+    // 새 이벤트 → 소리 + 브라우저 알림
     const recent = j.recent || [];
+    if (MON.sound) MON.sound.check(recent);
     if (recent.length) {
       if (lastEventId !== null) {
         for (const ev of recent) {
