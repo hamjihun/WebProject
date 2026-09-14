@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.5.4"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.5.5"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -87,7 +87,7 @@ $BackupScript = Join-Path $Dir "backup.ps1"
 $BackupOut = Join-Path $DataDir "backup.json"
 $BackupPaths = @()
 if ($conf['BACKUP_PATH']) { $BackupPaths = @($conf['BACKUP_PATH'] -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
-else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'E:\DBBackup', 'C:\DBBackup')) { if (Test-Path $p) { $BackupPaths += $p } } }
+else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'C:\DBBackup', 'C:\DB_BACKUP')) { if (Test-Path $p) { $BackupPaths += $p } } }
 $HasBackup = (Test-Path $BackupScript) -and ($BackupPaths.Count -gt 0 -or $conf['USB'] -or $conf['SQL'])
 $backupLast = (Get-Date).AddHours(-1); $backupProc = $null
 $RemoteConf = Join-Path $DataDir "remote.conf"; $remoteCache = ''   # 수집기 화면에서 정한 설정(USB 확인 시간대 등)을 받아 backup.ps1 에 전달

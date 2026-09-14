@@ -50,7 +50,7 @@ function create({ settingsFile, logDir, log = console.log }) {
   // ---- 알림 로그 파일 (월별, data/alerts-YYYY-MM.log) ----
   logDir = logDir || path.dirname(settingsFile);
   const KIND_KO = { alert: '경고', remind: '계속', recovery: '복귀' };
-  const DELIV_KO = { telegram: '텔레그램 전송', quiet: '조용 시간(미전송)', error: '전송 실패', off: '텔레그램 꺼짐', skipped: '이력만 기록', held: '유예 중 (복구되면 미전송)', pending: '' };
+  const DELIV_KO = { telegram: '텔레그램 전송', quiet: '방해 금지 시간(미전송)', error: '전송 실패', off: '텔레그램 꺼짐', skipped: '이력만 기록', held: '유예 중 (복구되면 미전송)', pending: '' };
   function logFileFor(month) { return path.join(logDir, `alerts-${month}.log`); }
   function monthKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
   function writeLog(ev) {

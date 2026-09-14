@@ -13,7 +13,7 @@ try { if ($ConfPath -and (Test-Path $ConfPath)) { foreach ($line in Get-Content 
 # ---- 백업 폴더 (SQL 유지 관리 계획이 .bak 을 쓰는 곳) ----
 $paths = @()
 if ($conf['BACKUP_PATH']) { $paths = @($conf['BACKUP_PATH'] -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
-else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'E:\DBBackup', 'C:\DBBackup')) { if (Test-Path $p) { $paths += $p } } }
+else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'C:\DBBackup', 'C:\DB_BACKUP')) { if (Test-Path $p) { $paths += $p } } }
 function ScanFolder($root, $depth) {
   # 폴더 아래 백업 파일(.bak/.trn/.dif/.zip/.7z) 중 최신 파일과 개수·용량
   $r = @{ path = $root; exists = (Test-Path $root); newest_file = $null; newest_time = $null; count = 0; size = 0; error = '' }
@@ -77,39 +77,46 @@ if ($win -match '^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$') {
 $usb = $null
 if ($conf['USB'] -ne '0') {
   $prev = @{}; try { if (Test-Path $UsbState) { $prev = Get-Content $UsbState -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
-  $usb = @{ connected = $false; drive = ''; label = ''; path = ''; newest_file = $null; newest_time = $null; count = 0; size = 0; free = 0; total = 0; last_seen = $null; error = '' }
-  foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'count', 'size', 'free', 'total', 'last_seen')) { try { if ($prev.$k -ne $null) { $usb[$k] = $prev.$k } } catch {} }
-  # USB 로 연결된 디스크의 드라이브 문자 찾기
+  $usb = @{ connected = $false; drive = ''; label = ''; path = ''; newest_file = $null; newest_time = $null; count = 0; size = 0; free = 0; total = 0; last_seen = $null; last_scan = $null; error = '' }
+  foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan')) { try { if ($prev.$k -ne $null) { $usb[$k] = $prev.$k } } catch {} }
+  # 1) 후보 드라이브: agent.conf USB=E: 지정 > USB 인터페이스 디스크 > 이동식 > C:/D: 가 아니면서 backup/bak/db 폴더가 있는 드라이브
   $letters = @()
-  if (-not $inWindow) { }
-  elseif ($conf['USB'] -and $conf['USB'] -ne 'auto') { $letters = @($conf['USB'] -split ',' | ForEach-Object { $_.Trim().TrimEnd('\') } | Where-Object { $_ }) }
+  $sysLetters = @('C:', 'D:'); foreach ($p in $paths) { if ($p -match '^([A-Za-z]:)') { $sysLetters += $matches[1].ToUpper() } }
+  if ($conf['USB'] -and $conf['USB'] -ne 'auto') { $letters = @($conf['USB'] -split ',' | ForEach-Object { $_.Trim().TrimEnd('\') } | Where-Object { $_ }) }
   else {
     try {
-      foreach ($dd in @(Get-CimInstance Win32_DiskDrive | Where-Object { $_.InterfaceType -eq 'USB' })) {
+      foreach ($dd in @(Get-CimInstance Win32_DiskDrive | Where-Object { $_.InterfaceType -eq 'USB' -or $_.PNPDeviceID -match 'USBSTOR|USB' })) {
         foreach ($part in @(Get-CimAssociatedInstance -InputObject $dd -ResultClassName Win32_DiskPartition)) {
           foreach ($ld in @(Get-CimAssociatedInstance -InputObject $part -ResultClassName Win32_LogicalDisk)) { $letters += $ld.DeviceID }
         }
       }
-      foreach ($ld in @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2")) { if ($letters -notcontains $ld.DeviceID -and $ld.Size -gt 4GB) { $letters += $ld.DeviceID } }
+      foreach ($ld in @(Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -or $_.DriveType -eq 3 })) {
+        $L = $ld.DeviceID
+        if ($letters -contains $L -or $sysLetters -contains $L) { continue }
+        if ($ld.DriveType -eq 2 -and $ld.Size -gt 4GB) { $letters += $L; continue }
+        try { if (@(Get-ChildItem -Path "$L\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'backup|bak|db' }).Count -gt 0) { $letters += $L } } catch {}
+      }
     } catch { $usb.error = $_.Exception.Message }
   }
   $letters = @($letters | Sort-Object -Unique | Where-Object { Test-Path "$_\" })
-  if (-not $inWindow) { $letters = @() }
   if ($letters.Count -gt 0) {
-    # 여러 개면 백업 폴더가 있는 것 우선
     $pick = $null; $pickPath = ''
     foreach ($L in $letters) {
-      $cands = @()
-      try { $cands = @(Get-ChildItem -Path "$L\" -Directory -Depth 1 -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'backup|bak|db' }) } catch {}
+      $cands = @(); try { $cands = @(Get-ChildItem -Path "$L\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'backup|bak|db' }) } catch {}
       if ($cands.Count -gt 0) { $pick = $L; $pickPath = ($cands | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName; break }
       if (-not $pick) { $pick = $L; $pickPath = "$L\" }
     }
     $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$pick'"
-    $scan = ScanFolder $pickPath $(if ($pickPath -match '^[A-Z]:\\$') { 3 } else { 0 })
     $usb.connected = $true; $usb.drive = $pick; $usb.label = [string]$ld.VolumeName; $usb.path = $pickPath
-    $usb.newest_file = $scan.newest_file; $usb.newest_time = $scan.newest_time; $usb.count = $scan.count; $usb.size = $scan.size
     $usb.free = [int64]$ld.FreeSpace; $usb.total = [int64]$ld.Size; $usb.last_seen = Iso (Get-Date)
-    if ($scan.error) { $usb.error = $scan.error }
+    # 2) 폴더 훑기(무거움)는 확인 시간대 안이거나, 새 드라이브가 꽂혔거나, 마지막 훑은 지 1시간이 넘었을 때만
+    $lastScan = $null; try { if ($usb.last_scan) { $lastScan = [datetime]::Parse($usb.last_scan) } } catch {}
+    $newDrive = ($prev.drive -ne $pick) -or ($prev.path -ne $pickPath)
+    if ($inWindow -or $newDrive -or (-not $lastScan) -or (((Get-Date) - $lastScan).TotalMinutes -ge 60)) {
+      $scan = ScanFolder $pickPath $(if ($pickPath -match '^[A-Z]:\\$') { 3 } else { 0 })
+      $usb.newest_file = $scan.newest_file; $usb.newest_time = $scan.newest_time; $usb.count = $scan.count; $usb.size = $scan.size; $usb.last_scan = Iso (Get-Date)
+      if ($scan.error) { $usb.error = $scan.error }
+    }
     try { $usb | ConvertTo-Json -Compress | Set-Content -Path $UsbState -Encoding UTF8 } catch {}
   }
 }
