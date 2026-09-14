@@ -1,7 +1,7 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.12.8';
-  const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['stats.html', '통계 · 리포트']];
+  const UI_VERSION = '1.13.0';
+  const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
   const embed = params.get('embed') === '1' || params.get('tv') === '1';

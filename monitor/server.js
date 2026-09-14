@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.12.8';
+const VERSION = '1.13.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -156,6 +156,23 @@ function reportCsv(from, to, gran) {
 
 let topology = { nodes: {}, links: [], groups: [], notes: [] };   // 구성도 (화면에서 편집)
 let order = [];   // 화면 카드 순서 (호스트명 배열). 화면에서 드래그하면 갱신됨
+let backupDays = {};   // 일자별 백업 이력 { host: { 'YYYY-MM-DD': { sql:{...}, usb:{...}, veeam:{ 작업명:{...} } } } } — 에이전트가 보낸 최신 상태에서 날짜별로 누적
+const BACKUP_DAYS_KEEP = 400;
+// 에이전트가 보낸 backups 를 날짜별 이력에 반영 (같은 날짜는 최신 값으로 덮어씀)
+function recordBackupDays(host, b) {
+  if (!b) return;
+  const H = backupDays[host] = backupDays[host] || {};
+  const day = (t) => { if (!t) return null; const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const get = (k) => (H[k] = H[k] || {});
+  if (Array.isArray(b.files) && b.files.length) {
+    const f = b.files.reduce((a, x) => (x.newest_time || 0) > (a.newest_time || 0) ? x : a, b.files[0]);
+    const k = day(f.newest_time); if (k) get(k).sql = { time: f.newest_time, file: f.newest_file, size: f.newest_size, count: f.count, total: f.size, path: f.path };
+  }
+  if (b.sql && Array.isArray(b.sql.dbs)) for (const d of b.sql.dbs) { const k = day(d.full); if (k) { const s = get(k); s.dbs = s.dbs || {}; s.dbs[d.db] = { time: d.full, size: d.size }; } }
+  if (b.usb) { const t = Math.max(b.usb.copied_time || 0, b.usb.done_time || 0) || b.usb.newest_time; const k = day(t); if (k) get(k).usb = { time: t, count: b.usb.count, free: b.usb.free, total: b.usb.total, ok: b.usb.done_ok, code: b.usb.done_code, drive: b.usb.drive, file: b.usb.newest_file }; }
+  if (Array.isArray(b.jobs)) for (const j of b.jobs) { const k = day(j.end || j.start); if (k && j.result && j.result !== 'None') { const s = get(k); s.veeam = s.veeam || {}; s.veeam[j.name] = { result: j.result, end: j.end, size: j.size, duration: j.duration, type: j.type }; } }
+  const keys = Object.keys(H); if (keys.length > BACKUP_DAYS_KEEP) { keys.sort(); for (const k of keys.slice(0, keys.length - BACKUP_DAYS_KEEP)) delete H[k]; }
+}
 
 // ---- 스냅샷 저장/복원 (재시작해도 이력 유지) ----
 function loadState() {
@@ -165,6 +182,7 @@ function loadState() {
     const hosts = obj.hosts || obj;                       // 구버전 파일은 호스트 맵 그대로
     if (Array.isArray(obj.order)) order = obj.order.filter((h) => typeof h === 'string');
     if (obj.topology && typeof obj.topology === 'object') topology = { nodes: {}, links: [], groups: [], notes: [], ...obj.topology };
+    if (obj.backupDays && typeof obj.backupDays === 'object') backupDays = obj.backupDays;
     alerter.importState(obj.alerts);
     for (const [host, e] of Object.entries(hosts)) if (e && e.latest) store.set(host, { latest: e.latest, history: (e.history || []).slice(-HISTORY), daily: e.daily || {} });
     console.log(`스냅샷 복원: ${store.size}대 (${STATE_FILE})`);
@@ -175,7 +193,7 @@ function saveState(sync) {
   if (!STATE_FILE || !dirty) return;
   dirty = false;
   const hosts = {}; for (const [h, e] of store) hosts[h] = e;
-  const obj = { hosts, order, topology, alerts: alerter.exportState() };
+  const obj = { hosts, order, topology, backupDays, alerts: alerter.exportState() };
   const tmp = STATE_FILE + '.tmp';
   try {
     fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
@@ -320,6 +338,7 @@ function ingest(raw, remoteIp) {
   if (!entry) { entry = { latest: null, history: [], daily: {} }; store.set(m.host, entry); }
   entry.latest = m;
   recordDaily(entry, m);
+  if (m.backups) recordBackupDays(m.host, visibleBackups(m.backups));
   recordHourly(m); hourlyDirty = true;
   entry.history.push({ ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx });
   if (entry.history.length > HISTORY) entry.history.splice(0, entry.history.length - HISTORY);
@@ -355,7 +374,7 @@ function removeHost(host) {
   const existed = store.delete(host);
   delete hourly[host]; delete hourCur[host]; hourlyDirty = true;
   if (topology.nodes[host] && !topology.nodes[host].custom) { delete topology.nodes[host]; topology.links = topology.links.filter((l) => l.a !== host && l.b !== host); }
-  order = order.filter((h) => h !== host);
+  order = order.filter((h) => h !== host); delete backupDays[host];
   alerter.forget(host);
   if (existed) dirty = true;
   return existed;
@@ -444,6 +463,27 @@ const server = http.createServer(async (req, res) => {
     const k = (t) => dayKey(t).replace(/-/g, '');
     res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="report-${k(from)}-${k(to)}.csv"`, 'Cache-Control': 'no-store' });
     return res.end(reportCsv(from, to, gran));
+  }
+  // 일자별 백업 이력: ?month=YYYY-MM (기본 이번 달) 또는 ?days=N
+  if (req.method === 'GET' && url.pathname === '/api/backups') {
+    const now = new Date(); let from, to;
+    const mo = url.searchParams.get('month') || '';
+    if (/^\d{4}-\d{2}$/.test(mo)) { const [y, m] = mo.split('-').map(Number); from = new Date(y, m - 1, 1); to = new Date(y, m, 0); }
+    else { const n = Math.min(400, Math.max(1, Number(url.searchParams.get('days') || 31))); to = new Date(now.getFullYear(), now.getMonth(), now.getDate()); from = new Date(to); from.setDate(from.getDate() - n + 1); }
+    const days = []; for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) days.push(dayKey(d.getTime()));
+    const hosts = [], data = {};
+    for (const s of serversView()) {
+      if (!s.backups && !backupDays[s.host]) continue;
+      const b = s.backups || {}; const H = backupDays[s.host] || {};
+      const stages = []; if ((b.files && b.files.length) || Object.values(H).some((x) => x.sql)) stages.push('sql');
+      if ((b.jobs && b.jobs.length) || Object.values(H).some((x) => x.veeam)) stages.push('veeam');
+      if (b.usb || Object.values(H).some((x) => x.usb)) stages.push('usb');
+      const jobs = new Set((b.jobs || []).filter((j) => j.enabled !== false).map((j) => j.name)); for (const k of days) for (const jn of Object.keys((H[k] && H[k].veeam) || {})) jobs.add(jn);
+      hosts.push({ host: s.host, name: s.name || '', online: s.online, stages, jobs: [...jobs], latest: b });
+      data[s.host] = {}; for (const k of days) if (H[k]) data[s.host][k] = H[k];
+    }
+    const r = alerter.getSettings().rules;
+    return json(res, 200, { from: days[0], to: days[days.length - 1], days, hosts, data, today: dayKey(Date.now()), settings: { skip_weekend: r.backup_skip_weekend !== false, max_hours: r.backup_max_hours, usb_max_hours: r.usb_max_hours, check_time: r.backup_check_time } });
   }
   // 구성도 저장/조회
   if (req.method === 'GET' && url.pathname === '/api/topology') return json(res, 200, topology);

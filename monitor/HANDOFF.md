@@ -6,12 +6,13 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.12.8) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.13.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade)·**알림 소리**(MON.sound: localStorage `mon_sound` {on,dur,vol,quietOn,quietFrom,quietTo,remind}, Web Audio 비프, 🔊 버튼 패널, TV 모드는 오른쪽 아래 버튼, `sound.check(recent)` 를 index/dashboard/pollNav 가 호출). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
 | `public/dashboard.html` | TV 대시보드 (`?tv=1` 탭 숨김, 위험 시 점멸) | 브라우저 |
 | `public/topology.html` | 구성도 편집기 v2. 장비 아이콘 18종(ICONS, stroke SVG), 영역 도형 6종(groups[].kind: rect/round/ellipse/diamond/hex/cloud, color/fill/dash/tpos/fs), 연결 선(links[]: style solid/dashed/dotted, route straight/elbow-v/elbow-h, arrow, width, color, label), 메모(color/bg/fs), 노드(icon/size s·m·l/label/sub/color/nometric), 상자 안 LED 상태등(grade), 속성 패널, 실행취소(undo 스택), 복제, 격자, 화면 끌기·Ctrl+휠 확대, 단축키. 저장은 `PUT /api/topology` → state.json `topology` (서버는 nodes/links/groups/notes 만 보존) | 브라우저 |
+| `public/backup.html` | **백업 탭**: 월별 일자 매트릭스(행 = 서버×단계, Veeam 은 작업별; 열 = 날짜). 셀 상태 ok/warn/bad/run/miss/none(주말)/wait(오늘 판단 시각 전)/future, 툴팁·클릭 상세, 단계별 오늘·이번 달 성공률 KPI. 데이터: `GET /api/backups?month=YYYY-MM` — server.js `backupDays{host:{날짜:{sql,dbs,usb,veeam{작업}}}}` 를 ingest 때 `recordBackupDays()` 로 누적(state.json 저장, 400일). 날짜는 백업 파일 시각/복사 시각/Veeam 종료 시각 기준 | 브라우저 |
 | `public/stats.html` | 통계·리포트. 기간(오늘/7일/30일/90일/1년/월)·서버 선택, KPI, CPU·메모리 추이(SVG 직접 그림, 외부 라이브러리 없음), 일별 경고 건수, 가동률, 서버별 요약표, 디스크 증감표(+단일 서버 시 일별 사용량 그래프), 경고 이력. CSV 는 `GET /api/report.csv`, PDF 는 인쇄 스타일(`@media print`, A4 가로) + `window.print()`. 데이터: `data/hourly.json` (host→[{h,n,ca,cx,ma,mx,off}], 366일) 과 daily 스냅샷, 월별 알림 로그 | 브라우저 |
 | `agent/win/` | Windows 에이전트 소스: `agent.ps1`(수집), `tray.ps1`(트레이), `service.ps1`(작업 등록; 2012 의 ExecutionTimeLimit 0 무시 버그를 XML 재등록으로 우회, 감시자 작업 `IMSMonitoringAgentWatchdog` 5분마다 XML 등록), `watchdog.ps1`(agent.ps1 프로세스 없거나 status.json 3분 이상 미갱신이면 재시작, agent.log 에 [감시자] 기록), `start.ps1/.vbs`(바탕화면 실행), `installer.nsi`(NSIS), `make-icon.py`(아이콘) | 각 Windows 서버 |
 | `dist/IMS-Monitoring-Agent-Setup.exe` (v1.5.10) | 빌드된 설치 파일. `agent/win/build.sh` (makensis) 로 재빌드 | 각 Windows 서버 |
@@ -40,6 +41,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-14 (16): 백업 탭(backup.html) 신설, 수집기 1.13.0. common.js PAGES 에 backup.html 추가(탭 5개). 시드 테스트(scratchpad shot-bk.js) 로 매트릭스·툴팁·상세 확인. 주말 처리: SQL/USB 는 backup_skip_weekend 면 none, Veeam 은 매일 기대.
 - 2026-09-14 (15): agent.log 한글 깨짐 — 자식 스크립트가 `-Encoding UTF8` 로 쓰고 agent.ps1 은 기본(ANSI) 으로 써서 섞임 → 전부 기본 인코딩으로 통일 (에이전트 1.5.10). 알림 설정 USB 시간대 label `grid-column:span 2`, time 입력 130px (수집기 1.12.8).
 - 2026-09-14 (14): 1.12.5 의 USB 표 템플릿 한 줄이 깨져(IIFE 뒤에 문자열 조각) index.html 전체 스크립트가 멈춤("연결 중…" 고정, 탭 미표시) → 수정, 수집기 1.12.7. CLAUDE.md 에 화면/PS 문법 검사 규칙 추가.
 - 2026-09-14 (13): `rules.backup_hide`(기본 'Cloudoc, Cloudoc_clone1') — server.js `visibleBackups()` 가 serversView 에서 해당 이름 Veeam 작업을 제외(화면·알림 모두). 알림 설정 "표시·판단에서 뺄 백업 작업 이름" 입력. 수집기 1.12.6.
