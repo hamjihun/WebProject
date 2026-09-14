@@ -152,14 +152,14 @@ while ($true) {
     if ($HasVeeam) {
       if ((-not $veeamProc -or $veeamProc.HasExited) -and ((Get-Date) - $veeamLast).TotalMinutes -ge 10) {
         $veeamLast = Get-Date
-        try { $veeamProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$VeeamScript`"" -WindowStyle Hidden -PassThru } catch { Log "Veeam 수집 실행 실패: $($_.Exception.Message)" }
+        try { $veeamProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$VeeamScript`"" -WindowStyle Hidden -PassThru; try { $veeamProc.PriorityClass = 'BelowNormal' } catch {} } catch { Log "Veeam 수집 실행 실패: $($_.Exception.Message)" }
       }
       try { if ((Test-Path $VeeamOut) -and ((Get-Date) - (Get-Item $VeeamOut).LastWriteTime).TotalHours -lt 3) { $backups = Get-Content $VeeamOut -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
     }
     if ($HasBackup) {
       if ((-not $backupProc -or $backupProc.HasExited) -and ((Get-Date) - $backupLast).TotalMinutes -ge 5) {
         $backupLast = Get-Date
-        try { $backupProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$BackupScript`" -ConfPath `"$confPath`"" -WindowStyle Hidden -PassThru } catch { Log "백업 수집 실행 실패: $($_.Exception.Message)" }
+        try { $backupProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$BackupScript`" -ConfPath `"$confPath`"" -WindowStyle Hidden -PassThru; try { $backupProc.PriorityClass = 'BelowNormal' } catch {} } catch { Log "백업 수집 실행 실패: $($_.Exception.Message)" }
       }
       try {
         if ((Test-Path $BackupOut) -and ((Get-Date) - (Get-Item $BackupOut).LastWriteTime).TotalHours -lt 2) {

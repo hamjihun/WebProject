@@ -14,19 +14,20 @@ try { if ($ConfPath -and (Test-Path $ConfPath)) { foreach ($line in Get-Content 
 $paths = @()
 if ($conf['BACKUP_PATH']) { $paths = @($conf['BACKUP_PATH'] -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'E:\DBBackup', 'C:\DBBackup')) { if (Test-Path $p) { $paths += $p } } }
-function ScanFolder($root, $maxFiles) {
+function ScanFolder($root, $depth) {
   # 폴더 아래 백업 파일(.bak/.trn/.dif/.zip/.7z) 중 최신 파일과 개수·용량
   $r = @{ path = $root; exists = (Test-Path $root); newest_file = $null; newest_time = $null; count = 0; size = 0; error = '' }
   if (-not $r.exists) { return $r }
   try {
-    $files = @(Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' })
+    $gci = @{ Path = $root; Recurse = $true; File = $true; ErrorAction = 'SilentlyContinue' }; if ($depth -gt 0) { $gci.Depth = $depth }   # USB 전체를 훑을 땐 3단계까지만
+    $files = @(Get-ChildItem @gci | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' })
     $r.count = $files.Count; $r.size = [int64](($files | Measure-Object Length -Sum).Sum)
     $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($n) { $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\'); $r.newest_time = Iso $n.LastWriteTime; $r.newest_size = [int64]$n.Length }
   } catch { $r.error = $_.Exception.Message }
   return $r
 }
-$files = @(); foreach ($p in $paths) { $files += ScanFolder $p }
+$files = @(); foreach ($p in $paths) { $files += ScanFolder $p 0 }
 
 # ---- SQL Server msdb 백업 기록 (DB별 마지막 전체/차등/로그 백업) ----
 $sql = $null
@@ -93,7 +94,7 @@ if ($conf['USB'] -ne '0') {
       if (-not $pick) { $pick = $L; $pickPath = "$L\" }
     }
     $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$pick'"
-    $scan = ScanFolder $pickPath 0
+    $scan = ScanFolder $pickPath $(if ($pickPath -match '^[A-Z]:\\$') { 3 } else { 0 })
     $usb.connected = $true; $usb.drive = $pick; $usb.label = [string]$ld.VolumeName; $usb.path = $pickPath
     $usb.newest_file = $scan.newest_file; $usb.newest_time = $scan.newest_time; $usb.count = $scan.count; $usb.size = $scan.size
     $usb.free = [int64]$ld.FreeSpace; $usb.total = [int64]$ld.Size; $usb.last_seen = Iso (Get-Date)
