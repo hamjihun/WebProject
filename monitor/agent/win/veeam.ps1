@@ -5,7 +5,7 @@
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $Out = Join-Path $DataDir "veeam.json"
 $LogFile = Join-Path $DataDir "agent.log"
-function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [Veeam] {1}" -f (Get-Date), $m) -Encoding UTF8 } catch {} }
+function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [Veeam] {1}" -f (Get-Date), $m) } catch {} }
 function Save($obj) { try { $obj | ConvertTo-Json -Depth 6 -Compress | Set-Content -Path $Out -Encoding UTF8 } catch { Log "저장 실패: $($_.Exception.Message)" } }
 function Iso($d) { try { if ($d -and ($d -is [datetime]) -and $d.Year -gt 2000) { return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } } catch {}; return $null }
 function Str($v) { try { if ($null -eq $v) { return '' }; $s = [string]$v; if ($v -is [array]) { $s = [string]$v[0] }; return ($s -split '\s+')[0] } catch { return '' } }

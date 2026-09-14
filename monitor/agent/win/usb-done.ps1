@@ -7,7 +7,7 @@ param([int]$Code = 0, [string]$Path = '', [string]$Tool = 'robocopy')
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $Out = Join-Path $DataDir "usb-done.json"
 $LogFile = Join-Path $DataDir "agent.log"
-function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [USB] {1}" -f (Get-Date), $m) -Encoding UTF8 } catch {} }
+function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [USB] {1}" -f (Get-Date), $m) } catch {} }
 function Iso($d) { try { if ($d -and ($d -is [datetime]) -and $d.Year -gt 2000) { return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } } catch {}; return $null }
 try { New-Item -ItemType Directory -Force -Path $DataDir | Out-Null } catch {}
 $ok = $(if ($Tool -eq 'xcopy') { $Code -eq 0 } else { $Code -lt 8 })

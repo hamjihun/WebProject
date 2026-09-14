@@ -151,7 +151,7 @@
       <label>SQL·Veeam 백업이 이 시간 넘게 없으면 알림 (시간)<input type="number" id="rBackupHours" min="1" max="720"></label>
       <label>USB 백업이 이 시간 넘게 없으면 알림 (시간)<input type="number" id="rUsbHours" min="1" max="720"></label>
       <label class="chk"><input type="checkbox" id="rSkipWeekend"> 토·일은 백업을 안 하므로 시간 계산에서 뺌</label>
-      <label>USB 를 꽂아 복사하는 시간대<span style="display:flex;gap:6px;align-items:center"><input type="time" id="rUsbFrom"> ~ <input type="time" id="rUsbTo"></span><span class="dim" style="font-size:11px">이 시간에만 USB 를 확인. 비우면 항상</span></label>
+      <label style="grid-column:span 2">USB 를 꽂아 복사하는 시간대 <span class="dim" style="font-size:11px">(이 시간에만 USB 를 확인. 비우면 항상)</span><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="time" id="rUsbFrom" style="width:130px;flex:none"> ~ <input type="time" id="rUsbTo" style="width:130px;flex:none"></span></label>
       <label class="wide">표시·판단에서 뺄 백업 작업 이름 (쉼표로 구분)<input type="text" id="rBackupHide" placeholder="예: Cloudoc, Cloudoc_clone1"></label>
       <label>백업 판단 시각 (하루 1회)<input type="time" id="rBackupTime"><span class="dim" style="font-size:11px">새벽 백업이 끝난 뒤 시각. 비우면 10분마다 계속 판단</span></label>
     </div>
@@ -240,7 +240,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.12.7';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.12.8';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';

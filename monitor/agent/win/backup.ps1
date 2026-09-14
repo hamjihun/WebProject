@@ -6,7 +6,7 @@ $Out = Join-Path $DataDir "backup.json"
 $UsbState = Join-Path $DataDir "usb-state.json"
 $UsbDone = Join-Path $DataDir "usb-done.json"     # usb-done.ps1 (bat 파일에서 호출) 이 남기는 복사 완료 기록
 $LogFile = Join-Path $DataDir "agent.log"
-function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [백업] {1}" -f (Get-Date), $m) -Encoding UTF8 } catch {} }
+function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [백업] {1}" -f (Get-Date), $m) } catch {} }
 function Iso($d) { try { if ($d -and ($d -is [datetime]) -and $d.Year -gt 2000) { return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } } catch {}; return $null }
 $conf = @{}
 try { if ($ConfPath -and (Test-Path $ConfPath)) { foreach ($line in Get-Content $ConfPath) { if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$') { $conf[$matches[1].ToUpper()] = $matches[2] } } } } catch {}

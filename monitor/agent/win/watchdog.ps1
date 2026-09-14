@@ -5,7 +5,7 @@ $TaskName = "IMSMonitoringAgent"
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
-function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [감시자] {1}" -f (Get-Date), $m) -Encoding UTF8 } catch {} }
+function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [감시자] {1}" -f (Get-Date), $m) } catch {} }
 
 $procs = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\agent\.ps1' })
 $reason = $null
