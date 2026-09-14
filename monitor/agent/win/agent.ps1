@@ -81,6 +81,12 @@ $VeeamOut = Join-Path $DataDir "veeam.json"
 $HasVeeam = (Test-Path $VeeamScript) -and ((Test-Path "$env:ProgramFiles\Veeam\Backup and Replication\Backup") -or (Test-Path "$env:ProgramFiles\Veeam\Backup and Replication\Console"))
 $veeamLast = (Get-Date).AddHours(-1); $veeamProc = $null
 if ($HasVeeam) { Log "Veeam 감지: 백업 작업 상태를 10분마다 수집합니다" }
+# SQL 백업 폴더 / USB 복사 감시 (backup.ps1): 백업 폴더가 있거나 agent.conf 에 BACKUP_PATH/USB/SQL 이 있으면 5분마다
+$BackupScript = Join-Path $Dir "backup.ps1"
+$BackupOut = Join-Path $DataDir "backup.json"
+$HasBackup = (Test-Path $BackupScript) -and ($conf['BACKUP_PATH'] -or $conf['USB'] -or $conf['SQL'] -or (Test-Path 'D:\DBBackup') -or (Test-Path 'D:\DB_BACKUP') -or (Test-Path 'E:\DBBackup') -or (Test-Path 'C:\DBBackup'))
+$backupLast = (Get-Date).AddHours(-1); $backupProc = $null
+if ($HasBackup) { Log "백업 폴더 감지: SQL 백업 파일·USB 복사 상태를 5분마다 수집합니다" }
 function Get-DisplayName {
   try {
     if (Test-Path $DisplayFile) {
@@ -149,6 +155,19 @@ while ($true) {
         try { $veeamProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$VeeamScript`"" -WindowStyle Hidden -PassThru } catch { Log "Veeam 수집 실행 실패: $($_.Exception.Message)" }
       }
       try { if ((Test-Path $VeeamOut) -and ((Get-Date) - (Get-Item $VeeamOut).LastWriteTime).TotalHours -lt 3) { $backups = Get-Content $VeeamOut -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
+    }
+    if ($HasBackup) {
+      if ((-not $backupProc -or $backupProc.HasExited) -and ((Get-Date) - $backupLast).TotalMinutes -ge 5) {
+        $backupLast = Get-Date
+        try { $backupProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$BackupScript`" -ConfPath `"$confPath`"" -WindowStyle Hidden -PassThru } catch { Log "백업 수집 실행 실패: $($_.Exception.Message)" }
+      }
+      try {
+        if ((Test-Path $BackupOut) -and ((Get-Date) - (Get-Item $BackupOut).LastWriteTime).TotalHours -lt 2) {
+          $bk = Get-Content $BackupOut -Raw -Encoding UTF8 | ConvertFrom-Json
+          if (-not $backups) { $backups = New-Object PSObject; $backups | Add-Member NoteProperty time $bk.time }
+          foreach ($k in @('files', 'sql', 'usb')) { if ($bk.$k -ne $null) { $backups | Add-Member NoteProperty $k $bk.$k -Force } }
+        }
+      } catch {}
     }
     $payload = @{
       host = $HostName; name = (Get-DisplayName); os = $osName; token = $Token

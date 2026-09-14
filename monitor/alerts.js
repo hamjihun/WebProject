@@ -17,7 +17,9 @@ const DEFAULTS = {
     backup_on: true,                            // 백업(Veeam) 알림: 실패/경고/미실행
     backup_warn: true,                          // Warning 도 알림
     backup_max_hours: 26,                       // 이 시간 넘게 성공 기록이 없으면 알림
-    backup_check_time: '08:00',                 // 백업 판단 시각 (하루 1회, 새벽 백업이 끝난 뒤). 비우면 항상
+    backup_check_time: '08:00',
+    usb_max_hours: 30,                          // USB 복사본 최신 파일이 이 시간(주말 제외) 넘게 오래되면 알림
+    backup_skip_weekend: true,                  // 주말(토·일)은 백업 안 도는 것으로 보고 경과 시간에서 제외                 // 백업 판단 시각 (하루 1회, 새벽 백업이 끝난 뒤). 비우면 항상
     offline_grace: 0,                           // 오프라인 유예(분): 이 시간 안에 복구되면 텔레그램 생략, 이력만 기록 (0=즉시 전송)
     disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
   },
@@ -229,6 +231,14 @@ function create({ settingsFile, logDir, log = console.log }) {
     return false;
   }
   function diskCheckDue() { return dailyDue('disk', settings.rules.disk_check_time); }
+  // 경과 시간(시간). skipWeekend 면 토·일에 해당하는 시간을 뺀다 (주말엔 백업이 안 도니까)
+  function hoursSince(from, now, skipWeekend) {
+    if (!from) return null;
+    if (!skipWeekend) return (now - from) / 3600000;
+    let h = 0, t = from;
+    while (t < now) { const d = new Date(t); const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime(); const seg = Math.min(dayEnd, now) - t; if (d.getDay() !== 0 && d.getDay() !== 6) h += seg / 3600000; t = dayEnd; }
+    return h;
+  }
 
   function evaluate(servers) {
     const r = settings.rules;
@@ -274,7 +284,33 @@ function create({ settingsFile, logDir, log = console.log }) {
           { rule: 'full', threshold: r.days_left, recoverMsg: () => `${d.mount} 드라이브 소진 예상 해제` });
       }
       // 백업 (Veeam 서버 에이전트가 보낸 backups): 실패/경고, 오래 성공 없음, 저장소 용량
-      if (bkOn && bkNow && s.backups && Array.isArray(s.backups.jobs)) {   // 백업은 지정 시각(기본 08:00)에 하루 한 번 판단
+      if (bkOn && bkNow && s.backups) {   // 백업은 지정 시각(기본 08:00)에 하루 한 번 판단
+        const maxHb = Math.max(1, Number(r.backup_max_hours) || 26), skipW = r.backup_skip_weekend !== false, nowT = Date.now();
+        const fmtAge = (h) => h == null ? '기록 없음' : h < 48 ? `${Math.round(h)}시간` : `${Math.round(h / 24)}일`;
+        // 1차: SQL 백업 (폴더 최신 파일 + msdb 기록)
+        for (const f of (s.backups.files || [])) {
+          const age = hoursSince(f.newest_time, nowT, skipW);
+          check(`${H}|backup|sql:${f.path}`, H, N, !f.exists || age == null || age > maxHb,
+            () => !f.exists ? `SQL 백업 폴더 ${f.path} 없음` : age == null ? `SQL 백업 파일 없음 (${f.path})` : `SQL 백업 ${fmtAge(age)}째 없음 (${f.path}, 최신 ${fmtTs(new Date(f.newest_time))}, 기준 ${maxHb}시간${skipW ? ', 주말 제외' : ''})`,
+            { rule: 'backup', threshold: maxHb, recoverMsg: () => `SQL 백업 정상 (${f.path})` });
+        }
+        if (s.backups.sql && !s.backups.sql.error) for (const d of (s.backups.sql.dbs || [])) {
+          const age = hoursSince(d.full, nowT, skipW);
+          check(`${H}|backup|db:${d.db}`, H, N, age == null || age > maxHb * 7,   // DB 별 전체 백업은 여유 있게 (주 1회 전체 + 매일 차등 구성도 있으므로)
+            () => age == null ? `DB "${d.db}" 전체 백업 기록 없음` : `DB "${d.db}" 전체 백업 ${fmtAge(age)}째 없음 (마지막 ${fmtTs(new Date(d.full))})`,
+            { rule: 'backup', threshold: maxHb, recoverMsg: () => `DB "${d.db}" 전체 백업 확인` });
+        }
+        // 3차: USB 복사본
+        if (s.backups.usb) {
+          const u = s.backups.usb, maxHu = Math.max(1, Number(r.usb_max_hours) || 30), age = hoursSince(u.newest_time, nowT, skipW);
+          check(`${H}|backup|usb`, H, N, age == null || age > maxHu,
+            () => age == null ? `USB 백업 기록 없음 (USB 가 꽂힌 동안 확인된 적 없음)` : `USB 백업 ${fmtAge(age)}째 없음 (USB 최신 파일 ${fmtTs(new Date(u.newest_time))}, 기준 ${maxHu}시간${skipW ? ', 주말 제외' : ''})`,
+            { rule: 'backup', threshold: maxHu, recoverMsg: () => `USB 백업 확인 (최신 ${u.newest_time ? fmtTs(new Date(u.newest_time)) : ''})` });
+          if (u.total) check(`${H}|backup|usbfree`, H, N, u.free / u.total < 0.1,
+            () => `USB 남은 용량 부족 (${fmtBytes(u.free)} / ${fmtBytes(u.total)}) — 새 USB 준비 필요`, { rule: 'backup', recoverMsg: () => 'USB 용량 여유 확인' });
+        }
+      }
+      if (bkOn && bkNow && s.backups && Array.isArray(s.backups.jobs)) {   // 2차: Veeam
         const maxH = Math.max(1, Number(r.backup_max_hours) || 26), warnOn = r.backup_warn !== false;
         for (const j of s.backups.jobs) {
           if (j.enabled === false) continue;

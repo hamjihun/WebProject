@@ -72,6 +72,7 @@
   td.n { text-align:right; font-variant-numeric:tabular-nums; }
   .lv { display:inline-flex; align-items:center; gap:6px; } .lv .d { width:9px; height:9px; border-radius:50%; }
   .lv.alert .d { background:var(--bad); } .lv.remind .d { background:var(--warn); } .lv.recovery .d { background:var(--ok); }
+  .lv.ok .d { background:var(--ok); } .lv.warn .d { background:var(--warn); } .lv.bad .d { background:var(--bad); } .lv.off .d { background:#475569; }
   .tbl { flex:1; min-height:0; overflow:hidden; }
   .empty { color:var(--muted); font-size:13px; padding:10px 0; }
   .foot { grid-column:1/-1; font-size:12px; color:var(--muted); text-align:right; margin-top:-8px; }
@@ -179,13 +180,20 @@ async function refresh() {
 
     // 백업 현황 (Veeam 서버가 보낸 backups)
     const BK = { Success: ['성공', 'ok'], Warning: ['경고', 'warn'], Failed: ['실패', 'bad'], Running: ['실행 중', 'ok'], None: ['기록 없음', 'off'] };
-    const bkRows = []; let bkErr = '';
-    for (const s of servers) if (s.backups) { if (s.backups.error) bkErr = s.backups.error; for (const j of s.backups.jobs || []) if (j.enabled !== false) bkRows.push(j); }
+    const bkRows = []; let bkErr = ''; const stRows = [];
+    const ageH = (t) => t ? (Date.now() - t) / 3600000 : null, ageTxt = (h) => h == null ? '없음' : h < 1 ? '방금' : h < 48 ? Math.round(h) + '시간 전' : Math.round(h / 24) + '일 전';
+    for (const s of servers) if (s.backups) {
+      const b = s.backups; if (b.error) bkErr = b.error;
+      for (const j of b.jobs || []) if (j.enabled !== false) bkRows.push(j);
+      if (b.files && b.files.length) { const f = b.files.reduce((a, x) => (x.newest_time || 0) > (a.newest_time || 0) ? x : a, b.files[0]); const h = ageH(f.newest_time); stRows.push({ name: `${label(s)} · 1차 SQL`, bad: !f.exists || h == null || h > 30, txt: !f.exists ? '폴더 없음' : ageTxt(h) }); }
+      if (b.usb) { const h = ageH(b.usb.newest_time); stRows.push({ name: `${label(s)} · 3차 USB`, bad: h == null || h > 80, txt: (b.usb.connected ? '연결 중 · ' : '') + ageTxt(h) }); }
+    }
+    stRows.sort((a, b) => (b.bad ? 1 : 0) - (a.bad ? 1 : 0));
     bkRows.sort((a, b) => ({ Failed: 0, Warning: 1, Running: 2, None: 3, Success: 4 }[a.result] ?? 5) - ({ Failed: 0, Warning: 1, Running: 2, None: 3, Success: 4 }[b.result] ?? 5));
     const bkOk = bkRows.filter(j => j.result === 'Success').length;
-    document.getElementById('bksub').textContent = bkRows.length ? `${bkOk}/${bkRows.length} 성공` : 'Veeam';
-    document.getElementById('backups').innerHTML = bkRows.length
-      ? `<table><thead><tr><th>작업</th><th>결과</th><th class="n">마지막 성공</th></tr></thead><tbody>${bkRows.slice(0, 7).map(j => { const [t, c] = BK[j.result] || [j.result, '']; const age = j.ok_end ? (Date.now() - j.ok_end) / 3600000 : null; return `<tr><td title="${esc(j.name)}">${esc(j.name)}</td><td><span class="lv ${c}"><span class="d"></span>${t}${j.result === 'Running' && j.progress != null ? ' ' + j.progress + '%' : ''}</span></td><td class="n" style="${age != null && age > 26 ? 'color:var(--bad);font-weight:700' : ''}">${age == null ? '없음' : age < 1 ? '방금' : age < 48 ? Math.round(age) + '시간 전' : Math.round(age / 24) + '일 전'}</td></tr>`; }).join('')}</tbody></table>`
+    document.getElementById('bksub').textContent = bkRows.length ? `Veeam ${bkOk}/${bkRows.length} 성공` + (stRows.length ? ` · SQL/USB ${stRows.filter(x => !x.bad).length}/${stRows.length} 정상` : '') : (stRows.length ? `${stRows.filter(x => !x.bad).length}/${stRows.length} 정상` : 'Veeam · SQL · USB');
+    document.getElementById('backups').innerHTML = (bkRows.length || stRows.length)
+      ? `<table><thead><tr><th>작업</th><th>결과</th><th class="n">마지막 성공</th></tr></thead><tbody>${stRows.slice(0, 8).map(x => `<tr><td title="${esc(x.name)}">${esc(x.name)}</td><td><span class="lv ${x.bad ? 'bad' : 'ok'}"><span class="d"></span>${x.bad ? '확인 필요' : '정상'}</span></td><td class="n" style="${x.bad ? 'color:var(--bad);font-weight:700' : ''}">${esc(x.txt)}</td></tr>`).join('')}${bkRows.slice(0, 7).map(j => { const [t, c] = BK[j.result] || [j.result, '']; const age = j.ok_end ? (Date.now() - j.ok_end) / 3600000 : null; return `<tr><td title="${esc(j.name)}">${esc(j.name)}</td><td><span class="lv ${c}"><span class="d"></span>${t}${j.result === 'Running' && j.progress != null ? ' ' + j.progress + '%' : ''}</span></td><td class="n" style="${age != null && age > 26 ? 'color:var(--bad);font-weight:700' : ''}">${age == null ? '없음' : age < 1 ? '방금' : age < 48 ? Math.round(age) + '시간 전' : Math.round(age / 24) + '일 전'}</td></tr>`; }).join('')}</tbody></table>`
       : `<div class="empty">${bkErr ? '백업 조회 실패: ' + esc(bkErr) : 'Veeam 서버의 에이전트(1.4.0 이상)가 백업 상태를 보내면 여기에 표시됩니다'}</div>`;
 
     // 이벤트 현황

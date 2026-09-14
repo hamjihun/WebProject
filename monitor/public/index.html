@@ -143,6 +143,8 @@
       <label class="chk"><input type="checkbox" id="rOffline"> 오프라인 알림</label>
       <label class="chk"><input type="checkbox" id="rBackupOn"> 백업 알림 (Veeam 실패 · 경고 · 오래 성공 없음 · 저장소 용량)</label>
       <label>백업 미성공 허용 시간 (시간)<input type="number" id="rBackupHours" min="1" max="720" title="마지막 성공 이후 이 시간이 지나면 '성공 없음' 알림 (매일 백업이면 26 권장)"></label>
+      <label>USB 백업 허용 시간 (시간, 주말 제외)<input type="number" id="rUsbHours" min="1" max="720" title="USB 복사본의 최신 파일이 이 시간(토·일 제외) 넘게 오래되면 알림. 매일 1회 복사면 30 권장"></label>
+      <label class="chk"><input type="checkbox" id="rSkipWeekend"> 주말은 백업 없음 (경과 시간에서 토·일 제외)</label>
       <label>백업 점검 시각 (하루 1회, 비우면 계속 감시)<input type="time" id="rBackupTime" title="새벽 백업이 끝난 뒤 시각으로. 이 시각에 실패·경고·미성공·저장소 용량을 한 번 판단해서 알립니다. 화면 표시는 10분마다 계속 갱신됩니다"></label>
       <label>오프라인 유예 (분, 0=즉시)<input type="number" id="rOffGrace" min="0" max="60" title="이 시간 안에 응답이 복구되면 텔레그램을 보내지 않고 이력에만 남깁니다 (새벽 백업 중 잠깐 끊기는 서버용)"></label>
     </div>
@@ -226,7 +228,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.11.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.12.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -293,7 +295,7 @@ function cardHtml(s) {
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
-    ${s.backups ? (() => { const k = bkSummary(s.backups); return `<div class="bk ${k.cls}" title="카드를 클릭하면 작업별 상세"><span>${k.txt}</span><span class="dim">${k.latest ? fmtTime(k.latest) : ''}</span></div>`; })() : ''}
+    ${s.backups ? bkStages(s.backups).map(st => `<div class="bk ${st.cls}" title="카드를 클릭하면 상세"><span>💾 ${st.label}</span><span>${esc(st.txt)}${st.cls === 'bad' ? ' ⚠' : ''}</span></div>`).join('') : ''}
     <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="uptm">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
@@ -451,20 +453,43 @@ const $aoverlay = document.getElementById('aoverlay');
 const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인', backup: '백업' };
 // Veeam 백업 요약/표
 const BK_RES = { Success: ['성공', 'ok'], Warning: ['경고', 'warn'], Failed: ['실패', 'bad'], Running: ['실행 중', 'run'], None: ['기록 없음', ''] };
+const ageTxt = (t) => { if (!t) return '없음'; const h = (Date.now() - t) / 3600000; return h < 1 ? '방금' : h < 48 ? Math.round(h) + '시간 전' : Math.round(h / 24) + '일 전'; };
+const ageCls = (t, maxH) => !t ? 'bad' : (Date.now() - t) / 3600000 > maxH ? 'bad' : '';
+// 단계별 요약: 1차 SQL(폴더 최신 파일) · 2차 Veeam · 3차 USB
+function bkStages(b) {
+  const out = [];
+  if (b.files && b.files.length) { const f = b.files.reduce((a, x) => (x.newest_time || 0) > (a.newest_time || 0) ? x : a, b.files[0]); out.push({ k: 'sql', label: '1차 SQL', t: f.newest_time, cls: !f.exists ? 'bad' : ageCls(f.newest_time, 30), txt: !f.exists ? '폴더 없음' : ageTxt(f.newest_time) }); }
+  if (b.jobs && b.jobs.length) { const k = bkSummary(b); out.push({ k: 'veeam', label: '2차 Veeam', t: k.latest, cls: k.cls, txt: `${k.ok}/${k.n} 성공` }); }
+  if (b.usb) { const u = b.usb; out.push({ k: 'usb', label: '3차 USB', t: u.newest_time, cls: ageCls(u.newest_time, 80), txt: (u.connected ? '연결됨 · ' : '') + ageTxt(u.newest_time) }); }
+  return out;
+}
 function bkSummary(b) {
   const jobs = (b.jobs || []).filter(j => j.enabled !== false); const n = jobs.length;
   const c = { Success: 0, Warning: 0, Failed: 0, Running: 0 }; for (const j of jobs) if (c[j.result] != null) c[j.result]++;
   const latest = Math.max(0, ...jobs.map(j => j.ok_end || 0));
   const cls = c.Failed ? 'bad' : (c.Warning || b.error) ? 'warn' : '';
   const txt = b.error ? '백업 조회 실패' : `💾 백업 ${c.Success}/${n} 성공${c.Failed ? ' · 실패 ' + c.Failed : ''}${c.Warning ? ' · 경고 ' + c.Warning : ''}${c.Running ? ' · 실행 중 ' + c.Running : ''}`;
-  return { cls, txt, latest, n };
+  return { cls, txt, latest, n, ok: c.Success };
 }
 function bkTable(b) {
+  let h = '';
+  if (b.files && b.files.length || b.sql) {
+    h += `<h3>1차 SQL 백업 <span class="dim" style="font-weight:400;font-size:12px">유지 관리 계획이 남긴 백업 파일${b.sql && b.sql.instance ? ' · SQL ' + esc(b.sql.instance) : ''}</span></h3><table class="bktbl"><thead><tr><th>폴더</th><th>최신 파일</th><th>시각</th><th>파일 수</th><th>용량</th></tr></thead><tbody>` +
+      (b.files || []).map(f => `<tr><td>${esc(f.path)}</td><td>${f.exists ? esc(f.newest_file || '-') : '<span class="bad">폴더 없음</span>'}</td><td class="${ageCls(f.newest_time, 30)}">${f.newest_time ? fmtTime(f.newest_time) + ' (' + ageTxt(f.newest_time) + ')' : '-'}</td><td>${f.count}</td><td>${f.size ? fmtBytes(f.size) : '-'}</td></tr>`).join('') + '</tbody>';
+    if (b.sql) h += b.sql.error ? `<tbody><tr><td colspan="5" class="dim">SQL 기록 조회 실패: ${esc(b.sql.error)} (폴더 기준으로만 판단)</td></tr></tbody>`
+      : `<thead><tr><th>DB</th><th>전체 백업</th><th>차등</th><th>로그</th><th>크기</th></tr></thead><tbody>${(b.sql.dbs || []).map(d => `<tr><td>${esc(d.db)}</td><td class="${ageCls(d.full, 24 * 8)}">${d.full ? fmtTime(d.full) + ' (' + ageTxt(d.full) + ')' : '<span class="bad">없음</span>'}</td><td>${d.diff ? fmtTime(d.diff) : '-'}</td><td>${d.log ? fmtTime(d.log) : '-'}</td><td>${d.size ? fmtBytes(d.size) : '-'}</td></tr>`).join('') || '<tr><td colspan="5" class="dim">사용자 DB 없음</td></tr>'}</tbody>`;
+    h += '</table>';
+  }
+  if (b.usb) { const u = b.usb;
+    h += `<h3>3차 USB 백업 <span class="dim" style="font-weight:400;font-size:12px">${u.connected ? '지금 연결됨' : u.last_seen ? '마지막 연결 ' + fmtTime(u.last_seen) : 'USB 가 연결된 적 없음'}</span></h3><table class="bktbl"><thead><tr><th>드라이브</th><th>폴더</th><th>최신 파일</th><th>시각</th><th>파일 수</th><th>남은 용량</th></tr></thead><tbody>` +
+      (u.last_seen ? `<tr><td>${esc(u.drive)} ${esc(u.label)}</td><td>${esc(u.path)}</td><td>${esc(u.newest_file || '-')}</td><td class="${ageCls(u.newest_time, 80)}">${u.newest_time ? fmtTime(u.newest_time) + ' (' + ageTxt(u.newest_time) + ')' : '-'}</td><td>${u.count}</td><td class="${u.total && u.free / u.total < 0.1 ? 'bad' : ''}">${u.total ? fmtBytes(u.free) + ' / ' + fmtBytes(u.total) : '-'}</td></tr>` : `<tr><td colspan="6" class="dim">USB 를 꽂아 복사하는 동안 에이전트가 5분마다 확인합니다${u.error ? ' · ' + esc(u.error) : ''}</td></tr>`) + '</tbody></table>';
+  }
+  if (!(b.jobs && b.jobs.length) && !(b.repos && b.repos.length)) return h;
   const dur = (sec) => sec >= 3600 ? `${Math.floor(sec / 3600)}시간 ${Math.round(sec % 3600 / 60)}분` : `${Math.round(sec / 60)}분`;
   const rows = (b.jobs || []).map(j => { const [t, c] = BK_RES[j.result] || [j.result, '']; return `<tr><td>${esc(j.name)}${j.enabled === false ? ' <span class="dim">(비활성)</span>' : ''}</td><td class="dim">${esc(j.type)}</td><td class="${c}">${t}${j.result === 'Running' && j.progress != null ? ` ${j.progress}%` : ''}</td><td>${j.end ? fmtTime(j.end) : '-'}</td><td>${j.ok_end ? fmtTime(j.ok_end) : '-'}</td><td>${j.duration ? dur(j.duration) : '-'}</td><td>${j.size ? fmtBytes(j.size) : '-'}</td><td>${j.next ? fmtTime(j.next) : '-'}</td></tr>`; }).join('');
   const repos = (b.repos || []).map(r => `<tr><td>${esc(r.name)}</td><td colspan="2" class="${r.pct >= 90 ? 'bad' : r.pct >= 75 ? 'warn' : ''}">${r.pct != null ? r.pct + '% 사용' : '-'}</td><td colspan="5">${r.total ? `남은 ${fmtBytes(r.free)} / 전체 ${fmtBytes(r.total)}` : ''}</td></tr>`).join('');
   const sv = servers.find(x => x.host === selected); const bkOff = sv && sv.host_rules && sv.host_rules.backup === false;
-  return `<h3 style="display:flex;align-items:center;gap:10px">백업 작업 (Veeam) <span class="dim" style="font-weight:400;font-size:12px">${b.time ? '조회 ' + fmtTime(b.time) : ''}${b.error ? ' · ' + esc(b.error) : ''}</span><button id="bBkAlert" class="${bkOff ? '' : 'on'}" style="margin-left:auto;font-size:12px;padding:3px 10px" title="이 서버의 백업 알림(실패·경고·미실행·저장소)만 켜고 끕니다">${bkOff ? '🔕 백업 알림 꺼짐 (켜기)' : '🔔 백업 알림 켜짐 (끄기)'}</button></h3>
+  return h + `<h3 style="display:flex;align-items:center;gap:10px">2차 백업 작업 (Veeam) <span class="dim" style="font-weight:400;font-size:12px">${b.time ? '조회 ' + fmtTime(b.time) : ''}${b.error ? ' · ' + esc(b.error) : ''}</span><button id="bBkAlert" class="${bkOff ? '' : 'on'}" style="margin-left:auto;font-size:12px;padding:3px 10px" title="이 서버의 백업 알림(실패·경고·미실행·저장소)만 켜고 끕니다">${bkOff ? '🔕 백업 알림 꺼짐 (켜기)' : '🔔 백업 알림 켜짐 (끄기)'}</button></h3>
     <table class="bktbl"><thead><tr><th>작업</th><th>종류</th><th>결과</th><th>마지막 실행</th><th>마지막 성공</th><th>소요</th><th>크기</th><th>다음 실행</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="dim">작업 없음</td></tr>'}</tbody>
     ${repos ? `<thead><tr><th>저장소</th><th colspan="2">사용률</th><th colspan="5">용량</th></tr></thead><tbody>${repos}</tbody>` : ''}</table>`;
 }
@@ -525,7 +550,7 @@ async function loadSettings() {
   F('tgChat').value = c.telegram.chatId || ''; F('aTitle').value = c.title || '';
   F('rCpu').value = c.rules.cpu; F('rCpuMin').value = c.rules.cpu_minutes; F('rMem').value = c.rules.mem; F('rMemMin').value = c.rules.mem_minutes;
   F('rDisk').value = c.rules.disk; F('rDays').value = c.rules.days_left; F('rRemind').value = c.remind_min; F('rDiskTime').value = c.rules.disk_check_time || '';
-  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0; F('rBackupOn').checked = c.rules.backup_on !== false; F('rBackupHours').value = c.rules.backup_max_hours || 26; F('rBackupTime').value = c.rules.backup_check_time == null ? '08:00' : c.rules.backup_check_time;
+  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0; F('rBackupOn').checked = c.rules.backup_on !== false; F('rBackupHours').value = c.rules.backup_max_hours || 26; F('rBackupTime').value = c.rules.backup_check_time == null ? '08:00' : c.rules.backup_check_time; F('rUsbHours').value = c.rules.usb_max_hours || 30; F('rSkipWeekend').checked = c.rules.backup_skip_weekend !== false;
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
@@ -538,7 +563,7 @@ function collectSettings() {
     telegram: { enabled: F('tgEnabled').checked, chatId: F('tgChat').value.trim() },
     title: F('aTitle').value.trim() || 'IMS 모니터',
     enabled: F('aEnabled').checked,
-    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '',
+    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), backup_skip_weekend: F('rSkipWeekend').checked,
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '' },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
