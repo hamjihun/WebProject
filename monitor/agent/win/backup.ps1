@@ -89,21 +89,10 @@ if ($conf['USB'] -ne '0') {
   $spec = $conf['USB']; if (-not $spec -or $spec -eq 'auto') { $spec = $remote['USB_PATHS'] }
   $logical = @(); try { $logical = @(Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -or $_.DriveType -eq 3 }) } catch {}
   $sysLetters = @('C:', 'D:'); foreach ($p in $paths) { if ($p -match '^([A-Za-z]:)') { $sysLetters += $matches[1].ToUpper() } }
-  # 확인할 대상 목록: @{ name; drive; path }
-  $targets = @()
-  if ($spec -and $spec -ne 'auto') {
-    foreach ($ent in @($spec -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
-      $name = ''; $loc = $ent
-      if ($ent -match '^([^=]+?)\s*=\s*(.+)$') { $name = $matches[1].Trim(); $loc = $matches[2].Trim() }
-      $loc = $loc.TrimEnd('\'); $drive = $null; $sub = ''
-      if ($loc -match '^([A-Za-z]):(\\.*)?$') { $drive = ($matches[1] + ':').ToUpper(); $sub = [string]$matches[2] }
-      elseif ($loc -match '^([^\\:]+):(\\.*)?$') { $lab = $matches[1]; $sub = [string]$matches[2]; $ld = $logical | Where-Object { $_.VolumeName -and $_.VolumeName.ToLower() -eq $lab.ToLower() } | Select-Object -First 1; if ($ld) { $drive = $ld.DeviceID } }
-      elseif ($loc -match '^\\\\') { $drive = ''; $sub = $loc }   # UNC 경로도 허용
-      if (-not $name) { $name = $(if ($sub -and $sub -ne '\') { Split-Path $sub -Leaf } elseif ($loc -match '^([^\\:]{2,}):') { $matches[1] } else { $loc }) }
-      $targets += @{ name = $name; spec = $loc; drive = $drive; path = $(if ($drive -eq $null) { '' } elseif ($sub -and $sub -ne '\') { "$drive$sub" } else { "$drive\" }) }
-    }
-  } else {
-    # 자동 감지: USB 인터페이스 디스크 > 이동식 > C:/D: 가 아니면서 backup/bak/db 폴더가 있는 드라이브
+  # 꽂혀 있는 USB 후보 드라이브: USB 인터페이스 디스크 > 이동식(4GB↑) > C:/D:(SQL 폴더 드라이브) 가 아닌 드라이브. 한 번만 조회
+  $script:usbLetters = $null
+  function UsbLetters {
+    if ($script:usbLetters -ne $null) { return $script:usbLetters }
     $letters = @()
     try {
       foreach ($dd in @(Get-CimInstance Win32_DiskDrive | Where-Object { $_.InterfaceType -eq 'USB' -or $_.PNPDeviceID -match 'USBSTOR|USB' })) {
@@ -115,10 +104,38 @@ if ($conf['USB'] -ne '0') {
         $L = $ld.DeviceID
         if ($letters -contains $L -or $sysLetters -contains $L) { continue }
         if ($ld.DriveType -eq 2 -and $ld.Size -gt 4GB) { $letters += $L; continue }
-        try { if (@(Get-ChildItem -Path "$L\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'backup|bak|db' }).Count -gt 0) { $letters += $L } } catch {}
+        $letters += $L
       }
     } catch { Log "USB 감지 오류: $($_.Exception.Message)" }
-    $letters = @($letters | Sort-Object -Unique | Where-Object { Test-Path "$_\" })
+    $script:usbLetters = @($letters | Sort-Object -Unique | Where-Object { Test-Path "$_\" })
+    return $script:usbLetters
+  }
+  # 확인할 대상 목록: @{ name; spec; drive; path; rel }
+  $targets = @()
+  if ($spec -and $spec -ne 'auto') {
+    foreach ($ent in @($spec -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+      $name = ''; $loc = $ent
+      if ($ent -match '^([^=]+?)\s*=\s*(.+)$') { $name = $matches[1].Trim(); $loc = $matches[2].Trim() }
+      $loc = $loc.TrimEnd('\'); $drive = $null; $sub = ''
+      if ($loc -match '^([A-Za-z]):(\\.*)?$') { $drive = ($matches[1] + ':').ToUpper(); $sub = [string]$matches[2] }
+      elseif ($loc -match '^([^\\:]+):(\\.*)?$') { $lab = $matches[1]; $sub = [string]$matches[2]; $ld = $logical | Where-Object { $_.VolumeName -and $_.VolumeName.ToLower() -eq $lab.ToLower() } | Select-Object -First 1; if ($ld) { $drive = $ld.DeviceID } }
+      elseif ($loc -match '^\\\\') { $drive = ''; $sub = $loc }   # UNC 경로도 허용
+      else {   # 드라이브 문자 없이 폴더만 적은 경우 (예: 0.백업\1.ERP(부산)\DBBackup): 꽂혀 있는 USB 중 그 폴더가 있는 드라이브를 찾음
+        $rel = $loc.TrimStart('\'); $sub = '\' + $rel
+        foreach ($L in @(UsbLetters)) { if (Test-Path "$L\$rel") { $drive = $L; break } }
+      }
+      if (-not $name) { $name = $(if ($sub -and $sub -ne '\') { Split-Path $sub -Leaf } elseif ($loc -match '^([^\\:]{2,}):') { $matches[1] } else { $loc }) }
+      $targets += @{ name = $name; spec = $loc; drive = $drive; rel = $(if ($sub -and $sub -ne '\') { $sub.TrimStart('\') } else { '' }); path = $(if ($drive -eq $null) { '' } elseif ($sub -and $sub -ne '\') { "$drive$sub" } else { "$drive\" }) }
+    }
+  } else {
+    # 자동 감지: 후보 드라이브 중 backup/bak/db 폴더가 있는 것 우선 (이동식·USB 인터페이스는 폴더 없어도 후보)
+    $letters = @()
+    foreach ($L in @(UsbLetters)) {
+      $ld = $logical | Where-Object { $_.DeviceID -eq $L } | Select-Object -First 1
+      if ($ld -and $ld.DriveType -eq 2) { $letters += $L; continue }
+      $isUsb = $false; try { $isUsb = @(Get-CimInstance Win32_DiskDrive | Where-Object { $_.InterfaceType -eq 'USB' -or $_.PNPDeviceID -match 'USBSTOR|USB' }).Count -gt 0 } catch {}
+      try { if ($isUsb -or @(Get-ChildItem -Path "$L\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'backup|bak|db' }).Count -gt 0) { $letters += $L } } catch {}
+    }
     $pick = $null; $pickPath = ''
     foreach ($L in $letters) {
       $cands = @(); try { $cands = @(Get-ChildItem -Path "$L\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'backup|bak|db' }) } catch {}
@@ -153,11 +170,11 @@ if ($conf['USB'] -ne '0') {
           if ($scan.error) { $u.error = $scan.error }
         }
       }
-    } elseif ($tg.spec -ne 'auto' -and -not $tg.drive -and -not $tg.path) { $u.error = "USB 를 찾지 못함: $($tg.spec)" }
+    } elseif ($tg.spec -ne 'auto' -and -not $tg.drive -and -not $tg.path) { $u.connected = $false; $u.note = "USB 가 꽂히면 $($tg.spec) 폴더를 확인" }   # 지금 안 꽂혀 있음 (오류 아님)
     # 완료 기록 합치기: 경로가 같은(포함 관계) 기록, 자동 감지면 가장 최근 기록
     $dn = $null
     if ($tg.spec -eq 'auto') { $dn = $dones | Sort-Object time -Descending | Select-Object -First 1 }
-    else { $dn = $dones | Where-Object { (SamePath $_.path $tg.path) -or ($tg.spec -and (SamePath $_.path $tg.spec)) } | Sort-Object time -Descending | Select-Object -First 1 }
+    else { $dn = $dones | Where-Object { (SamePath $_.path $tg.path) -or ($tg.spec -and (SamePath $_.path $tg.spec)) -or ($tg.rel -and $_.path -and (([string]$_.path).TrimEnd('\').ToLower().EndsWith('\' + $tg.rel.ToLower()) -or ([string]$_.path).ToLower().Contains('\' + $tg.rel.ToLower() + '\'))) } | Sort-Object time -Descending | Select-Object -First 1 }
     if ($dn) {
       try {
         $u.done_time = $dn.time; $u.done_code = $dn.code; $u.done_ok = $dn.ok

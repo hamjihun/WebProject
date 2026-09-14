@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.14.2';
+const VERSION = '1.14.3';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -273,7 +273,7 @@ function normalizeBackups(b) {
     // 1차: SQL 백업 폴더(.bak 최신 파일) + msdb 기록, 3차: USB 복사
     files: Array.isArray(b.files) ? b.files.slice(0, 10).map((f) => ({ path: String(f.path || ''), exists: f.exists !== false, newest_file: f.newest_file ? String(f.newest_file).slice(0, 200) : null, newest_time: t(f.newest_time), newest_size: num(f.newest_size), count: num(f.count), size: num(f.size), error: f.error ? String(f.error).slice(0, 200) : '' })) : undefined,
     sql: b.sql && typeof b.sql === 'object' ? { instance: String(b.sql.instance || ''), error: b.sql.error ? String(b.sql.error).slice(0, 200) : '', dbs: (Array.isArray(b.sql.dbs) ? b.sql.dbs : []).slice(0, 200).map((d) => ({ db: String(d.db || ''), full: t(d.full), diff: t(d.diff), log: t(d.log), size: num(d.size), path: String(d.path || '').slice(0, 260), recovery: String(d.recovery || '') })) } : undefined,
-    usbs: usbList.length ? usbList.slice(0, 10).map((u) => ({ name: String(u.name || '').slice(0, 60), spec: u.spec ? String(u.spec).slice(0, 200) : '', connected: !!u.connected, drive: String(u.drive || ''), label: String(u.label || ''), path: String(u.path || ''), newest_file: u.newest_file ? String(u.newest_file).slice(0, 200) : null, newest_time: t(u.newest_time), copied_time: t(u.copied_time), copied_file: u.copied_file ? String(u.copied_file).slice(0, 200) : null, count: num(u.count), size: num(u.size), free: num(u.free), total: num(u.total), last_seen: t(u.last_seen), done_time: t(u.done_time), done_code: u.done_code == null ? null : num(u.done_code), done_ok: u.done_ok == null ? null : !!u.done_ok, error: u.error ? String(u.error).slice(0, 200) : '' })) : undefined,   // 3차 USB (여러 개 가능; 구버전 에이전트의 usb 하나짜리도 목록으로)
+    usbs: usbList.length ? usbList.slice(0, 10).map((u) => ({ name: String(u.name || '').slice(0, 60), spec: u.spec ? String(u.spec).slice(0, 200) : '', connected: !!u.connected, drive: String(u.drive || ''), label: String(u.label || ''), path: String(u.path || ''), newest_file: u.newest_file ? String(u.newest_file).slice(0, 200) : null, newest_time: t(u.newest_time), copied_time: t(u.copied_time), copied_file: u.copied_file ? String(u.copied_file).slice(0, 200) : null, count: num(u.count), size: num(u.size), free: num(u.free), total: num(u.total), last_seen: t(u.last_seen), done_time: t(u.done_time), done_code: u.done_code == null ? null : num(u.done_code), done_ok: u.done_ok == null ? null : !!u.done_ok, error: u.error ? String(u.error).slice(0, 200) : '', note: u.note ? String(u.note).slice(0, 200) : '' })) : undefined,   // 3차 USB (여러 개 가능; 구버전 에이전트의 usb 하나짜리도 목록으로)
   };
 }
 
