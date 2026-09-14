@@ -17,6 +17,7 @@ const DEFAULTS = {
     backup_on: true,                            // 백업(Veeam) 알림: 실패/경고/미실행
     backup_warn: true,                          // Warning 도 알림
     backup_max_hours: 26,                       // 이 시간 넘게 성공 기록이 없으면 알림
+    backup_check_time: '08:00',                 // 백업 판단 시각 (하루 1회, 새벽 백업이 끝난 뒤). 비우면 항상
     offline_grace: 0,                           // 오프라인 유예(분): 이 시간 안에 복구되면 텔레그램 생략, 이력만 기록 (0=즉시 전송)
     disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
   },
@@ -218,22 +219,22 @@ function create({ settingsFile, logDir, log = console.log }) {
     for (const [key, st] of states) { const p = key.split('|'); if (p[0] === host && p[1] === rule && st.active) { st.active = false; st.notified = false; st.since = null; } }
   }
 
-  let lastDiskCheckDay = null;
-  function diskCheckDue() {
-    const t = settings.rules.disk_check_time;
-    if (!t) return true;                                   // 미설정 = 항상
+  const lastCheckDay = {};
+  function dailyDue(kind, t) {                             // 지정 시각 이후 하루 한 번만 true (미설정 = 항상)
+    if (!t) return true;
     const m = /^(\d{1,2}):(\d{2})$/.exec(t); if (!m) return true;
     const now = new Date(), cur = now.getHours() * 60 + now.getMinutes(), target = Number(m[1]) * 60 + Number(m[2]);
     const day = now.toDateString();
-    if (cur >= target && lastDiskCheckDay !== day) { lastDiskCheckDay = day; return true; }
+    if (cur >= target && lastCheckDay[kind] !== day) { lastCheckDay[kind] = day; return true; }
     return false;
   }
+  function diskCheckDue() { return dailyDue('disk', settings.rules.disk_check_time); }
 
   function evaluate(servers) {
     const r = settings.rules;
     const live = new Set();
     if (!settings.enabled) { for (const s of servers) clearHost(s.host); return; }
-    const diskNow = diskCheckDue();
+    const diskNow = diskCheckDue(), bkNow = dailyDue('backup', settings.rules.backup_check_time);
     for (const s of servers) {
       live.add(s.host);
       const H = s.host, N = s.name;
@@ -273,7 +274,7 @@ function create({ settingsFile, logDir, log = console.log }) {
           { rule: 'full', threshold: r.days_left, recoverMsg: () => `${d.mount} 드라이브 소진 예상 해제` });
       }
       // 백업 (Veeam 서버 에이전트가 보낸 backups): 실패/경고, 오래 성공 없음, 저장소 용량
-      if (bkOn && s.backups && Array.isArray(s.backups.jobs)) {
+      if (bkOn && bkNow && s.backups && Array.isArray(s.backups.jobs)) {   // 백업은 지정 시각(기본 08:00)에 하루 한 번 판단
         const maxH = Math.max(1, Number(r.backup_max_hours) || 26), warnOn = r.backup_warn !== false;
         for (const j of s.backups.jobs) {
           if (j.enabled === false) continue;

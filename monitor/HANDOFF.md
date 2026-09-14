@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.11.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.11.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade)·**알림 소리**(MON.sound: localStorage `mon_sound` {on,dur,vol,quietOn,quietFrom,quietTo,remind}, Web Audio 비프, 🔊 버튼 패널, TV 모드는 오른쪽 아래 버튼, `sound.check(recent)` 를 index/dashboard/pollNav 가 호출). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
@@ -40,6 +40,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-14 (3): `rules.backup_check_time`(기본 08:00) — 백업 규칙은 그 시각에 하루 1회 판단 (`dailyDue(kind,t)` 로 disk_check_time 과 공용화). 알림 설정에 "백업 점검 시각" 입력. 수집기 1.11.1.
 - 2026-09-14 (2): 실기 결과 — 사용자 Veeam 작업은 전부 Windows Agent Backup 5개 + Linux Agent Policy 1개. Get-VBRJob 에는 안 잡히고 Result 가 배열로 와서 "Success Success…" 표시됨 → veeam.ps1 1.4.1: Get-VBRBackupSession + Get-VBRComputerBackupJobSession 세션을 JobName 별로 묶어 작업 목록을 만들고(정의는 Get-VBRJob/Get-VBRComputerBackupJob 에서 type/enabled/next 만 보강), Str() 로 첫 토큰만 사용, agent.log 에 `[Veeam] 작업 정의 VM=… 에이전트=…, 세션 …` 진단 줄 기록, json 에 diag. 팝업 백업 표 제목에 서버별 백업 알림 켜기/끄기 버튼(hostRules.backup).
 - 2026-09-14: **Veeam 백업 모니터링** (에이전트 1.4.0, 수집기 1.11.0). `agent/win/veeam.ps1`(Veeam.Backup.PowerShell 모듈/스냅인, Get-VBRJob+Get-VBRBackupSession, Get-VBRComputerBackupJob, Get-VBRBackupRepository → `%ProgramData%\IMSMonitoringAgent\veeam.json`)을 agent.ps1 이 Veeam 설치 폴더가 있을 때만 10분마다 별도 프로세스로 실행하고 payload `backups:{time,error,jobs[{name,type,enabled,result,state,progress,start,end,ok_end,duration,size,next}],repos[{name,total,free}]}` 로 동봉. server.js `normalizeBackups`(repos 에 pct 추가). alerts.js 규칙 `backup`: rules.backup_on/backup_warn/backup_max_hours(26) — 실패·경고, 성공 없음(ok_end 기준), 저장소 사용률(rules.disk 기준); hostRules 에 backup 추가. UI: 카드 `.bk` 요약줄, 팝업 `bkTable`, 대시보드 3행 c4×3(저장장치/소진 임박/백업 현황), 알림 설정 체크·시간, 통계 byRule.backup. 사용자 환경: Veeam 11.0.0.837, 백업 작업 5개 + NAS 로 백업 복사 1개. 실기 검증 전.
 - 2026-09-10 (3): 상단 탭에 ⛶ 전체화면 버튼(requestFullscreen), 음성 알림 발음 변환 `toSpeech`(WORDS 약자 사전 + 알파벳 낱자 한글, 사용자 사전 `snd.dict` "ERP=이알피" 줄 단위, 🔊 패널 텍스트 영역).
