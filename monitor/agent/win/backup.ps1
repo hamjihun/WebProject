@@ -23,7 +23,7 @@ function ScanFolder($root, $depth) {
     $files = @(Get-ChildItem @gci | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' })
     $r.count = $files.Count; $r.size = [int64](($files | Measure-Object Length -Sum).Sum)
     $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($n) { $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\'); $r.newest_time = Iso $n.LastWriteTime; $r.newest_size = [int64]$n.Length }
+    if ($n) { $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\', '/'); $r.newest_time = Iso $n.LastWriteTime; $r.newest_size = [int64]$n.Length }
   } catch { $r.error = $_.Exception.Message }
   return $r
 }
@@ -114,5 +114,5 @@ if ($conf['USB'] -ne '0') {
   }
 }
 
-$out = @{ time = Iso (Get-Date); files = @($files); sql = $sql; usb = $usb }
-try { $out | ConvertTo-Json -Depth 6 -Compress | Set-Content -Path $Out -Encoding UTF8 } catch { Log "저장 실패: $($_.Exception.Message)" }
+$result = @{ time = Iso (Get-Date); files = @($files); sql = $sql; usb = $usb }
+try { $result | ConvertTo-Json -Depth 6 -Compress | Set-Content -Path $Out -Encoding UTF8 } catch { Log "저장 실패: $($_.Exception.Message)" }
