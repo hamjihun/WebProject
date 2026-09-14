@@ -25,6 +25,8 @@ try {
     $r.count = $files.Count
     $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($n) { $r.newest_file = $n.FullName.Substring($Path.Length).TrimStart('\'); $r.newest_time = Iso $n.LastWriteTime }
+    $c = $files | Sort-Object CreationTime -Descending | Select-Object -First 1
+    if ($c) { $r.copied_time = Iso $c.CreationTime }
     $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($r.drive)'"; if ($ld) { $r.free = [int64]$ld.FreeSpace; $r.total = [int64]$ld.Size }
   }
 } catch { Log "확인 오류: $($_.Exception.Message)" }

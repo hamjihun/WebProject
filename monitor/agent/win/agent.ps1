@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.5.7"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.5.8"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -181,6 +181,7 @@ while ($true) {
           $bk = Get-Content $BackupOut -Raw -Encoding UTF8 | ConvertFrom-Json
           if (-not $backups) { $backups = New-Object PSObject; $backups | Add-Member NoteProperty time $bk.time }
           foreach ($k in @('files', 'sql', 'usb')) { if ($bk.$k -ne $null) { $backups | Add-Member NoteProperty $k $bk.$k -Force } }
+          try { if ($bk.usb -and $bk.usb.connected -and $bk.usb.drive -and ($allDrives | ForEach-Object { $_.DeviceID }) -notcontains $bk.usb.drive) { $bk.usb.connected = $false } } catch {}   # 빠진 뒤엔 '연결됨' 표시 안 함
         }
       } catch {}
     }

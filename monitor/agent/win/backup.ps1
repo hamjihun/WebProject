@@ -25,6 +25,9 @@ function ScanFolder($root, $depth) {
     $r.count = $files.Count; $r.size = [int64](($files | Measure-Object Length -Sum).Sum)
     $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($n) { $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\', '/'); $r.newest_time = Iso $n.LastWriteTime; $r.newest_size = [int64]$n.Length }
+    # 복사된 시각: USB 로 복사하면 수정 시각은 원본 그대로지만 생성 시각은 복사한 때가 된다
+    $c = $files | Sort-Object CreationTime -Descending | Select-Object -First 1
+    if ($c) { $r.copied_time = Iso $c.CreationTime; $r.copied_file = $c.FullName.Substring($root.Length).TrimStart('\', '/') }
   } catch { $r.error = $_.Exception.Message }
   return $r
 }
@@ -78,8 +81,8 @@ if ($win -match '^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$') {
 $usb = $null
 if ($conf['USB'] -ne '0') {
   $prev = @{}; try { if (Test-Path $UsbState) { $prev = Get-Content $UsbState -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
-  $usb = @{ connected = $false; drive = ''; label = ''; path = ''; newest_file = $null; newest_time = $null; count = 0; size = 0; free = 0; total = 0; last_seen = $null; last_scan = $null; error = '' }
-  foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan')) { try { if ($prev.$k -ne $null) { $usb[$k] = $prev.$k } } catch {} }
+  $usb = @{ connected = $false; drive = ''; label = ''; path = ''; newest_file = $null; newest_time = $null; copied_time = $null; copied_file = $null; count = 0; size = 0; free = 0; total = 0; last_seen = $null; last_scan = $null; error = '' }
+  foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'copied_time', 'copied_file', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan')) { try { if ($prev.$k -ne $null) { $usb[$k] = $prev.$k } } catch {} }
   # 1) 후보 드라이브: agent.conf USB=E: 지정 > USB 인터페이스 디스크 > 이동식 > C:/D: 가 아니면서 backup/bak/db 폴더가 있는 드라이브
   $letters = @()
   $sysLetters = @('C:', 'D:'); foreach ($p in $paths) { if ($p -match '^([A-Za-z]:)') { $sysLetters += $matches[1].ToUpper() } }
@@ -115,7 +118,7 @@ if ($conf['USB'] -ne '0') {
     $newDrive = ($prev.drive -ne $pick) -or ($prev.path -ne $pickPath)
     if ($ForceUsb -or $inWindow -or $newDrive -or (-not $lastScan) -or (((Get-Date) - $lastScan).TotalMinutes -ge 60)) {
       $scan = ScanFolder $pickPath $(if ($pickPath -match '^[A-Z]:\\$') { 3 } else { 0 })
-      $usb.newest_file = $scan.newest_file; $usb.newest_time = $scan.newest_time; $usb.count = $scan.count; $usb.size = $scan.size; $usb.last_scan = Iso (Get-Date)
+      $usb.newest_file = $scan.newest_file; $usb.newest_time = $scan.newest_time; $usb.copied_time = $scan.copied_time; $usb.copied_file = $scan.copied_file; $usb.count = $scan.count; $usb.size = $scan.size; $usb.last_scan = Iso (Get-Date)
       if ($scan.error) { $usb.error = $scan.error }
     }
     try { $usb | ConvertTo-Json -Compress | Set-Content -Path $UsbState -Encoding UTF8 } catch {}

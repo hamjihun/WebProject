@@ -303,10 +303,10 @@ function create({ settingsFile, logDir, log = console.log }) {
         }
         // 3차: USB 복사본
         if (s.backups.usb) {
-          const u = s.backups.usb, maxHu = Math.max(1, Number(r.usb_max_hours) || 30), age = hoursSince(Math.max(u.newest_time || 0, u.done_time || 0) || null, nowT, skipW);
+          const u = s.backups.usb, maxHu = Math.max(1, Number(r.usb_max_hours) || 30), age = hoursSince(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time || null, nowT, skipW);
           check(`${H}|backup|usbfail`, H, N, u.done_ok === false, () => `USB 복사 실패 (robocopy 코드 ${u.done_code}, ${u.done_time ? fmtTs(new Date(u.done_time)) : ''})`, { rule: 'backup', recoverMsg: () => 'USB 복사 정상' });
           check(`${H}|backup|usb`, H, N, age == null || age > maxHu,
-            () => age == null ? `USB 백업 기록 없음 (USB 가 꽂힌 동안 확인된 적 없음)` : `USB 백업 ${fmtAge(age)}째 없음 (USB 최신 파일 ${fmtTs(new Date(u.newest_time))}, 기준 ${maxHu}시간${skipW ? ', 주말 제외' : ''})`,
+            () => age == null ? `USB 백업 기록 없음 (USB 가 꽂힌 동안 확인된 적 없음)` : `USB 백업 ${fmtAge(age)}째 없음 (마지막 복사 ${fmtTs(new Date(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time))}, 기준 ${maxHu}시간${skipW ? ', 주말 제외' : ''})`,
             { rule: 'backup', threshold: maxHu, recoverMsg: () => `USB 백업 확인 (최신 ${u.newest_time ? fmtTs(new Date(u.newest_time)) : ''})` });
           if (u.total) check(`${H}|backup|usbfree`, H, N, u.free / u.total < 0.1,
             () => `USB 남은 용량 부족 (${fmtBytes(u.free)} / ${fmtBytes(u.total)}) — 새 USB 준비 필요`, { rule: 'backup', recoverMsg: () => 'USB 용량 여유 확인' });

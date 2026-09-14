@@ -239,7 +239,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.12.4';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.12.5';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -471,7 +471,7 @@ function bkStages(b) {
   const out = [];
   if (b.files && b.files.length) { const f = b.files.reduce((a, x) => (x.newest_time || 0) > (a.newest_time || 0) ? x : a, b.files[0]); out.push({ k: 'sql', label: '1차 백업(SQL)', t: f.newest_time, cls: !f.exists ? 'bad' : ageCls(f.newest_time, 30), txt: !f.exists ? '폴더 없음' : ageTxt(f.newest_time) }); }
   if (b.jobs && b.jobs.length) { const k = bkSummary(b); out.push({ k: 'veeam', label: '2차 백업(Veeam)', t: k.latest, cls: k.cls, txt: `${k.ok}/${k.n} 성공` }); }
-  if (b.usb) { const u = b.usb; const t = Math.max(u.newest_time || 0, u.done_time || 0) || null; out.push({ k: 'usb', label: '3차 백업(USB)', t, cls: u.done_ok === false ? 'bad' : ageCls(t, 80), txt: u.done_ok === false ? '복사 실패' : (u.connected ? '연결됨 · ' : '') + ageTxt(t) }); }
+  if (b.usb) { const u = b.usb; const t = Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time || null; out.push({ k: 'usb', label: '3차 백업(USB)', t, cls: u.done_ok === false ? 'bad' : ageCls(t, 80), txt: u.done_ok === false ? '복사 실패' : (u.connected ? '연결됨 · ' : '') + ageTxt(t) }); }
   return out;
 }
 function bkSummary(b) {
@@ -508,8 +508,8 @@ function bkTable(b) {
     h += '</table>';
   }
   if (b.usb) { const u = b.usb;
-    h += `<h3>3차 백업(USB) <span class="dim" style="font-weight:400;font-size:12px">${u.connected ? '지금 연결됨' : u.last_seen ? '마지막 연결 ' + fmtTime(u.last_seen) : 'USB 가 연결된 적 없음'}${u.done_time ? ` · <span class="${u.done_ok === false ? 'bad' : 'ok'}">복사 ${u.done_ok === false ? '실패' : '완료'} ${fmtTime(u.done_time)} (robocopy 코드 ${u.done_code})</span>` : ''}</span></h3><table class="bktbl"><thead><tr><th>드라이브</th><th>폴더</th><th>최신 파일</th><th>시각</th><th>파일 수</th><th>남은 용량</th></tr></thead><tbody>` +
-      (u.last_seen ? `<tr><td>${esc(u.drive)} ${esc(u.label)}</td><td>${esc(u.path)}</td><td>${esc(u.newest_file || '-')}</td><td class="${ageCls(u.newest_time, 80)}">${u.newest_time ? fmtTime(u.newest_time) + ' (' + ageTxt(u.newest_time) + ')' : '-'}</td><td>${u.count}</td><td class="${u.total && u.free / u.total < 0.1 ? 'bad' : ''}">${u.total ? fmtBytes(u.free) + ' / ' + fmtBytes(u.total) : '-'}</td></tr>` : `<tr><td colspan="6" class="dim">USB 를 꽂아 복사하는 동안 에이전트가 5분마다 확인합니다${u.error ? ' · ' + esc(u.error) : ''}</td></tr>`) + '</tbody></table>';
+    h += `<h3>3차 백업(USB) <span class="dim" style="font-weight:400;font-size:12px">${u.connected ? '지금 연결됨' : u.last_seen ? '마지막 연결 ' + fmtTime(u.last_seen) : 'USB 가 연결된 적 없음'}${u.done_time ? ` · <span class="${u.done_ok === false ? 'bad' : 'ok'}">복사 ${u.done_ok === false ? '실패' : '완료'} ${fmtTime(u.done_time)} (robocopy 코드 ${u.done_code})</span>` : ''}</span></h3><table class="bktbl"><thead><tr><th>드라이브</th><th>폴더</th><th>마지막 복사</th><th>최신 파일 (원본 시각)</th><th>파일 수</th><th>남은 용량</th></tr></thead><tbody>` +
+      (u.last_seen ? (() => { const ct = Math.max(u.copied_time || 0, u.done_time || 0) || null; return `<tr><td>${esc(u.drive)} ${esc(u.label)}</td><td>${esc(u.path)}</td><td class="${ageCls(ct, 80)}">${ct ? fmtTime(ct) + ' (' + ageTxt(ct) + ')' : '-'}</td><td>${esc(u.newest_file || '-')}${u.newest_time ? ' · ' + fmtTime(u.newest_time) : ''}</td>`; })()<td>${u.count}</td><td class="${u.total && u.free / u.total < 0.1 ? 'bad' : ''}">${u.total ? fmtBytes(u.free) + ' / ' + fmtBytes(u.total) : '-'}</td></tr>` : `<tr><td colspan="6" class="dim">USB 를 꽂아 복사하는 동안 에이전트가 5분마다 확인합니다${u.error ? ' · ' + esc(u.error) : ''}</td></tr>`) + '</tbody></table>';
   }
   if (!(b.jobs && b.jobs.length) && !(b.repos && b.repos.length)) return h;
   const dur = (sec) => sec >= 3600 ? `${Math.floor(sec / 3600)}시간 ${Math.round(sec % 3600 / 60)}분` : `${Math.round(sec / 60)}분`;
