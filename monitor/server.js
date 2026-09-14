@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.12.1';
+const VERSION = '1.12.2';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -237,6 +237,7 @@ function normalize(raw, remoteIp) {
     net_tx: num(raw.net_tx),
     disks,
     backups: normalizeBackups(raw.backups),               // Veeam 백업 서버만 보냄 (없으면 undefined → JSON 에서 빠짐)
+    agent: raw.agent && typeof raw.agent === 'object' ? { version: String(raw.agent.version || '').slice(0, 20), veeam: !!raw.agent.veeam, backup: !!raw.agent.backup, paths: (Array.isArray(raw.agent.paths) ? raw.agent.paths : []).slice(0, 10).map((p) => String(p).slice(0, 200)) } : undefined,   // 에이전트 자기 정보 (1.5.4+)
   };
 }
 // Veeam 에이전트가 보낸 백업 작업/저장소 상태
@@ -244,7 +245,7 @@ function normalizeBackups(b) {
   if (!b || typeof b !== 'object') return undefined;
   const t = (v) => { const x = Date.parse(v); return isNaN(x) ? null : x; };
   return {
-    time: t(b.time) || Date.now(), error: b.error ? String(b.error).slice(0, 200) : '',
+    time: t(b.time) || Date.now(), error: b.error ? String(b.error).slice(0, 200) : '', diag: b.diag ? String(b.diag).slice(0, 400) : '',
     jobs: (Array.isArray(b.jobs) ? b.jobs : []).slice(0, 100).map((j) => ({
       name: String(j.name || '').slice(0, 80), type: String(j.type || ''), enabled: j.enabled !== false, result: String(j.result || 'None'), state: String(j.state || ''),
       progress: j.progress == null ? null : num(j.progress), start: t(j.start), end: t(j.end), ok_end: t(j.ok_end), duration: num(j.duration), size: num(j.size), next: t(j.next),

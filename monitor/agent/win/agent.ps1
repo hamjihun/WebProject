@@ -10,6 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$AgentVersion = "1.5.4"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -84,10 +85,13 @@ if ($HasVeeam) { Log "Veeam 감지: 백업 작업 상태를 10분마다 수집�
 # SQL 백업 폴더 / USB 복사 감시 (backup.ps1): 백업 폴더가 있거나 agent.conf 에 BACKUP_PATH/USB/SQL 이 있으면 5분마다
 $BackupScript = Join-Path $Dir "backup.ps1"
 $BackupOut = Join-Path $DataDir "backup.json"
-$HasBackup = (Test-Path $BackupScript) -and ($conf['BACKUP_PATH'] -or $conf['USB'] -or $conf['SQL'] -or (Test-Path 'D:\DBBackup') -or (Test-Path 'D:\DB_BACKUP') -or (Test-Path 'E:\DBBackup') -or (Test-Path 'C:\DBBackup'))
+$BackupPaths = @()
+if ($conf['BACKUP_PATH']) { $BackupPaths = @($conf['BACKUP_PATH'] -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'E:\DBBackup', 'C:\DBBackup')) { if (Test-Path $p) { $BackupPaths += $p } } }
+$HasBackup = (Test-Path $BackupScript) -and ($BackupPaths.Count -gt 0 -or $conf['USB'] -or $conf['SQL'])
 $backupLast = (Get-Date).AddHours(-1); $backupProc = $null
 $RemoteConf = Join-Path $DataDir "remote.conf"; $remoteCache = ''   # 수집기 화면에서 정한 설정(USB 확인 시간대 등)을 받아 backup.ps1 에 전달
-if ($HasBackup) { Log "백업 폴더 감지: SQL 백업 파일·USB 복사 상태를 5분마다 수집합니다" }
+if ($HasBackup) { Log "백업 폴더 감지 ($($BackupPaths -join ', ')): SQL 백업 파일·USB 복사 상태를 5분마다 수집합니다" } else { Log "백업 폴더 없음 (D:\DBBackup 등): 백업 감시 안 함. 필요하면 agent.conf 에 BACKUP_PATH= 지정" }
 function Get-DisplayName {
   try {
     if (Test-Path $DisplayFile) {
@@ -175,6 +179,7 @@ while ($true) {
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
+      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; paths = @($BackupPaths) }
     }
     if ($backups) { $payload.backups = $backups }
     $body = $payload | ConvertTo-Json -Depth 8 -Compress

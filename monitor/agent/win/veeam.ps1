@@ -46,7 +46,17 @@ try {
   $agSess = @(); try { $agSess = @(Get-VBRComputerBackupJobSession -WarningAction SilentlyContinue -ErrorAction Stop) } catch { $diag += "ComputerBackupJobSession 오류: $($_.Exception.Message)" }
   foreach ($s in $vmSess) { AddSess $s }
   foreach ($s in $agSess) { AddSess $s }
-  Log ("작업 정의 VM=$($vmJobs.Count) 에이전트=$($agJobs.Count), 세션 VM=$($vmSess.Count) 에이전트=$($agSess.Count), 작업 이름 $($byName.Count)개" + $(if ($diag.Count) { ' / ' + ($diag -join '; ') } else { '' }))
+  # 추가 경로: 내부 API(모든 종류의 세션/작업), 구버전 엔드포인트 세션, 저장소의 백업 체인 이름
+  $allSess = @(); try { $allSess = @([Veeam.Backup.Core.CBackupSession]::GetAll()) } catch { $diag += "CBackupSession.GetAll 오류: $($_.Exception.Message)" }
+  foreach ($s in $allSess) { AddSess $s }
+  $allJobs = @(); try { $allJobs = @([Veeam.Backup.Core.CBackupJob]::GetAll()) } catch { $diag += "CBackupJob.GetAll 오류: $($_.Exception.Message)" }
+  foreach ($j in $allJobs) { $n = [string]$j.Name; if ($n -and -not $defs.ContainsKey($n)) { $t = ''; try { $t = [string]$j.TypeToString } catch {}; if (-not $t) { $t = [string]$j.JobType }; $en = $true; try { $en = [bool]$j.IsScheduleEnabled } catch {}; $defs[$n] = @{ type = $t; enabled = $en; next = $null; id = [string]$j.Id } } }
+  $epSess = @(); try { $epSess = @(Get-VBREPSession -WarningAction SilentlyContinue -ErrorAction Stop) } catch {}
+  foreach ($s in $epSess) { AddSess $s }
+  $chains = @(); try { $chains = @(Get-VBRBackup -WarningAction SilentlyContinue -ErrorAction Stop) } catch { $diag += "VBRBackup 오류: $($_.Exception.Message)" }
+  foreach ($b in $chains) { $n = [string]$b.JobName; if ($n -and -not $defs.ContainsKey($n) -and -not $byName.ContainsKey($n)) { $defs[$n] = @{ type = [string]$b.JobType; enabled = $true; next = $null; id = '' } } }
+  $diagLine = "작업 정의 VM=$($vmJobs.Count) 에이전트=$($agJobs.Count) 전체API=$($allJobs.Count) 체인=$($chains.Count), 세션 VM=$($vmSess.Count) 에이전트=$($agSess.Count) 전체API=$($allSess.Count) EP=$($epSess.Count), 작업 이름 $($byName.Count)개" + $(if ($diag.Count) { ' / ' + ($diag -join '; ') } else { '' })
+  Log $diagLine
 
   # 3) 작업별 마지막 결과
   $names = @($defs.Keys) + @($byName.Keys) | Sort-Object -Unique
@@ -76,7 +86,7 @@ try {
     try { $c = $r.GetContainer(); $item.total = [int64]$c.CachedTotalSpace.InBytes; $item.free = [int64]$c.CachedFreeSpace.InBytes } catch {}
     $repos += $item
   }
-  Save @{ time = $now; error = ''; jobs = @($jobs); repos = @($repos); diag = ($diag -join '; ') }
+  Save @{ time = $now; error = ''; jobs = @($jobs); repos = @($repos); diag = $diagLine }
 } catch {
   Save @{ time = $now; error = $_.Exception.Message; jobs = @(); repos = @() }
   Log "수집 실패: $($_.Exception.Message)"

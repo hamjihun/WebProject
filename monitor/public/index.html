@@ -229,7 +229,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.12.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.12.2';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -427,7 +427,7 @@ async function loadDetail() {
     if (!r.ok) return;
     const j = await r.json();
     document.getElementById('gtable').innerHTML = growthTable(j);
-    const sb = servers.find(x => x.host === selected); document.getElementById('bktable').innerHTML = sb && sb.backups ? bkTable(sb.backups) : '';
+    const sb = servers.find(x => x.host === selected); document.getElementById('bktable').innerHTML = bkDiag(sb) + (sb && sb.backups ? bkTable(sb.backups) : '');
     const bb = document.getElementById('bBkAlert'); if (bb) bb.onclick = async () => { const off = !(sb.host_rules && sb.host_rules.backup === false); await fetch('api/mute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: selected, rules: { backup: !off } }) }); await refresh(); loadDetail(); };
     drawChart(document.getElementById('chart'), j.history);
   } catch (e) {}
@@ -471,6 +471,22 @@ function bkSummary(b) {
   const cls = c.Failed ? 'bad' : (c.Warning || b.error) ? 'warn' : '';
   const txt = b.error ? '백업 조회 실패' : `💾 백업 ${c.Success}/${n} 성공${c.Failed ? ' · 실패 ' + c.Failed : ''}${c.Warning ? ' · 경고 ' + c.Warning : ''}${c.Running ? ' · 실행 중 ' + c.Running : ''}`;
   return { cls, txt, latest, n, ok: c.Success };
+}
+// 백업 감시 상태 진단 줄 (에이전트 버전·폴더 감지 여부) — 왜 안 뜨는지 화면에서 바로 알 수 있게
+function bkDiag(s) {
+  if (!s) return '';
+  const a = s.agent, b = s.backups;
+  let msg, cls = 'dim';
+  if (!a) msg = '에이전트가 구버전(1.5.4 미만)이라 백업 감시 정보를 보내지 않습니다. 최신 Setup.exe 로 덮어쓰기 설치하세요.';
+  else {
+    const parts = [`에이전트 v${esc(a.version)}`];
+    if (a.veeam) parts.push('Veeam 감지');
+    if (a.backup) parts.push(`백업 폴더 감지: ${esc(a.paths.join(', ') || '(agent.conf 지정)')}`); else parts.push('백업 폴더 없음 (D:\\DBBackup 등을 찾지 못함 → agent.conf 에 BACKUP_PATH= 지정)');
+    if ((a.backup || a.veeam) && !b) { parts.push('첫 결과 대기 중 (최대 5~10분)'); cls = 'warn'; }
+    if (b && b.diag) parts.push('Veeam 조회: ' + esc(b.diag));
+    msg = parts.join(' · ');
+  }
+  return `<div class="${cls}" style="font-size:12px;margin:10px 0 4px">💾 ${msg}</div>`;
 }
 function bkTable(b) {
   let h = '';
