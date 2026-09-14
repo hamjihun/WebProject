@@ -35,35 +35,48 @@ try {
     $next = $null; try { $nr = Prop $j @('NextRun'); if (-not $nr -and $j.ScheduleOptions) { $nr = $j.ScheduleOptions.NextRun }; if ($nr) { $next = Iso ([datetime]$nr) } } catch {}
     $defs[[string]$j.Name] = @{ type = $type.Trim(); enabled = [bool]$en; next = $next; id = [string]$j.Id }
   }
-  # 2) 세션 기록 (작업 이름별로 묶기)
-  $byName = @{}
-  function AddSess($s) {
-    $n = [string](Prop $s @('JobName', 'Name')); if (-not $n) { return }
-    if (-not $byName.ContainsKey($n)) { $byName[$n] = New-Object System.Collections.ArrayList }
-    [void]$byName[$n].Add($s)
+  # 2) 세션 기록 (작업 이름별로 묶기). 이름이 없으면 작업 ID 로 정의와 연결
+  $script:byName = @{}
+  $script:idName = @{}
+  foreach ($k in @($defs.Keys)) { $i = [string]$defs[$k].id; if ($i) { $script:idName[$i] = $k } }
+  $script:sample = @{}
+  function SessName($s) {
+    foreach ($p in @('JobName', 'Name', 'OrigJobName')) { try { $v = $s.$p; if ($v -and "$v" -ne '') { return ([string]$v) } } catch {} }
+    foreach ($p in @('JobId', 'OrigJobId')) { try { $v = [string]$s.$p; if ($v -and $script:idName.ContainsKey($v)) { return $script:idName[$v] } } catch {} }
+    try { $v = $s.JobInfo; if ($v -and $v.Name) { return [string]$v.Name } } catch {}
+    return ''
+  }
+  function AddSess($s, $src) {
+    if (-not $script:sample.ContainsKey($src)) {   # 소스별 첫 기록의 속성 이름을 진단에 남김 (이름을 못 찾을 때 원인 파악용)
+      $props = ''; try { $props = (($s | Get-Member -MemberType Property, NoteProperty | ForEach-Object { $_.Name }) | Select-Object -First 25) -join ',' } catch {}
+      $script:sample[$src] = "$src[$($s.GetType().Name)] JobName=$(try { $s.JobName } catch {}) Name=$(try { $s.Name } catch {}) JobId=$(try { $s.JobId } catch {}) Result=$(try { $s.Result } catch {}) props=$props"
+    }
+    $n = SessName $s; if (-not $n) { return }
+    if (-not $script:byName.ContainsKey($n)) { $script:byName[$n] = New-Object System.Collections.ArrayList }
+    [void]$script:byName[$n].Add($s)
   }
   $vmSess = @(); try { $vmSess = @(Get-VBRBackupSession -WarningAction SilentlyContinue -ErrorAction Stop) } catch { $diag += "BackupSession 오류: $($_.Exception.Message)" }
   $agSess = @(); try { $agSess = @(Get-VBRComputerBackupJobSession -WarningAction SilentlyContinue -ErrorAction Stop) } catch { $diag += "ComputerBackupJobSession 오류: $($_.Exception.Message)" }
-  foreach ($s in $vmSess) { AddSess $s }
-  foreach ($s in $agSess) { AddSess $s }
+  foreach ($s in $vmSess) { AddSess $s 'VM' }
+  foreach ($s in $agSess) { AddSess $s 'AG' }
   # 추가 경로: 내부 API(모든 종류의 세션/작업), 구버전 엔드포인트 세션, 저장소의 백업 체인 이름
   $allSess = @(); try { $allSess = @([Veeam.Backup.Core.CBackupSession]::GetAll()) } catch { $diag += "CBackupSession.GetAll 오류: $($_.Exception.Message)" }
-  foreach ($s in $allSess) { AddSess $s }
+  foreach ($s in $allSess) { AddSess $s 'ALL' }
   $allJobs = @(); try { $allJobs = @([Veeam.Backup.Core.CBackupJob]::GetAll()) } catch { $diag += "CBackupJob.GetAll 오류: $($_.Exception.Message)" }
-  foreach ($j in $allJobs) { $n = [string]$j.Name; if ($n -and -not $defs.ContainsKey($n)) { $t = ''; try { $t = [string]$j.TypeToString } catch {}; if (-not $t) { $t = [string]$j.JobType }; $en = $true; try { $en = [bool]$j.IsScheduleEnabled } catch {}; $defs[$n] = @{ type = $t; enabled = $en; next = $null; id = [string]$j.Id } } }
+  foreach ($j in $allJobs) { $n = [string]$j.Name; if ($n -and -not $defs.ContainsKey($n)) { $t = ''; try { $t = [string]$j.TypeToString } catch {}; if (-not $t) { $t = [string]$j.JobType }; $en = $true; try { $en = [bool]$j.IsScheduleEnabled } catch {}; $defs[$n] = @{ type = $t; enabled = $en; next = $null; id = [string]$j.Id } }; try { $i = [string]$j.Id; if ($i -and -not $script:idName.ContainsKey($i)) { $script:idName[$i] = $n } } catch {} }
   $epSess = @(); try { $epSess = @(Get-VBREPSession -WarningAction SilentlyContinue -ErrorAction Stop) } catch {}
-  foreach ($s in $epSess) { AddSess $s }
+  foreach ($s in $epSess) { AddSess $s 'EP' }
   $chains = @(); try { $chains = @(Get-VBRBackup -WarningAction SilentlyContinue -ErrorAction Stop) } catch { $diag += "VBRBackup 오류: $($_.Exception.Message)" }
-  foreach ($b in $chains) { $n = [string]$b.JobName; if ($n -and -not $defs.ContainsKey($n) -and -not $byName.ContainsKey($n)) { $defs[$n] = @{ type = [string]$b.JobType; enabled = $true; next = $null; id = '' } } }
-  $diagLine = "작업 정의 VM=$($vmJobs.Count) 에이전트=$($agJobs.Count) 전체API=$($allJobs.Count) 체인=$($chains.Count), 세션 VM=$($vmSess.Count) 에이전트=$($agSess.Count) 전체API=$($allSess.Count) EP=$($epSess.Count), 작업 이름 $($byName.Count)개" + $(if ($diag.Count) { ' / ' + ($diag -join '; ') } else { '' })
+  foreach ($b in $chains) { $n = [string]$b.JobName; if ($n -and -not $defs.ContainsKey($n) -and -not $script:byName.ContainsKey($n)) { $defs[$n] = @{ type = [string]$b.JobType; enabled = $true; next = $null; id = '' } } }
+  $diagLine = "작업 정의 VM=$($vmJobs.Count) 에이전트=$($agJobs.Count) 전체API=$($allJobs.Count) 체인=$($chains.Count), 세션 VM=$($vmSess.Count) 에이전트=$($agSess.Count) 전체API=$($allSess.Count) EP=$($epSess.Count), 작업 이름 $($script:byName.Count)개" + $(if ($diag.Count) { ' / ' + ($diag -join '; ') } else { '' }) + $(if ($script:byName.Count -eq 0 -and $script:sample.Count) { ' / 샘플: ' + (($script:sample.Values) -join ' | ') } else { '' })
   Log $diagLine
 
   # 3) 작업별 마지막 결과
-  $names = @($defs.Keys) + @($byName.Keys) | Sort-Object -Unique
+  $names = @($defs.Keys) + @($script:byName.Keys) | Sort-Object -Unique
   $jobs = @()
   foreach ($n in $names) {
     $d = $defs[$n]; if (-not $d) { $d = @{ type = ''; enabled = $true; next = $null } }
-    $sess = @(); if ($byName.ContainsKey($n)) { $sess = @($byName[$n] | Sort-Object { try { [datetime]$_.CreationTime } catch { [datetime]::MinValue } } -Descending) }
+    $sess = @(); if ($script:byName.ContainsKey($n)) { $sess = @($script:byName[$n] | Sort-Object { try { [datetime]$_.CreationTime } catch { [datetime]::MinValue } } -Descending) }
     $last = $null; if ($sess.Count -gt 0) { $last = $sess[0] }
     $ok = $null; foreach ($s in $sess) { $r = Str $s.Result; if ($r -eq 'Success' -or $r -eq 'Warning') { $ok = $s; break } }
     $result = 'None'; $state = ''; $prog = $null; $dur = 0; $size = 0; $start = $null; $end = $null
