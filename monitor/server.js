@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.12.3';
+const VERSION = '1.12.4';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -254,7 +254,7 @@ function normalizeBackups(b) {
     // 1차: SQL 백업 폴더(.bak 최신 파일) + msdb 기록, 3차: USB 복사
     files: Array.isArray(b.files) ? b.files.slice(0, 10).map((f) => ({ path: String(f.path || ''), exists: f.exists !== false, newest_file: f.newest_file ? String(f.newest_file).slice(0, 200) : null, newest_time: t(f.newest_time), newest_size: num(f.newest_size), count: num(f.count), size: num(f.size), error: f.error ? String(f.error).slice(0, 200) : '' })) : undefined,
     sql: b.sql && typeof b.sql === 'object' ? { instance: String(b.sql.instance || ''), error: b.sql.error ? String(b.sql.error).slice(0, 200) : '', dbs: (Array.isArray(b.sql.dbs) ? b.sql.dbs : []).slice(0, 200).map((d) => ({ db: String(d.db || ''), full: t(d.full), diff: t(d.diff), log: t(d.log), size: num(d.size), path: String(d.path || '').slice(0, 260), recovery: String(d.recovery || '') })) } : undefined,
-    usb: b.usb && typeof b.usb === 'object' ? { connected: !!b.usb.connected, drive: String(b.usb.drive || ''), label: String(b.usb.label || ''), path: String(b.usb.path || ''), newest_file: b.usb.newest_file ? String(b.usb.newest_file).slice(0, 200) : null, newest_time: t(b.usb.newest_time), count: num(b.usb.count), size: num(b.usb.size), free: num(b.usb.free), total: num(b.usb.total), last_seen: t(b.usb.last_seen), error: b.usb.error ? String(b.usb.error).slice(0, 200) : '' } : undefined,
+    usb: b.usb && typeof b.usb === 'object' ? { connected: !!b.usb.connected, drive: String(b.usb.drive || ''), label: String(b.usb.label || ''), path: String(b.usb.path || ''), newest_file: b.usb.newest_file ? String(b.usb.newest_file).slice(0, 200) : null, newest_time: t(b.usb.newest_time), count: num(b.usb.count), size: num(b.usb.size), free: num(b.usb.free), total: num(b.usb.total), last_seen: t(b.usb.last_seen), done_time: t(b.usb.done_time), done_code: b.usb.done_code == null ? null : num(b.usb.done_code), done_ok: b.usb.done_ok == null ? null : !!b.usb.done_ok, error: b.usb.error ? String(b.usb.error).slice(0, 200) : '' } : undefined,
   };
 }
 

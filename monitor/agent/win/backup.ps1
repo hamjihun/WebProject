@@ -1,9 +1,10 @@
 ﻿# 1차(SQL 백업 파일·msdb 기록) / 3차(USB 복사) 상태 수집 → %ProgramData%\IMSMonitoringAgent\backup.json
 # 에이전트가 5분마다 별도 프로세스로 실행. agent.conf 의 BACKUP_PATH / SQL / USB 로 조정 가능 (없으면 자동 감지).
-param([string]$ConfPath)
+param([string]$ConfPath, [switch]$ForceUsb)
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $Out = Join-Path $DataDir "backup.json"
 $UsbState = Join-Path $DataDir "usb-state.json"
+$UsbDone = Join-Path $DataDir "usb-done.json"     # usb-done.ps1 (bat 파일에서 호출) 이 남기는 복사 완료 기록
 $LogFile = Join-Path $DataDir "agent.log"
 function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [백업] {1}" -f (Get-Date), $m) -Encoding UTF8 } catch {} }
 function Iso($d) { try { if ($d -and ($d -is [datetime]) -and $d.Year -gt 2000) { return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } } catch {}; return $null }
@@ -112,13 +113,15 @@ if ($conf['USB'] -ne '0') {
     # 2) 폴더 훑기(무거움)는 확인 시간대 안이거나, 새 드라이브가 꽂혔거나, 마지막 훑은 지 1시간이 넘었을 때만
     $lastScan = $null; try { if ($usb.last_scan) { $lastScan = [datetime]::Parse($usb.last_scan) } } catch {}
     $newDrive = ($prev.drive -ne $pick) -or ($prev.path -ne $pickPath)
-    if ($inWindow -or $newDrive -or (-not $lastScan) -or (((Get-Date) - $lastScan).TotalMinutes -ge 60)) {
+    if ($ForceUsb -or $inWindow -or $newDrive -or (-not $lastScan) -or (((Get-Date) - $lastScan).TotalMinutes -ge 60)) {
       $scan = ScanFolder $pickPath $(if ($pickPath -match '^[A-Z]:\\$') { 3 } else { 0 })
       $usb.newest_file = $scan.newest_file; $usb.newest_time = $scan.newest_time; $usb.count = $scan.count; $usb.size = $scan.size; $usb.last_scan = Iso (Get-Date)
       if ($scan.error) { $usb.error = $scan.error }
     }
     try { $usb | ConvertTo-Json -Compress | Set-Content -Path $UsbState -Encoding UTF8 } catch {}
   }
+  # bat 파일이 복사 직후 usb-done.ps1 을 호출했으면 그 기록(완료 시각, robocopy 결과)을 같이
+  try { if (Test-Path $UsbDone) { $dn = Get-Content $UsbDone -Raw -Encoding UTF8 | ConvertFrom-Json; $usb.done_time = $dn.time; $usb.done_code = $dn.code; $usb.done_ok = $dn.ok; if ($dn.newest_time -and -not $usb.newest_time) { $usb.newest_time = $dn.newest_time }; if ($dn.newest_time -and $dn.time -gt $usb.last_seen) { $usb.newest_time = $dn.newest_time; $usb.newest_file = $dn.newest_file; $usb.count = $dn.count; $usb.free = $dn.free; $usb.total = $dn.total; $usb.drive = $dn.drive; $usb.path = $dn.path; $usb.last_seen = $dn.time } } } catch {}
 }
 
 $result = @{ time = Iso (Get-Date); files = @($files); sql = $sql; usb = $usb }

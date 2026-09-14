@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.5.5"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.5.6"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -90,6 +90,7 @@ if ($conf['BACKUP_PATH']) { $BackupPaths = @($conf['BACKUP_PATH'] -split ';' | F
 else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'C:\DBBackup', 'C:\DB_BACKUP')) { if (Test-Path $p) { $BackupPaths += $p } } }
 $HasBackup = (Test-Path $BackupScript) -and ($BackupPaths.Count -gt 0 -or $conf['USB'] -or $conf['SQL'])
 $backupLast = (Get-Date).AddHours(-1); $backupProc = $null
+$knownDrives = $null; $usbBurstUntil = (Get-Date).AddMinutes(-1); $usbBurstLast = (Get-Date).AddMinutes(-1)   # USB 가 꽂히면 4분간 20초마다 확인 (3분 만에 자동 분리되는 경우 대비)
 $RemoteConf = Join-Path $DataDir "remote.conf"; $remoteCache = ''   # 수집기 화면에서 정한 설정(USB 확인 시간대 등)을 받아 backup.ps1 에 전달
 if ($HasBackup) { Log "백업 폴더 감지 ($($BackupPaths -join ', ')): SQL 백업 파일·USB 복사 상태를 5분마다 수집합니다" } else { Log "백업 폴더 없음 (D:\DBBackup 등): 백업 감시 안 함. 필요하면 agent.conf 에 BACKUP_PATH= 지정" }
 function Get-DisplayName {
@@ -148,7 +149,14 @@ while ($true) {
     $prevNet = $net; $prevT = $now
     $tm.net = $sw.Elapsed.TotalSeconds - $tm.cpu - $tm.mem
 
-    $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
+    $allDrives = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3")
+    if ($HasBackup) {
+      # 새 드라이브 문자가 나타나면(USB 꽂힘) 즉시 + 4분 동안 20초마다 USB 상태 수집
+      $cur = @($allDrives | ForEach-Object { $_.DeviceID })
+      if ($null -ne $knownDrives) { foreach ($d in $cur) { if ($knownDrives -notcontains $d -and $d -ne 'C:' -and $d -ne 'D:') { Log "새 드라이브 감지: $d (USB 백업 확인 시작)"; $usbBurstUntil = (Get-Date).AddMinutes(4); $usbBurstLast = (Get-Date).AddMinutes(-1) } } }
+      $knownDrives = $cur
+    }
+    $disks = $allDrives | Where-Object { $_.DriveType -eq 3 } | ForEach-Object {
       @{ mount = $_.DeviceID; total = [int64]$_.Size; used = [int64]$_.Size - [int64]$_.FreeSpace }
     }
     $tm.disk = $sw.Elapsed.TotalSeconds - $tm.cpu - $tm.mem - $tm.net
@@ -162,12 +170,14 @@ while ($true) {
       try { if ((Test-Path $VeeamOut) -and ((Get-Date) - (Get-Item $VeeamOut).LastWriteTime).TotalHours -lt 3) { $backups = Get-Content $VeeamOut -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
     }
     if ($HasBackup) {
-      if ((-not $backupProc -or $backupProc.HasExited) -and ((Get-Date) - $backupLast).TotalMinutes -ge 5) {
-        $backupLast = Get-Date
-        try { $backupProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$BackupScript`" -ConfPath `"$confPath`"" -WindowStyle Hidden -PassThru; try { $backupProc.PriorityClass = 'BelowNormal' } catch {} } catch { Log "백업 수집 실행 실패: $($_.Exception.Message)" }
+      $burst = ((Get-Date) -lt $usbBurstUntil) -and (((Get-Date) - $usbBurstLast).TotalSeconds -ge 20)
+      if ((-not $backupProc -or $backupProc.HasExited) -and ($burst -or ((Get-Date) - $backupLast).TotalMinutes -ge 5)) {
+        $backupLast = Get-Date; if ($burst) { $usbBurstLast = Get-Date }
+        $extra = $(if ($burst) { ' -ForceUsb' } else { '' })
+        try { $backupProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$BackupScript`" -ConfPath `"$confPath`"$extra" -WindowStyle Hidden -PassThru; try { $backupProc.PriorityClass = 'BelowNormal' } catch {} } catch { Log "백업 수집 실행 실패: $($_.Exception.Message)" }
       }
       try {
-        if ((Test-Path $BackupOut) -and ((Get-Date) - (Get-Item $BackupOut).LastWriteTime).TotalHours -lt 2) {
+        if ((Test-Path $BackupOut) -and ((Get-Date) - (Get-Item $BackupOut).LastWriteTime).TotalHours -lt 2) {   # (usb 는 backup.ps1 이 usb-state/usb-done 을 합쳐 넣음)
           $bk = Get-Content $BackupOut -Raw -Encoding UTF8 | ConvertFrom-Json
           if (-not $backups) { $backups = New-Object PSObject; $backups | Add-Member NoteProperty time $bk.time }
           foreach ($k in @('files', 'sql', 'usb')) { if ($bk.$k -ne $null) { $backups | Add-Member NoteProperty $k $bk.$k -Force } }
