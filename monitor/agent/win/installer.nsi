@@ -7,7 +7,7 @@ Unicode true
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.5.6"
+!define VERSION "1.5.7"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
