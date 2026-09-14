@@ -111,7 +111,7 @@
 MON.renderNav('stats.html'); MON.pollNav(); setInterval(MON.pollNav, 30000);
 const $ = (s) => document.querySelector(s), esc = MON.esc;
 const PAL = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'];
-const RULE = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진', offline: '오프라인', etc: '기타' };
+const RULE = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진', offline: '오프라인', backup: '백업', etc: '기타' };
 let state = { days: 7, month: '', host: '' }, data = null;
 const p2 = (n) => String(n).padStart(2, '0');
 const fmtDate = (t) => { const d = new Date(t); return `${d.getFullYear()}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
@@ -158,7 +158,7 @@ function render() {
     ['평균 CPU', cpu == null ? '-' : cpu.toFixed(1), '%', '최대 ' + pct(list.length ? Math.max(...list.map((h) => h.cpu_max ?? 0)) : null), g(cpu, 60, 80)],
     ['평균 메모리', mem == null ? '-' : mem.toFixed(1), '%', '최대 ' + pct(list.length ? Math.max(...list.map((h) => h.mem_max ?? 0)) : null), g(mem, 75, 90)],
     ['가동률', upr == null ? '-' : upr.toFixed(2), '%', '오프라인 누적 ' + hrs(off), upr == null ? '' : upr >= 99.5 ? 'ok' : upr >= 95 ? 'warn' : 'bad'],
-    ['경고 발생', alerts, '건', `CPU ${br.cpu} · 메모리 ${br.mem} · 디스크 ${br.disk + br.full} · 오프라인 ${br.offline}`, alerts ? (alerts >= 10 ? 'bad' : 'warn') : 'ok'],
+    ['경고 발생', alerts, '건', `CPU ${br.cpu} · 메모리 ${br.mem} · 디스크 ${br.disk + br.full} · 오프라인 ${br.offline} · 백업 ${br.backup || 0}`, alerts ? (alerts >= 10 ? 'bad' : 'warn') : 'ok'],
     ['디스크 증감 합계', (dsum >= 0 ? '+' : '-') + MON.fmtBytes(Math.abs(dsum)), '', '기간 시작 대비', dsum > 50 * 1024 ** 3 ? 'warn' : ''],
   ].map(([l, v, u, s, c]) => `<div class="kpi ${c}"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div><div class="s">${esc(s)}</div></div>`).join('');
 

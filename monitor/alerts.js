@@ -14,6 +14,9 @@ const DEFAULTS = {
     disk: 90, disk_on: true,                    // 디스크 사용률 90% 이상 / 소진 예상
     days_left: 30,                              // 예상 소진 30일 이내
     offline: true,                              // 오프라인 알림
+    backup_on: true,                            // 백업(Veeam) 알림: 실패/경고/미실행
+    backup_warn: true,                          // Warning 도 알림
+    backup_max_hours: 26,                       // 이 시간 넘게 성공 기록이 없으면 알림
     offline_grace: 0,                           // 오프라인 유예(분): 이 시간 안에 복구되면 텔레그램 생략, 이력만 기록 (0=즉시 전송)
     disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
   },
@@ -67,7 +70,7 @@ function create({ settingsFile, logDir, log = console.log }) {
 
   // 기간 내 알림 로그 집계 (통계용): 월별 로그 파일을 읽어 서버별/일별/규칙별 경고 건수를 센다
   function countEvents(fromTs, toTs) {
-    const out = { total: 0, byHost: {}, byDay: {}, byRule: { cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, etc: 0 }, events: [] };
+    const out = { total: 0, byHost: {}, byDay: {}, byRule: { cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, backup: 0, etc: 0 }, events: [] };
     const months = []; const d = new Date(fromTs); d.setDate(1); d.setHours(0, 0, 0, 0);
     while (d.getTime() <= toTs) { months.push(monthKey(d)); d.setMonth(d.getMonth() + 1); }
     const re = /^\uFEFF?\[(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\] ([^\t]+)\t([^\t]*)\t([^\t]*)/;
@@ -79,10 +82,10 @@ function create({ settingsFile, logDir, log = console.log }) {
         if (t < fromTs || t > toTs) continue;
         const label = m[8], msg = m[9];
         const hm = /\(([^()]+)\)\s*$/.exec(label); const host = hm ? hm[1] : label;
-        const rule = /CPU/.test(msg) ? 'cpu' : /메모리/.test(msg) ? 'mem' : /가득 찰/.test(msg) ? 'full' : /드라이브|디스크/.test(msg) ? 'disk' : /응답 없음|오프라인/.test(msg) ? 'offline' : 'etc';
+        const rule = /백업/.test(msg) ? 'backup' : /CPU/.test(msg) ? 'cpu' : /메모리/.test(msg) ? 'mem' : /가득 찰/.test(msg) ? 'full' : /드라이브|디스크/.test(msg) ? 'disk' : /응답 없음|오프라인/.test(msg) ? 'offline' : 'etc';
         const day = `${m[1]}-${m[2]}-${m[3]}`;
         out.total++;
-        const h = out.byHost[host] = out.byHost[host] || { total: 0, cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, etc: 0 };
+        const h = out.byHost[host] = out.byHost[host] || { total: 0, cpu: 0, mem: 0, disk: 0, full: 0, offline: 0, backup: 0, etc: 0 };
         h.total++; h[rule]++; out.byRule[rule]++; out.byDay[day] = (out.byDay[day] || 0) + 1;
         if (out.events.length < 500) out.events.push({ time: t, host, name: hm ? label.slice(0, hm.index).trim() : '', rule, msg });
       }
@@ -242,6 +245,8 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (!memOn) clearRule(H, 'mem');
       if (!diskOn) { clearRule(H, 'disk'); clearRule(H, 'full'); }
       if (!offOn) clearRule(H, 'offline');
+      const bkOn = r.backup_on !== false && hr.backup !== false;
+      if (!bkOn) clearRule(H, 'backup');
       // 오프라인
       if (offOn) check(`${H}|offline`, H, N, !s.online,
         () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)`, { rule: 'offline', critical: true, grace: Math.max(0, Number(r.offline_grace) || 0) * 60000, recoverMsg: () => '서버 응답 복구' });
@@ -267,6 +272,24 @@ function create({ settingsFile, logDir, log = console.log }) {
           () => `${d.mount} 드라이브 약 ${g.days_left}일 후 가득 찰 것으로 예상 (하루 +${fmtBytes(g.rate_day)})`,
           { rule: 'full', threshold: r.days_left, recoverMsg: () => `${d.mount} 드라이브 소진 예상 해제` });
       }
+      // 백업 (Veeam 서버 에이전트가 보낸 backups): 실패/경고, 오래 성공 없음, 저장소 용량
+      if (bkOn && s.backups && Array.isArray(s.backups.jobs)) {
+        const maxH = Math.max(1, Number(r.backup_max_hours) || 26), warnOn = r.backup_warn !== false;
+        for (const j of s.backups.jobs) {
+          if (j.enabled === false) continue;
+          const bad = j.result === 'Failed' || (warnOn && j.result === 'Warning');
+          check(`${H}|backup|${j.name}`, H, N, bad,
+            () => `백업 "${j.name}" ${j.result === 'Failed' ? '실패' : '경고'}${j.end ? ' (' + fmtTs(new Date(j.end)) + ' 종료)' : ''}`,
+            { rule: 'backup', recoverMsg: () => `백업 "${j.name}" 정상 (${j.result})` });
+          const ageH = j.ok_end ? (Date.now() - j.ok_end) / 3600000 : null;
+          check(`${H}|backup|${j.name}|stale`, H, N, ageH === null || ageH > maxH,
+            () => ageH === null ? `백업 "${j.name}" 성공 기록 없음` : `백업 "${j.name}" ${Math.round(ageH)}시간째 성공 없음 (기준 ${maxH}시간)`,
+            { rule: 'backup', threshold: maxH, recoverMsg: () => `백업 "${j.name}" 성공 확인` });
+        }
+        for (const rp of (s.backups.repos || [])) if (rp.pct != null) check(`${H}|backup|repo:${rp.name}`, H, N, rp.pct >= r.disk,
+          () => `백업 저장소 "${rp.name}" ${rp.pct}% 사용 (남은 ${fmtBytes(rp.free)} / ${fmtBytes(rp.total)}, 기준 ${r.disk}%)`,
+          { rule: 'backup', threshold: r.disk, hold: rp.pct >= r.disk - 2, recoverMsg: () => `백업 저장소 "${rp.name}" 사용률 정상 (${rp.pct}%)` });
+      }
     }
     for (const key of [...states.keys()]) if (!live.has(key.split('|')[0])) states.delete(key);
   }
@@ -285,7 +308,7 @@ function create({ settingsFile, logDir, log = console.log }) {
     setHostRules(host, rules) {
       if (!settings.hostRules) settings.hostRules = {};
       const cur = { ...(settings.hostRules[host] || {}) };
-      for (const k of ['cpu', 'mem', 'disk', 'offline']) if (rules && typeof rules[k] === 'boolean') { if (rules[k]) delete cur[k]; else cur[k] = false; }
+      for (const k of ['cpu', 'mem', 'disk', 'offline', 'backup']) if (rules && typeof rules[k] === 'boolean') { if (rules[k]) delete cur[k]; else cur[k] = false; }
       if (Object.keys(cur).length) settings.hostRules[host] = cur; else delete settings.hostRules[host];
       for (const k of Object.keys(cur)) { clearRule(host, k); if (k === 'disk') clearRule(host, 'full'); }
       saveSettings();

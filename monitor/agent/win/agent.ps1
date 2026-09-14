@@ -75,6 +75,12 @@ $startChecked = Get-Date
 
 # 표시 이름: 트레이 메뉴 "이름 설정" 이 %ProgramData%\IMSMonitoringAgent\display.conf 에 저장 (NAME=...)
 $DisplayFile = Join-Path $DataDir "display.conf"
+# Veeam 백업 서버면 veeam.ps1 을 10분마다 별도 프로세스로 실행해 결과(veeam.json)를 같이 보낸다
+$VeeamScript = Join-Path $Dir "veeam.ps1"
+$VeeamOut = Join-Path $DataDir "veeam.json"
+$HasVeeam = (Test-Path $VeeamScript) -and ((Test-Path "$env:ProgramFiles\Veeam\Backup and Replication\Backup") -or (Test-Path "$env:ProgramFiles\Veeam\Backup and Replication\Console"))
+$veeamLast = (Get-Date).AddHours(-1); $veeamProc = $null
+if ($HasVeeam) { Log "Veeam 감지: 백업 작업 상태를 10분마다 수집합니다" }
 function Get-DisplayName {
   try {
     if (Test-Path $DisplayFile) {
@@ -136,12 +142,22 @@ while ($true) {
     }
     $tm.disk = $sw.Elapsed.TotalSeconds - $tm.cpu - $tm.mem - $tm.net
     $collectSec = $sw.Elapsed.TotalSeconds
-    $body = @{
+    $backups = $null
+    if ($HasVeeam) {
+      if ((-not $veeamProc -or $veeamProc.HasExited) -and ((Get-Date) - $veeamLast).TotalMinutes -ge 10) {
+        $veeamLast = Get-Date
+        try { $veeamProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$VeeamScript`"" -WindowStyle Hidden -PassThru } catch { Log "Veeam 수집 실행 실패: $($_.Exception.Message)" }
+      }
+      try { if ((Test-Path $VeeamOut) -and ((Get-Date) - (Get-Item $VeeamOut).LastWriteTime).TotalHours -lt 3) { $backups = Get-Content $VeeamOut -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
+    }
+    $payload = @{
       host = $HostName; name = (Get-DisplayName); os = $osName; token = $Token
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
-    } | ConvertTo-Json -Depth 4 -Compress
+    }
+    if ($backups) { $payload.backups = $backups }
+    $body = $payload | ConvertTo-Json -Depth 8 -Compress
 
     Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
       -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null

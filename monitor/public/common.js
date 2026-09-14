@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.10.1';
+  const UI_VERSION = '1.11.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -72,7 +72,7 @@
       return w;   // 긴 이름은 그대로 (TTS 가 단어처럼 읽음)
     });
   }
-  const RULE_KO = { cpu: 'CPU 경고', mem: '메모리 경고', disk: '디스크 경고', full: '디스크 소진 예상', offline: '오프라인' };
+  const RULE_KO = { cpu: 'CPU 경고', mem: '메모리 경고', disk: '디스크 경고', full: '디스크 소진 예상', offline: '오프라인', backup: '백업 경고' };
   let snd = { ...sndDef }; try { snd = { ...sndDef, ...JSON.parse(localStorage.getItem(SND_KEY) || '{}') }; } catch (e) {}
   let actx = null, ringTimer = null, ringUntil = 0, lastEvId = null, ringing = false, phrases = [], tick = 0;
   function sndSave() { try { localStorage.setItem(SND_KEY, JSON.stringify(snd)); } catch (e) {} sndBtn(); }

@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.10.1';
+const VERSION = '1.11.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -135,9 +135,9 @@ function reportCsv(from, to, gran) {
   lines.push(['서버 모니터 리포트', `기간 ${fmtD(from)} ~ ${fmtD(to)}`, `생성 ${new Date().toLocaleString('ko-KR')}`]);
   lines.push([]);
   lines.push(['[서버별 요약]']);
-  lines.push(['서버', '호스트명', 'OS', 'CPU 평균(%)', 'CPU 최대(%)', '메모리 평균(%)', '메모리 최대(%)', '가동률(%)', '오프라인(시간)', '경고 건수', 'CPU 경고', '메모리 경고', '디스크 경고', '오프라인 경고']);
+  lines.push(['서버', '호스트명', 'OS', 'CPU 평균(%)', 'CPU 최대(%)', '메모리 평균(%)', '메모리 최대(%)', '가동률(%)', '오프라인(시간)', '경고 건수', 'CPU 경고', '메모리 경고', '디스크 경고', '오프라인 경고', '백업 경고']);
   const list = Object.values(hosts).sort((a, b) => (order.indexOf(a.host) + 1 || 1e9) - (order.indexOf(b.host) + 1 || 1e9) || a.host.localeCompare(b.host));
-  for (const h of list) { const a = ev.byHost[h.host] || {}; lines.push([h.name || h.host, h.host, h.os, h.cpu_avg, h.cpu_max, h.mem_avg, h.mem_max, h.uptime, (h.off_sec / 3600).toFixed(1), a.total || 0, a.cpu || 0, a.mem || 0, (a.disk || 0) + (a.full || 0), a.offline || 0]); }
+  for (const h of list) { const a = ev.byHost[h.host] || {}; lines.push([h.name || h.host, h.host, h.os, h.cpu_avg, h.cpu_max, h.mem_avg, h.mem_max, h.uptime, (h.off_sec / 3600).toFixed(1), a.total || 0, a.cpu || 0, a.mem || 0, (a.disk || 0) + (a.full || 0), a.offline || 0, a.backup || 0]); }
   lines.push([]);
   lines.push(['[디스크 증감]']);
   lines.push(['서버', '드라이브', '전체(GB)', '기간 시작 사용(GB)', '현재 사용(GB)', '증감(GB)', '사용률(%)', '기준일']);
@@ -149,7 +149,7 @@ function reportCsv(from, to, gran) {
   lines.push([]);
   lines.push(['[경고 이력]']);
   lines.push(['일시', '서버', '구분', '내용']);
-  const RULE = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진', offline: '오프라인', etc: '기타' };
+  const RULE = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진', offline: '오프라인', backup: '백업', etc: '기타' };
   for (const e of ev.events) lines.push([new Date(e.time).toLocaleString('ko-KR'), e.name || e.host, RULE[e.rule] || e.rule, e.msg]);
   return '﻿' + lines.map((l) => l.map(csvEscape).join(',')).join('\r\n') + '\r\n';
 }
@@ -236,6 +236,20 @@ function normalize(raw, remoteIp) {
     net_rx: num(raw.net_rx),                                // bytes/sec
     net_tx: num(raw.net_tx),
     disks,
+    backups: normalizeBackups(raw.backups),               // Veeam 백업 서버만 보냄 (없으면 undefined → JSON 에서 빠짐)
+  };
+}
+// Veeam 에이전트가 보낸 백업 작업/저장소 상태
+function normalizeBackups(b) {
+  if (!b || typeof b !== 'object') return undefined;
+  const t = (v) => { const x = Date.parse(v); return isNaN(x) ? null : x; };
+  return {
+    time: t(b.time) || Date.now(), error: b.error ? String(b.error).slice(0, 200) : '',
+    jobs: (Array.isArray(b.jobs) ? b.jobs : []).slice(0, 100).map((j) => ({
+      name: String(j.name || '').slice(0, 80), type: String(j.type || ''), enabled: j.enabled !== false, result: String(j.result || 'None'), state: String(j.state || ''),
+      progress: j.progress == null ? null : num(j.progress), start: t(j.start), end: t(j.end), ok_end: t(j.ok_end), duration: num(j.duration), size: num(j.size), next: t(j.next),
+    })),
+    repos: (Array.isArray(b.repos) ? b.repos : []).slice(0, 50).map((r) => ({ name: String(r.name || '').slice(0, 80), total: num(r.total), free: num(r.free), pct: num(r.total) ? Math.round((num(r.total) - num(r.free)) / num(r.total) * 1000) / 10 : null })),
   };
 }
 

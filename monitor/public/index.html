@@ -88,6 +88,9 @@
   .val { width:128px; text-align:right; font-variant-numeric:tabular-nums; flex:none; white-space:nowrap; }
   .growth { font-size:11px; margin:-2px 0 6px 72px; }
   .growth .bad { color:var(--bad); font-weight:700; }
+  .bk { font-size:12px; margin-top:8px; color:var(--ok); display:flex; justify-content:space-between; gap:8px; } .bk.warn { color:var(--warn); } .bk.bad { color:var(--bad); font-weight:700; } .bk .dim { color:var(--muted); font-weight:400; }
+  .bktbl { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; } .bktbl th, .bktbl td { padding:4px 6px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; } .bktbl th { color:var(--muted); font-weight:400; }
+  .bktbl .ok { color:var(--ok); } .bktbl .warn { color:var(--warn); } .bktbl .bad { color:var(--bad); font-weight:700; } .bktbl .run { color:var(--accent); }
   .meta { color:var(--muted); font-size:12px; margin-top:8px; display:flex; gap:10px; align-items:center; }
   .meta .os { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .meta .uptm, .meta .age { flex:none; white-space:nowrap; color:var(--muted); }
@@ -138,6 +141,8 @@
       <label class="chk"><input type="checkbox" id="rMemOn"> 메모리 알림</label>
       <label class="chk"><input type="checkbox" id="rDiskOn"> 디스크 알림 (사용률 + 소진 예상)</label>
       <label class="chk"><input type="checkbox" id="rOffline"> 오프라인 알림</label>
+      <label class="chk"><input type="checkbox" id="rBackupOn"> 백업 알림 (Veeam 실패 · 경고 · 오래 성공 없음 · 저장소 용량)</label>
+      <label>백업 미성공 허용 시간 (시간)<input type="number" id="rBackupHours" min="1" max="720" title="마지막 성공 이후 이 시간이 지나면 '성공 없음' 알림 (매일 백업이면 26 권장)"></label>
       <label>오프라인 유예 (분, 0=즉시)<input type="number" id="rOffGrace" min="0" max="60" title="이 시간 안에 응답이 복구되면 텔레그램을 보내지 않고 이력에만 남깁니다 (새벽 백업 중 잠깐 끊기는 서버용)"></label>
     </div>
 
@@ -195,6 +200,7 @@
   <div id="detail">
     <div class="dtop"><h2 id="dtitle"></h2><span class="sub" id="dsub"></span><button class="close" id="dclose">닫기 ✕</button></div>
     <div id="gtable"></div>
+    <div id="bktable"></div>
     <h3>CPU / 메모리 추이</h3>
     <div class="legend"><span style="background:#38bdf8"></span>CPU %<span style="background:#a78bfa"></span>메모리 %</div>
     <canvas id="chart"></canvas>
@@ -204,6 +210,7 @@
       <label><input type="checkbox" data-rule="mem"> 메모리</label>
       <label><input type="checkbox" data-rule="disk"> 디스크</label>
       <label><input type="checkbox" data-rule="offline"> 오프라인</label>
+      <label><input type="checkbox" data-rule="backup"> 백업</label>
       <span class="dim" style="font-size:12px">체크를 끄면 이 서버의 해당 알림만 꺼집니다</span>
     </div>
     <div class="actions">
@@ -218,7 +225,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.10.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.11.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -280,11 +287,12 @@ function cardHtml(s) {
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
   return `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
-    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
+    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인',backup:'백업'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
     <div class="hostline">${s.name ? esc(s.host) : '&nbsp;'}</div>
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
+    ${s.backups ? (() => { const k = bkSummary(s.backups); return `<div class="bk ${k.cls}" title="카드를 클릭하면 작업별 상세"><span>${k.txt}</span><span class="dim">${k.latest ? fmtTime(k.latest) : ''}</span></div>`; })() : ''}
     <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="uptm">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
@@ -415,6 +423,7 @@ async function loadDetail() {
     if (!r.ok) return;
     const j = await r.json();
     document.getElementById('gtable').innerHTML = growthTable(j);
+    const sb = servers.find(x => x.host === selected); document.getElementById('bktable').innerHTML = sb && sb.backups ? bkTable(sb.backups) : '';
     drawChart(document.getElementById('chart'), j.history);
   } catch (e) {}
 }
@@ -437,7 +446,25 @@ window.addEventListener('resize', () => { if (selected) loadDetail(); });
 
 // ---------- 알림 ----------
 const $aoverlay = document.getElementById('aoverlay');
-const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인' };
+const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인', backup: '백업' };
+// Veeam 백업 요약/표
+const BK_RES = { Success: ['성공', 'ok'], Warning: ['경고', 'warn'], Failed: ['실패', 'bad'], Running: ['실행 중', 'run'], None: ['기록 없음', ''] };
+function bkSummary(b) {
+  const jobs = (b.jobs || []).filter(j => j.enabled !== false); const n = jobs.length;
+  const c = { Success: 0, Warning: 0, Failed: 0, Running: 0 }; for (const j of jobs) if (c[j.result] != null) c[j.result]++;
+  const latest = Math.max(0, ...jobs.map(j => j.ok_end || 0));
+  const cls = c.Failed ? 'bad' : (c.Warning || b.error) ? 'warn' : '';
+  const txt = b.error ? '백업 조회 실패' : `💾 백업 ${c.Success}/${n} 성공${c.Failed ? ' · 실패 ' + c.Failed : ''}${c.Warning ? ' · 경고 ' + c.Warning : ''}${c.Running ? ' · 실행 중 ' + c.Running : ''}`;
+  return { cls, txt, latest, n };
+}
+function bkTable(b) {
+  const dur = (sec) => sec >= 3600 ? `${Math.floor(sec / 3600)}시간 ${Math.round(sec % 3600 / 60)}분` : `${Math.round(sec / 60)}분`;
+  const rows = (b.jobs || []).map(j => { const [t, c] = BK_RES[j.result] || [j.result, '']; return `<tr><td>${esc(j.name)}${j.enabled === false ? ' <span class="dim">(비활성)</span>' : ''}</td><td class="dim">${esc(j.type)}</td><td class="${c}">${t}${j.result === 'Running' && j.progress != null ? ` ${j.progress}%` : ''}</td><td>${j.end ? fmtTime(j.end) : '-'}</td><td>${j.ok_end ? fmtTime(j.ok_end) : '-'}</td><td>${j.duration ? dur(j.duration) : '-'}</td><td>${j.size ? fmtBytes(j.size) : '-'}</td><td>${j.next ? fmtTime(j.next) : '-'}</td></tr>`; }).join('');
+  const repos = (b.repos || []).map(r => `<tr><td>${esc(r.name)}</td><td colspan="2" class="${r.pct >= 90 ? 'bad' : r.pct >= 75 ? 'warn' : ''}">${r.pct != null ? r.pct + '% 사용' : '-'}</td><td colspan="5">${r.total ? `남은 ${fmtBytes(r.free)} / 전체 ${fmtBytes(r.total)}` : ''}</td></tr>`).join('');
+  return `<h3>백업 작업 (Veeam) <span class="dim" style="font-weight:400;font-size:12px">${b.time ? '조회 ' + fmtTime(b.time) : ''}${b.error ? ' · ' + esc(b.error) : ''}</span></h3>
+    <table class="bktbl"><thead><tr><th>작업</th><th>종류</th><th>결과</th><th>마지막 실행</th><th>마지막 성공</th><th>소요</th><th>크기</th><th>다음 실행</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="dim">작업 없음</td></tr>'}</tbody>
+    ${repos ? `<thead><tr><th>저장소</th><th colspan="2">사용률</th><th colspan="5">용량</th></tr></thead><tbody>${repos}</tbody>` : ''}</table>`;
+}
 function fmtTime(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 function hostLabel(h) { const s = servers.find(x => x.host === h); return s && s.name ? `${s.name} (${h})` : h; }
 
@@ -495,7 +522,7 @@ async function loadSettings() {
   F('tgChat').value = c.telegram.chatId || ''; F('aTitle').value = c.title || '';
   F('rCpu').value = c.rules.cpu; F('rCpuMin').value = c.rules.cpu_minutes; F('rMem').value = c.rules.mem; F('rMemMin').value = c.rules.mem_minutes;
   F('rDisk').value = c.rules.disk; F('rDays').value = c.rules.days_left; F('rRemind').value = c.remind_min; F('rDiskTime').value = c.rules.disk_check_time || '';
-  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0;
+  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0; F('rBackupOn').checked = c.rules.backup_on !== false; F('rBackupHours').value = c.rules.backup_max_hours || 26;
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
@@ -508,7 +535,7 @@ function collectSettings() {
     telegram: { enabled: F('tgEnabled').checked, chatId: F('tgChat').value.trim() },
     title: F('aTitle').value.trim() || 'IMS 모니터',
     enabled: F('aEnabled').checked,
-    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0),
+    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26),
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '' },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },

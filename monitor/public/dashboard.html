@@ -86,8 +86,9 @@
   <div class="p c3"><h2>메모리 사용률 <small>Top 5</small></h2><div class="bars" id="bMem"></div></div>
   <div class="p c3"><h2>점검 필요</h2><div class="chk" id="chk"></div><div class="need" id="need"></div></div>
 
-  <div class="p c6"><h2>저장장치 사용률 <small>Top 5</small></h2><div class="gauges" id="gauges"></div></div>
-  <div class="p c6"><h2>디스크 소진 임박 <small>예상 소진일 순</small></h2><div class="tbl" id="full"></div></div>
+  <div class="p c4"><h2>저장장치 사용률 <small>Top 5</small></h2><div class="gauges" id="gauges"></div></div>
+  <div class="p c4"><h2>디스크 소진 임박 <small>예상 소진일 순</small></h2><div class="tbl" id="full"></div></div>
+  <div class="p c4"><h2>백업 현황 <small id="bksub">Veeam</small></h2><div class="tbl" id="backups"></div></div>
 
   <div class="p c12"><h2>이벤트 현황 <small id="evsub"></small></h2><div class="tbl" id="events"></div></div>
 </div>
@@ -175,6 +176,17 @@ async function refresh() {
     document.getElementById('full').innerHTML = full.length
       ? `<table><thead><tr><th>서버</th><th>드라이브</th><th class="n">사용률</th><th class="n">하루 증가</th><th class="n">예상 소진</th></tr></thead><tbody>${full.slice(0, 6).map(({ s, x }) => `<tr><td>${esc(label(s))}</td><td>${esc(x.mount)}</td><td class="n">${Math.round(x.used / x.total * 100)}%</td><td class="n">+${fmtBytes(x.rate_day)}</td><td class="n" style="${x.days_left < 30 ? 'color:var(--bad);font-weight:700' : ''}">${x.days_left > 3650 ? '10년 이상' : '약 ' + x.days_left + '일'}</td></tr>`).join('')}</tbody></table>`
       : '<div class="empty">아직 증가량 데이터가 없습니다 (매일 11:30 이후 하루 1개씩 쌓입니다)</div>';
+
+    // 백업 현황 (Veeam 서버가 보낸 backups)
+    const BK = { Success: ['성공', 'ok'], Warning: ['경고', 'warn'], Failed: ['실패', 'bad'], Running: ['실행 중', 'ok'], None: ['기록 없음', 'off'] };
+    const bkRows = []; let bkErr = '';
+    for (const s of servers) if (s.backups) { if (s.backups.error) bkErr = s.backups.error; for (const j of s.backups.jobs || []) if (j.enabled !== false) bkRows.push(j); }
+    bkRows.sort((a, b) => ({ Failed: 0, Warning: 1, Running: 2, None: 3, Success: 4 }[a.result] ?? 5) - ({ Failed: 0, Warning: 1, Running: 2, None: 3, Success: 4 }[b.result] ?? 5));
+    const bkOk = bkRows.filter(j => j.result === 'Success').length;
+    document.getElementById('bksub').textContent = bkRows.length ? `${bkOk}/${bkRows.length} 성공` : 'Veeam';
+    document.getElementById('backups').innerHTML = bkRows.length
+      ? `<table><thead><tr><th>작업</th><th>결과</th><th class="n">마지막 성공</th></tr></thead><tbody>${bkRows.slice(0, 7).map(j => { const [t, c] = BK[j.result] || [j.result, '']; const age = j.ok_end ? (Date.now() - j.ok_end) / 3600000 : null; return `<tr><td title="${esc(j.name)}">${esc(j.name)}</td><td><span class="lv ${c}"><span class="d"></span>${t}${j.result === 'Running' && j.progress != null ? ' ' + j.progress + '%' : ''}</span></td><td class="n" style="${age != null && age > 26 ? 'color:var(--bad);font-weight:700' : ''}">${age == null ? '없음' : age < 1 ? '방금' : age < 48 ? Math.round(age) + '시간 전' : Math.round(age / 24) + '일 전'}</td></tr>`; }).join('')}</tbody></table>`
+      : `<div class="empty">${bkErr ? '백업 조회 실패: ' + esc(bkErr) : 'Veeam 서버의 에이전트(1.4.0 이상)가 백업 상태를 보내면 여기에 표시됩니다'}</div>`;
 
     // 이벤트 현황
     const day = Date.now() - 86400000;
