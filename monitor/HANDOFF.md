@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.14.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.14.2) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade)·**알림 소리**(MON.sound: localStorage `mon_sound` {on,dur,vol,quietOn,quietFrom,quietTo,remind}, Web Audio 비프, 🔊 버튼 패널, TV 모드는 오른쪽 아래 버튼, `sound.check(recent)` 를 index/dashboard/pollNav 가 호출). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
@@ -41,6 +41,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-14 (19): 팝업 USB 경로 입력 중 5초 갱신으로 커서 사라짐 → loadDetail 이 `#iUsbPaths` 포커스 중이면 bktable 을 다시 그리지 않음 (수집기 1.14.2).
 - 2026-09-14 (18): 1.14.0 회귀 — normalizeBackups 가 null 검사 전에 b.usbs 를 읽어 백업 없는 서버 전송이 400 → 전부 오프라인. 수정, 수집기 1.14.1.
 - 2026-09-14 (17): **USB 경로 서버별 지정 + USB 여러 개** (에이전트 1.6.0, 수집기 1.14.0). 사용자 문제: 자동 감지가 엉뚱한 폴더를 잡아 "743일 전", 그룹웨어는 USB 2개(data/db). alerts.js `settings.hostConf{host:{usb_paths}}` + `getHostConf/setHostConf`, `PUT /api/hostconf {host, usb_paths}`, `/api/metrics` 응답 `agent.usb_paths` → agent.ps1 이 remote.conf 에 `USB_HOURS=`/`USB_PATHS=` 두 줄로 저장. backup.ps1: 대상 목록 `targets`(agent.conf USB > remote USB_PATHS > 자동; 항목 `이름=경로`, `E:\폴더`, `라벨:\폴더`, `E:`), 결과 `usbs[]`(name/spec/…; `usb` 는 첫 항목으로 구버전 호환), usb-state.json `{items:[]}`, usb-done.json `{items:[]}` 경로별(usb-done.ps1 이 같은 경로는 덮어쓰고 10건 유지) → `SamePath` 포함 관계로 매칭. server.js normalizeBackups `usbs`(usb 하나짜리도 목록화), backupDays 날짜별 `usbs{이름:{…}}`, `/api/backups` hosts[].usbs, serversView `host_conf`. UI: index 팝업 USB 표(행=USB, 이름·연결 상태·완료 코드) + "USB 백업 폴더" 입력·저장(`#iUsbPaths/#bUsbPaths`), 카드/대시보드 줄 "3차 백업(USB) · 이름"(2개 이상일 때만 이름), backup.html 행 USB 별(`usbOf(e,name)`, 구 기록 e.usb 호환), 알림 키 `usb:이름/usbfail:이름/usbfree:이름`. pwsh 실행 테스트(remote.conf 2경로 + usb-done 2건) 및 Playwright 팝업·백업 탭 확인.
 - 2026-09-14 (16): 백업 탭(backup.html) 신설, 수집기 1.13.0. common.js PAGES 에 backup.html 추가(탭 5개). 시드 테스트(scratchpad shot-bk.js) 로 매트릭스·툴팁·상세 확인. 주말 처리: SQL/USB 는 backup_skip_weekend 면 none, Veeam 은 매일 기대.
