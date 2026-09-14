@@ -65,6 +65,15 @@ FROM sys.databases d WHERE d.database_id > 4 AND d.state = 0 AND d.name NOT IN (
 }
 
 # ---- USB (꽂혀 있는 동안만 볼 수 있으므로 마지막으로 본 결과를 usb-state.json 에 보관) ----
+# 확인 시간대: agent.conf USB_HOURS > 수집기에서 내려온 remote.conf > 기본 07:00-10:00. 시간대 밖이면 USB 를 살피지 않고 마지막 값만 보낸다.
+$win = $conf['USB_HOURS']
+if (-not $win) { try { $rc = Join-Path $DataDir "remote.conf"; if (Test-Path $rc) { foreach ($line in Get-Content $rc) { if ($line -match '^\s*USB_HOURS\s*=\s*(.*?)\s*$') { $win = $matches[1] } } } } catch {} }
+if ($null -eq $win) { $win = '07:00-10:00' }
+$inWindow = $true
+if ($win -match '^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$') {
+  $cur = (Get-Date).Hour * 60 + (Get-Date).Minute; $from = [int]$matches[1] * 60 + [int]$matches[2]; $to = [int]$matches[3] * 60 + [int]$matches[4]
+  $inWindow = $(if ($from -le $to) { $cur -ge $from -and $cur -lt $to } else { $cur -ge $from -or $cur -lt $to })
+}
 $usb = $null
 if ($conf['USB'] -ne '0') {
   $prev = @{}; try { if (Test-Path $UsbState) { $prev = Get-Content $UsbState -Raw -Encoding UTF8 | ConvertFrom-Json } } catch {}
@@ -72,7 +81,8 @@ if ($conf['USB'] -ne '0') {
   foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'count', 'size', 'free', 'total', 'last_seen')) { try { if ($prev.$k -ne $null) { $usb[$k] = $prev.$k } } catch {} }
   # USB 로 연결된 디스크의 드라이브 문자 찾기
   $letters = @()
-  if ($conf['USB'] -and $conf['USB'] -ne 'auto') { $letters = @($conf['USB'] -split ',' | ForEach-Object { $_.Trim().TrimEnd('\') } | Where-Object { $_ }) }
+  if (-not $inWindow) { }
+  elseif ($conf['USB'] -and $conf['USB'] -ne 'auto') { $letters = @($conf['USB'] -split ',' | ForEach-Object { $_.Trim().TrimEnd('\') } | Where-Object { $_ }) }
   else {
     try {
       foreach ($dd in @(Get-CimInstance Win32_DiskDrive | Where-Object { $_.InterfaceType -eq 'USB' })) {
@@ -84,6 +94,7 @@ if ($conf['USB'] -ne '0') {
     } catch { $usb.error = $_.Exception.Message }
   }
   $letters = @($letters | Sort-Object -Unique | Where-Object { Test-Path "$_\" })
+  if (-not $inWindow) { $letters = @() }
   if ($letters.Count -gt 0) {
     # 여러 개면 백업 폴더가 있는 것 우선
     $pick = $null; $pickPath = ''

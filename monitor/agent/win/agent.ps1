@@ -86,6 +86,7 @@ $BackupScript = Join-Path $Dir "backup.ps1"
 $BackupOut = Join-Path $DataDir "backup.json"
 $HasBackup = (Test-Path $BackupScript) -and ($conf['BACKUP_PATH'] -or $conf['USB'] -or $conf['SQL'] -or (Test-Path 'D:\DBBackup') -or (Test-Path 'D:\DB_BACKUP') -or (Test-Path 'E:\DBBackup') -or (Test-Path 'C:\DBBackup'))
 $backupLast = (Get-Date).AddHours(-1); $backupProc = $null
+$RemoteConf = Join-Path $DataDir "remote.conf"; $remoteCache = ''   # 수집기 화면에서 정한 설정(USB 확인 시간대 등)을 받아 backup.ps1 에 전달
 if ($HasBackup) { Log "백업 폴더 감지: SQL 백업 파일·USB 복사 상태를 5분마다 수집합니다" }
 function Get-DisplayName {
   try {
@@ -178,8 +179,9 @@ while ($true) {
     if ($backups) { $payload.backups = $backups }
     $body = $payload | ConvertTo-Json -Depth 8 -Compress
 
-    Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
-      -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null
+    $resp = Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
+      -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5
+    try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
     $sendSec = $sw.Elapsed.TotalSeconds - $collectSec
     if ($collectSec -ge 30 -or $sendSec -ge 3) {
       # 수집이 오래 걸리면 서버가 그 시간에 매우 느렸다는 뜻 (백업/메모리 부족). 어느 단계가 느렸는지 남긴다

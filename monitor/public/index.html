@@ -143,6 +143,7 @@
       <label class="chk"><input type="checkbox" id="rOffline"> 오프라인 알림</label>
       <label class="chk"><input type="checkbox" id="rBackupOn"> 백업 알림 (Veeam 실패 · 경고 · 오래 성공 없음 · 저장소 용량)</label>
       <label>백업 미성공 허용 시간 (시간)<input type="number" id="rBackupHours" min="1" max="720" title="마지막 성공 이후 이 시간이 지나면 '성공 없음' 알림 (매일 백업이면 26 권장)"></label>
+      <label>USB 확인 시간대 (예 07:00-10:00, 비우면 항상)<input type="text" id="rUsbWindow" placeholder="07:00-10:00" style="width:110px" title="USB 를 꽂아 백업하는 시간대. 각 서버 에이전트에 자동 전달되어 이 시간에만 USB 를 확인합니다"></label>
       <label>USB 백업 허용 시간 (시간, 주말 제외)<input type="number" id="rUsbHours" min="1" max="720" title="USB 복사본의 최신 파일이 이 시간(토·일 제외) 넘게 오래되면 알림. 매일 1회 복사면 30 권장"></label>
       <label class="chk"><input type="checkbox" id="rSkipWeekend"> 주말은 백업 없음 (경과 시간에서 토·일 제외)</label>
       <label>백업 점검 시각 (하루 1회, 비우면 계속 감시)<input type="time" id="rBackupTime" title="새벽 백업이 끝난 뒤 시각으로. 이 시각에 실패·경고·미성공·저장소 용량을 한 번 판단해서 알립니다. 화면 표시는 10분마다 계속 갱신됩니다"></label>
@@ -228,7 +229,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.12.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.12.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -550,7 +551,7 @@ async function loadSettings() {
   F('tgChat').value = c.telegram.chatId || ''; F('aTitle').value = c.title || '';
   F('rCpu').value = c.rules.cpu; F('rCpuMin').value = c.rules.cpu_minutes; F('rMem').value = c.rules.mem; F('rMemMin').value = c.rules.mem_minutes;
   F('rDisk').value = c.rules.disk; F('rDays').value = c.rules.days_left; F('rRemind').value = c.remind_min; F('rDiskTime').value = c.rules.disk_check_time || '';
-  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0; F('rBackupOn').checked = c.rules.backup_on !== false; F('rBackupHours').value = c.rules.backup_max_hours || 26; F('rBackupTime').value = c.rules.backup_check_time == null ? '08:00' : c.rules.backup_check_time; F('rUsbHours').value = c.rules.usb_max_hours || 30; F('rSkipWeekend').checked = c.rules.backup_skip_weekend !== false;
+  F('rOffline').checked = !!c.rules.offline; F('rRecovery').checked = !!c.recovery; F('rOffGrace').value = c.rules.offline_grace || 0; F('rBackupOn').checked = c.rules.backup_on !== false; F('rBackupHours').value = c.rules.backup_max_hours || 26; F('rBackupTime').value = c.rules.backup_check_time == null ? '08:00' : c.rules.backup_check_time; F('rUsbHours').value = c.rules.usb_max_hours || 30; F('rUsbWindow').value = c.rules.usb_window == null ? '07:00-10:00' : c.rules.usb_window; F('rSkipWeekend').checked = c.rules.backup_skip_weekend !== false;
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
@@ -563,7 +564,7 @@ function collectSettings() {
     telegram: { enabled: F('tgEnabled').checked, chatId: F('tgChat').value.trim() },
     title: F('aTitle').value.trim() || 'IMS 모니터',
     enabled: F('aEnabled').checked,
-    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), backup_skip_weekend: F('rSkipWeekend').checked,
+    rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), usb_window: (F('rUsbWindow').value.trim().match(/^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/) || [''])[0], backup_skip_weekend: F('rSkipWeekend').checked,
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '' },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
