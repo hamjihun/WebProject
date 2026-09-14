@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.14.0';
+const VERSION = '1.14.1';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -260,8 +260,8 @@ function normalize(raw, remoteIp) {
 }
 // Veeam 에이전트가 보낸 백업 작업/저장소 상태
 function normalizeBackups(b) {
+  if (!b || typeof b !== 'object') return undefined;   // 백업 정보 없는 서버 (이 검사가 먼저여야 함 — 1.14.0 에서 순서가 바뀌어 전 서버가 오프라인으로 뜬 적 있음)
   const usbList = Array.isArray(b.usbs) && b.usbs.length ? b.usbs.filter((u) => u && typeof u === 'object') : (b.usb && typeof b.usb === 'object' ? [b.usb] : []);
-  if (!b || typeof b !== 'object') return undefined;
   const t = (v) => { const x = Date.parse(v); return isNaN(x) ? null : x; };
   return {
     time: t(b.time) || Date.now(), error: b.error ? String(b.error).slice(0, 200) : '', diag: b.diag ? String(b.diag).slice(0, 400) : '',
