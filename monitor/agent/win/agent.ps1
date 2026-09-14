@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.5.10"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.6.0"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -180,8 +180,8 @@ while ($true) {
         if ((Test-Path $BackupOut) -and ((Get-Date) - (Get-Item $BackupOut).LastWriteTime).TotalHours -lt 2) {   # (usb 는 backup.ps1 이 usb-state/usb-done 을 합쳐 넣음)
           $bk = Get-Content $BackupOut -Raw -Encoding UTF8 | ConvertFrom-Json
           if (-not $backups) { $backups = New-Object PSObject; $backups | Add-Member NoteProperty time $bk.time }
-          foreach ($k in @('files', 'sql', 'usb')) { if ($bk.$k -ne $null) { $backups | Add-Member NoteProperty $k $bk.$k -Force } }
-          try { if ($bk.usb -and $bk.usb.connected -and $bk.usb.drive -and ($allDrives | ForEach-Object { $_.DeviceID }) -notcontains $bk.usb.drive) { $bk.usb.connected = $false } } catch {}   # 빠진 뒤엔 '연결됨' 표시 안 함
+          foreach ($k in @('files', 'sql', 'usb', 'usbs')) { if ($bk.$k -ne $null) { $backups | Add-Member NoteProperty $k $bk.$k -Force } }
+          try { $cur = @($allDrives | ForEach-Object { $_.DeviceID }); foreach ($u in @(@($bk.usb) + @($bk.usbs))) { if ($u -and $u.connected -and $u.drive -and $cur -notcontains $u.drive) { $u.connected = $false } } } catch {}   # 빠진 뒤엔 '연결됨' 표시 안 함
         }
       } catch {}
     }
@@ -197,7 +197,7 @@ while ($true) {
 
     $resp = Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
       -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5
-    try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
+    try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)`r`nUSB_PATHS=$($resp.agent.usb_paths)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
     $sendSec = $sw.Elapsed.TotalSeconds - $collectSec
     if ($collectSec -ge 30 -or $sendSec -ge 3) {
       # 수집이 오래 걸리면 서버가 그 시간에 매우 느렸다는 뜻 (백업/메모리 부족). 어느 단계가 느렸는지 남긴다

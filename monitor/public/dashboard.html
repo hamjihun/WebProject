@@ -186,7 +186,7 @@ async function refresh() {
       const b = s.backups; if (b.error) bkErr = b.error;
       for (const j of b.jobs || []) if (j.enabled !== false) bkRows.push(j);
       if (b.files && b.files.length) { const f = b.files.reduce((a, x) => (x.newest_time || 0) > (a.newest_time || 0) ? x : a, b.files[0]); const h = ageH(f.newest_time); stRows.push({ name: `${label(s)} · 1차 백업(SQL)`, bad: !f.exists || h == null || h > 30, txt: !f.exists ? '폴더 없음' : ageTxt(h) }); }
-      if (b.usb) { const h = ageH(Math.max(b.usb.copied_time || 0, b.usb.done_time || 0) || b.usb.newest_time); stRows.push({ name: `${label(s)} · 3차 백업(USB)`, bad: h == null || h > 80, txt: (b.usb.connected ? '연결 중 · ' : '') + ageTxt(h) }); }
+      for (const u of (b.usbs || [])) { const h = ageH(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time); stRows.push({ name: `${label(s)} · 3차 백업(USB)${b.usbs.length > 1 && u.name ? ' · ' + u.name : ''}`, bad: h == null || h > 80 || u.done_ok === false, txt: u.done_ok === false ? '복사 실패' : (u.connected ? '연결 중 · ' : '') + ageTxt(h) }); }
     }
     stRows.sort((a, b) => (b.bad ? 1 : 0) - (a.bad ? 1 : 0));
     bkRows.sort((a, b) => ({ Failed: 0, Warning: 1, Running: 2, None: 3, Success: 4 }[a.result] ?? 5) - ({ Failed: 0, Warning: 1, Running: 2, None: 3, Success: 4 }[b.result] ?? 5));

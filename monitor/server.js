@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -169,7 +169,7 @@ function recordBackupDays(host, b) {
     const k = day(f.newest_time); if (k) get(k).sql = { time: f.newest_time, file: f.newest_file, size: f.newest_size, count: f.count, total: f.size, path: f.path };
   }
   if (b.sql && Array.isArray(b.sql.dbs)) for (const d of b.sql.dbs) { const k = day(d.full); if (k) { const s = get(k); s.dbs = s.dbs || {}; s.dbs[d.db] = { time: d.full, size: d.size }; } }
-  if (b.usb) { const t = Math.max(b.usb.copied_time || 0, b.usb.done_time || 0) || b.usb.newest_time; const k = day(t); if (k) get(k).usb = { time: t, count: b.usb.count, free: b.usb.free, total: b.usb.total, ok: b.usb.done_ok, code: b.usb.done_code, drive: b.usb.drive, file: b.usb.newest_file }; }
+  if (Array.isArray(b.usbs)) for (const u of b.usbs) { const t = Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time; const k = day(t); if (k) { const s = get(k); s.usbs = s.usbs || {}; s.usbs[u.name || ''] = { time: t, count: u.count, free: u.free, total: u.total, ok: u.done_ok, code: u.done_code, drive: u.drive, path: u.path, file: u.newest_file }; } }
   if (Array.isArray(b.jobs)) for (const j of b.jobs) { const k = day(j.end || j.start); if (k && j.result && j.result !== 'None') { const s = get(k); s.veeam = s.veeam || {}; s.veeam[j.name] = { result: j.result, end: j.end, size: j.size, duration: j.duration, type: j.type }; } }
   const keys = Object.keys(H); if (keys.length > BACKUP_DAYS_KEEP) { keys.sort(); for (const k of keys.slice(0, keys.length - BACKUP_DAYS_KEEP)) delete H[k]; }
 }
@@ -260,6 +260,7 @@ function normalize(raw, remoteIp) {
 }
 // Veeam 에이전트가 보낸 백업 작업/저장소 상태
 function normalizeBackups(b) {
+  const usbList = Array.isArray(b.usbs) && b.usbs.length ? b.usbs.filter((u) => u && typeof u === 'object') : (b.usb && typeof b.usb === 'object' ? [b.usb] : []);
   if (!b || typeof b !== 'object') return undefined;
   const t = (v) => { const x = Date.parse(v); return isNaN(x) ? null : x; };
   return {
@@ -272,7 +273,7 @@ function normalizeBackups(b) {
     // 1차: SQL 백업 폴더(.bak 최신 파일) + msdb 기록, 3차: USB 복사
     files: Array.isArray(b.files) ? b.files.slice(0, 10).map((f) => ({ path: String(f.path || ''), exists: f.exists !== false, newest_file: f.newest_file ? String(f.newest_file).slice(0, 200) : null, newest_time: t(f.newest_time), newest_size: num(f.newest_size), count: num(f.count), size: num(f.size), error: f.error ? String(f.error).slice(0, 200) : '' })) : undefined,
     sql: b.sql && typeof b.sql === 'object' ? { instance: String(b.sql.instance || ''), error: b.sql.error ? String(b.sql.error).slice(0, 200) : '', dbs: (Array.isArray(b.sql.dbs) ? b.sql.dbs : []).slice(0, 200).map((d) => ({ db: String(d.db || ''), full: t(d.full), diff: t(d.diff), log: t(d.log), size: num(d.size), path: String(d.path || '').slice(0, 260), recovery: String(d.recovery || '') })) } : undefined,
-    usb: b.usb && typeof b.usb === 'object' ? { connected: !!b.usb.connected, drive: String(b.usb.drive || ''), label: String(b.usb.label || ''), path: String(b.usb.path || ''), newest_file: b.usb.newest_file ? String(b.usb.newest_file).slice(0, 200) : null, newest_time: t(b.usb.newest_time), copied_time: t(b.usb.copied_time), copied_file: b.usb.copied_file ? String(b.usb.copied_file).slice(0, 200) : null, count: num(b.usb.count), size: num(b.usb.size), free: num(b.usb.free), total: num(b.usb.total), last_seen: t(b.usb.last_seen), done_time: t(b.usb.done_time), done_code: b.usb.done_code == null ? null : num(b.usb.done_code), done_ok: b.usb.done_ok == null ? null : !!b.usb.done_ok, error: b.usb.error ? String(b.usb.error).slice(0, 200) : '' } : undefined,
+    usbs: usbList.length ? usbList.slice(0, 10).map((u) => ({ name: String(u.name || '').slice(0, 60), spec: u.spec ? String(u.spec).slice(0, 200) : '', connected: !!u.connected, drive: String(u.drive || ''), label: String(u.label || ''), path: String(u.path || ''), newest_file: u.newest_file ? String(u.newest_file).slice(0, 200) : null, newest_time: t(u.newest_time), copied_time: t(u.copied_time), copied_file: u.copied_file ? String(u.copied_file).slice(0, 200) : null, count: num(u.count), size: num(u.size), free: num(u.free), total: num(u.total), last_seen: t(u.last_seen), done_time: t(u.done_time), done_code: u.done_code == null ? null : num(u.done_code), done_ok: u.done_ok == null ? null : !!u.done_ok, error: u.error ? String(u.error).slice(0, 200) : '' })) : undefined,   // 3차 USB (여러 개 가능; 구버전 에이전트의 usb 하나짜리도 목록으로)
   };
 }
 
@@ -358,7 +359,7 @@ function serversView() {
   const now = Date.now();
   const list = [];
   for (const [host, e] of store) {
-    list.push({ ...e.latest, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host) });
+    list.push({ ...e.latest, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host) });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));
@@ -413,7 +414,7 @@ const server = http.createServer(async (req, res) => {
       }
       const m = ingest(raw, remoteIp);
       console.log(`[${new Date().toLocaleTimeString()}] ${m.host} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}%`);
-      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || '') } });   // 에이전트로 내려보내는 설정
+      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || '') } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
     } catch (e) {
       return json(res, 400, { ok: false, error: String(e.message || e) });
     }
@@ -433,6 +434,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 서버별 알림 끄기/켜기
+  // 서버별 에이전트 설정 (3차 USB 백업 경로 등) — 다음 전송 응답으로 에이전트에 내려간다
+  if (req.method === 'PUT' && url.pathname === '/api/hostconf') {
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      const host = String(raw.host || '').trim();
+      if (!host || !store.has(host)) return json(res, 404, { ok: false, error: 'unknown host' });
+      const conf = alerter.setHostConf(host, { usb_paths: raw.usb_paths });
+      console.log(`[${new Date().toLocaleTimeString()}] 서버별 설정: ${host} ${JSON.stringify(conf)}`);
+      return json(res, 200, { ok: true, host, conf });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
   if (req.method === 'POST' && url.pathname === '/api/mute') {
     try {
       const raw = JSON.parse((await readBody(req)) || '{}');
@@ -477,9 +489,10 @@ const server = http.createServer(async (req, res) => {
       const b = s.backups || {}; const H = backupDays[s.host] || {};
       const stages = []; if ((b.files && b.files.length) || Object.values(H).some((x) => x.sql)) stages.push('sql');
       if ((b.jobs && b.jobs.length) || Object.values(H).some((x) => x.veeam)) stages.push('veeam');
-      if (b.usb || Object.values(H).some((x) => x.usb)) stages.push('usb');
+      const usbs = new Set((b.usbs || []).map((u) => u.name || '')); for (const k of days) { const e = H[k] || {}; if (e.usb) usbs.add(''); for (const n of Object.keys(e.usbs || {})) usbs.add(n); }
+      if (usbs.size) stages.push('usb');
       const jobs = new Set((b.jobs || []).filter((j) => j.enabled !== false).map((j) => j.name)); for (const k of days) for (const jn of Object.keys((H[k] && H[k].veeam) || {})) jobs.add(jn);
-      hosts.push({ host: s.host, name: s.name || '', online: s.online, stages, jobs: [...jobs], latest: b });
+      hosts.push({ host: s.host, name: s.name || '', online: s.online, stages, jobs: [...jobs], usbs: [...usbs], latest: b });
       data[s.host] = {}; for (const k of days) if (H[k]) data[s.host][k] = H[k];
     }
     const r = alerter.getSettings().rules;

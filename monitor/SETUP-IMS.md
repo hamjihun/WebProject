@@ -184,7 +184,13 @@ Veeam Backup & Replication 서버에 에이전트 1.4.0 이상을 설치하면(�
 
 에이전트 1.5.0 이상을 SQL 백업이 있는 서버(ERP 부산·김해, 그룹웨어, ACE ERP)에 덮어쓰기 설치하면 추가 설정 없이 동작한다.
 - **1차 SQL**: `D:\DBBackup`, `D:\DB_BACKUP` 같은 폴더를 자동으로 찾아 최신 백업 파일 시각·개수·용량을 보내고, SQL Server 기록(msdb)에서 DB별 마지막 전체/차등/로그 백업 시각도 읽는다. 다른 경로면 `agent.conf` 에 `BACKUP_PATH=D:\백업;E:\백업2` 를 적는다. SQL 기록 조회가 권한 오류면 SQL Server 에서 `NT AUTHORITY\SYSTEM` 로그인에 msdb 읽기(db_datareader)를 주거나 `SQL=0` 으로 끄면 폴더 기준으로만 본다.
-- **3차 USB**: 알림 설정의 "USB 확인 시간대"(기본 07:00-10:00) 안에서만 USB 를 살핀다 (값은 각 에이전트에 자동 전달). USB 디스크가 꽂혀 있는 동안 5분마다 확인해서 복사본의 최신 파일 시각과 남은 용량을 기억한다. USB 를 빼도 마지막 값을 계속 보낸다. 자동 감지가 안 되면 `agent.conf` 에 `USB=E:` 를 적는다.
+- **3차 USB**: 알림 설정의 "USB 확인 시간대"(기본 07:00-10:00) 안에서만 USB 를 살핀다 (값은 각 에이전트에 자동 전달). USB 디스크가 꽂혀 있는 동안 5분마다 확인해서 복사본의 최신 파일 시각과 남은 용량을 기억한다. USB 를 빼도 마지막 값을 계속 보낸다.
+- **USB 백업 폴더 지정** (에이전트 1.6.0, 수집기 1.14.0): 서버 현황에서 서버를 클릭 → "3차 백업(USB)" 표 아래 **USB 백업 폴더** 칸에 bat 가 복사하는 대상 폴더를 적고 저장하면 5초 안에 그 서버 에이전트에 전달된다 (서버마다 다르게). 비우면 자동 감지(USB 안의 backup/bak/db 폴더 중 하나를 고르므로 엉뚱한 폴더가 잡혀 "743일 전" 처럼 뜰 수 있음).
+  - 한 개: `E:\DBBackup`
+  - USB 가 두 개(그룹웨어: data 용, db 용): `DB=E:\DB_BACKUP; DATA=F:\GWData` 처럼 `이름=경로` 를 `;` 로 나열하면 카드·팝업·대시보드·백업 탭에 "3차 백업(USB) · DB", "3차 백업(USB) · DATA" 로 따로 뜨고 알림도 따로 간다.
+  - 드라이브 문자가 바뀌는 USB 는 라벨로: `ERP_Bcakup:\DBBackup` (탐색기에 보이는 USB 이름). 
+  - bat 에 usb-done.ps1 줄을 넣었으면 그 경로와 같은(또는 상위/하위) 폴더의 USB 에 복사 결과가 붙는다. USB 두 개면 각 bat 에 각각 넣는다.
+  - `agent.conf` 에 `USB=E:\DBBackup` 을 적으면 화면 설정보다 우선한다 (예전 방식).
 - USB 가 몇 분 만에 자동 분리되는 경우: 에이전트가 새 드라이브가 꽂히는 순간(5초 이내) 감지해 4분 동안 20초마다 확인하므로 대부분 잡힌다. 더 정확히 하려면 복사 bat 파일의 robocopy 줄 **바로 다음, 분리(eject) 전**에 아래 한 줄을 넣는다. 복사 완료 시각과 robocopy 결과(0~7 정상, 8 이상 실패)가 그대로 기록되어 화면에 "복사 완료 09:12"로 뜨고 실패면 알림이 간다.
   ```
   powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\IMSMonitoringAgent\usb-done.ps1" %ERRORLEVEL%

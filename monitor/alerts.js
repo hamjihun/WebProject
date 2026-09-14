@@ -27,6 +27,7 @@ const DEFAULTS = {
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
+  hostConf: {},                    // 서버별 에이전트 설정 { 호스트명: { usb_paths: 'DB=E:\\DBBackup; DATA=F:\\GWData' } } (전송 응답으로 에이전트에 전달)
   remind_min: 60,                  // 계속 경고 상태면 이 간격으로 다시 알림 (0 = 처음 한 번만)
   recovery: true,                  // 정상 복귀 알림
   quiet: { enabled: false, from: '23:00', to: '07:00' },  // 조용 시간 (오프라인 알림은 예외)
@@ -303,14 +304,15 @@ function create({ settingsFile, logDir, log = console.log }) {
             { rule: 'backup', threshold: maxHb, recoverMsg: () => `DB "${d.db}" 전체 백업 확인` });
         }
         // 3차: USB 복사본
-        if (s.backups.usb) {
-          const u = s.backups.usb, maxHu = Math.max(1, Number(r.usb_max_hours) || 30), age = hoursSince(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time || null, nowT, skipW);
-          check(`${H}|backup|usbfail`, H, N, u.done_ok === false, () => `USB 복사 실패 (robocopy 코드 ${u.done_code}, ${u.done_time ? fmtTs(new Date(u.done_time)) : ''})`, { rule: 'backup', recoverMsg: () => 'USB 복사 정상' });
-          check(`${H}|backup|usb`, H, N, age == null || age > maxHu,
-            () => age == null ? `USB 백업 기록 없음 (USB 가 꽂힌 동안 확인된 적 없음)` : `USB 백업 ${fmtAge(age)}째 없음 (마지막 복사 ${fmtTs(new Date(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time))}, 기준 ${maxHu}시간${skipW ? ', 주말 제외' : ''})`,
-            { rule: 'backup', threshold: maxHu, recoverMsg: () => `USB 백업 확인 (최신 ${u.newest_time ? fmtTs(new Date(u.newest_time)) : ''})` });
-          if (u.total) check(`${H}|backup|usbfree`, H, N, u.free / u.total < 0.1,
-            () => `USB 남은 용량 부족 (${fmtBytes(u.free)} / ${fmtBytes(u.total)}) — 새 USB 준비 필요`, { rule: 'backup', recoverMsg: () => 'USB 용량 여유 확인' });
+        if (Array.isArray(s.backups.usbs)) for (const u of s.backups.usbs) {
+          const nm = u.name ? ` (${u.name})` : '', sfx = u.name ? `:${u.name}` : '';
+          const maxHu = Math.max(1, Number(r.usb_max_hours) || 30), age = hoursSince(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time || null, nowT, skipW);
+          check(`${H}|backup|usbfail${sfx}`, H, N, u.done_ok === false, () => `USB 복사 실패${nm} (복사 명령 코드 ${u.done_code}, ${u.done_time ? fmtTs(new Date(u.done_time)) : ''})`, { rule: 'backup', recoverMsg: () => `USB 복사 정상${nm}` });
+          check(`${H}|backup|usb${sfx}`, H, N, age == null || age > maxHu,
+            () => age == null ? `USB 백업 기록 없음${nm}${u.error ? ' · ' + u.error : ' (USB 가 꽂힌 동안 확인된 적 없음)'}` : `USB 백업${nm} ${fmtAge(age)}째 없음 (마지막 복사 ${fmtTs(new Date(Math.max(u.copied_time || 0, u.done_time || 0) || u.newest_time))}, 기준 ${maxHu}시간${skipW ? ', 주말 제외' : ''})`,
+            { rule: 'backup', threshold: maxHu, recoverMsg: () => `USB 백업 확인${nm} (최신 ${u.newest_time ? fmtTs(new Date(u.newest_time)) : ''})` });
+          if (u.total) check(`${H}|backup|usbfree${sfx}`, H, N, u.free / u.total < 0.1,
+            () => `USB 남은 용량 부족${nm} (${fmtBytes(u.free)} / ${fmtBytes(u.total)}) — 새 USB 준비 필요`, { rule: 'backup', recoverMsg: () => `USB 용량 여유 확인${nm}` });
         }
       }
       if (bkOn && bkNow && s.backups && Array.isArray(s.backups.jobs)) {   // 2차: Veeam
@@ -341,10 +343,21 @@ function create({ settingsFile, logDir, log = console.log }) {
       let changed = false;
       if (settings.muted && settings.muted[host]) { delete settings.muted[host]; changed = true; }
       if (settings.hostRules && settings.hostRules[host]) { delete settings.hostRules[host]; changed = true; }
+      if (settings.hostConf && settings.hostConf[host]) { delete settings.hostConf[host]; changed = true; }
       if (changed) saveSettings();
     },
     isMuted(host) { return !!(settings.muted && settings.muted[host]); },
     getHostRules(host) { return (settings.hostRules && settings.hostRules[host]) || {}; },
+    getHostConf(host) { return (settings.hostConf && settings.hostConf[host]) || {}; },
+    setHostConf(host, conf) {
+      if (!settings.hostConf) settings.hostConf = {};
+      const cur = { ...(settings.hostConf[host] || {}) };
+      if (conf && typeof conf.usb_paths === 'string') { const v = conf.usb_paths.trim().slice(0, 500); if (v) cur.usb_paths = v; else delete cur.usb_paths; }
+      if (Object.keys(cur).length) settings.hostConf[host] = cur; else delete settings.hostConf[host];
+      for (const key of [...states.keys()]) if (key.startsWith(`${host}|backup|usb`)) states.delete(key);   // 경로가 바뀌면 이전 USB 알림 상태는 버림
+      saveSettings();
+      return this.getHostConf(host);
+    },
     setHostRules(host, rules) {
       if (!settings.hostRules) settings.hostRules = {};
       const cur = { ...(settings.hostRules[host] || {}) };

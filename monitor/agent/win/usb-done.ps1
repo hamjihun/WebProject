@@ -30,5 +30,9 @@ try {
     $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($r.drive)'"; if ($ld) { $r.free = [int64]$ld.FreeSpace; $r.total = [int64]$ld.Size }
   }
 } catch { Log "확인 오류: $($_.Exception.Message)" }
-try { $r | ConvertTo-Json -Compress | Set-Content -Path $Out -Encoding UTF8 } catch {}
+# 경로별로 기록을 따로 둔다 (USB 두 개에 각각 복사하는 서버). 같은 경로는 덮어쓰고 최대 10건
+$items = @(); try { if (Test-Path $Out) { $pj = Get-Content $Out -Raw -Encoding UTF8 | ConvertFrom-Json; if ($pj.items) { $items = @($pj.items) } elseif ($pj.time) { $items = @($pj) } } } catch {}
+$items = @($items | Where-Object { -not $_.path -or -not $r.path -or ([string]$_.path).TrimEnd('\').ToLower() -ne $r.path.TrimEnd('\').ToLower() })
+$items = @(,$r) + @($items | Select-Object -First 9)
+try { @{ items = @($items) } | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path $Out -Encoding UTF8 } catch {}
 Log "복사 완료 기록 ($Tool): 코드 $Code ($(if ($r.ok) { '정상' } elseif ($Tool -eq 'xcopy' -and $Code -eq 1) { '복사할 새 파일 없음' } else { '실패' })), $($r.path), 파일 $($r.count)개, 최신 $($r.newest_time)"
