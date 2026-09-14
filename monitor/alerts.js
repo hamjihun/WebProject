@@ -18,6 +18,7 @@ const DEFAULTS = {
     backup_warn: true,                          // Warning 도 알림
     backup_max_hours: 26,                       // 이 시간 넘게 성공 기록이 없으면 알림
     backup_check_time: '08:00',
+    backup_hide: 'Cloudoc, Cloudoc_clone1',       // 화면·판단에서 제외할 백업 작업 이름 (쉼표 구분, 대소문자 무시)
     usb_window: '07:00-10:00',                  // USB 확인 시간대 (에이전트가 이 시간에만 USB 를 살핌). 비우면 항상
     usb_max_hours: 30,                          // USB 복사본 최신 파일이 이 시간(주말 제외) 넘게 오래되면 알림
     backup_skip_weekend: true,                  // 주말(토·일)은 백업 안 도는 것으로 보고 경과 시간에서 제외                 // 백업 판단 시각 (하루 1회, 새벽 백업이 끝난 뒤). 비우면 항상

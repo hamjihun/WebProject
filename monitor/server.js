@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.12.5';
+const VERSION = '1.12.6';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -328,11 +328,18 @@ function ingest(raw, remoteIp) {
   return m;
 }
 
+// 알림 설정의 backup_hide 에 적힌 Veeam 작업은 화면과 판단에서 뺀다
+function visibleBackups(b) {
+  if (!b || !Array.isArray(b.jobs) || !b.jobs.length) return b;
+  const hide = String(alerter.getSettings().rules.backup_hide || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (!hide.length) return b;
+  return { ...b, jobs: b.jobs.filter((j) => !hide.includes(String(j.name || '').toLowerCase())) };
+}
 function serversView() {
   const now = Date.now();
   const list = [];
   for (const [host, e] of store) {
-    list.push({ ...e.latest, online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host) });
+    list.push({ ...e.latest, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host) });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));

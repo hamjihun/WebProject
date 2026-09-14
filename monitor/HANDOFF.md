@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.12.5) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.12.6) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade)·**알림 소리**(MON.sound: localStorage `mon_sound` {on,dur,vol,quietOn,quietFrom,quietTo,remind}, Web Audio 비프, 🔊 버튼 패널, TV 모드는 오른쪽 아래 버튼, `sound.check(recent)` 를 index/dashboard/pollNav 가 호출). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
@@ -40,6 +40,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-14 (13): `rules.backup_hide`(기본 'Cloudoc, Cloudoc_clone1') — server.js `visibleBackups()` 가 serversView 에서 해당 이름 Veeam 작업을 제외(화면·알림 모두). 알림 설정 "표시·판단에서 뺄 백업 작업 이름" 입력. 수집기 1.12.6.
 - 2026-09-14 (12): Veeam 실기 diag: `작업 정의 VM=1 에이전트=1 전체API=6 체인=7, 세션 VM=0 에이전트=1 전체API=0 EP=946, 작업 이름 0개` → 에이전트 백업 기록은 Get-VBREPSession(946개)에 있고 JobName 으로 이름을 못 얻음. veeam.ps1 1.5.9: `SessName()` = JobName/Name/OrigJobName → JobId/OrigJobId 를 `$script:idName`(정의·GetAll 의 Id→Name) 으로 매핑 → JobInfo.Name; `$script:byName` 스코프 명시; 소스별 첫 기록의 타입·속성 목록을 diag 샘플로 남김(이름 0개일 때만). 모의 cmdlet(`scratchpad/veeam-mock.ps1`)으로 JobId 매핑 검증.
 - 2026-09-14 (11): USB 3차는 파일 수정 시각(xcopy 가 원본 시각 유지)이 아니라 **복사 시각** 기준 — ScanFolder 가 `copied_time`(최대 CreationTime) 반환, usb.copied_time / done_time 중 최신을 카드·표·대시보드·알림에 사용. agent.ps1 이 전송 직전 현재 드라이브 목록에 없으면 usb.connected=false. 에이전트 1.5.8, 수집기 1.12.5. 실기: ACE ERP 카드에 1차·3차 줄 정상 표시 확인. Veeam 카드는 0/7 성공(7개로 늘었으나 성공 0 → 이름 중복/None 의심, diag 줄 확인 필요).
 - 2026-09-14 (10): usb-done.ps1 에 3번째 인자 Tool(robocopy|xcopy) 추가 — 사용자 bat 은 xcopy(/d 날짜필터, 로그를 USB\백업\날짜\ACE_ERP_DB_OK.txt 에 기록, RemoveDrive.exe 로 분리, USB 라벨 ERP_Bcakup). xcopy 는 0 만 정상(1=새 파일 없음). 에이전트 1.5.7.
