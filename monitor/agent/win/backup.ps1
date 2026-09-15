@@ -15,22 +15,6 @@ try { if ($ConfPath -and (Test-Path $ConfPath)) { foreach ($line in Get-Content 
 $paths = @()
 if ($conf['BACKUP_PATH']) { $paths = @($conf['BACKUP_PATH'] -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 else { foreach ($p in @('D:\DBBackup', 'D:\DB_BACKUP', 'C:\DBBackup', 'C:\DB_BACKUP')) { if (Test-Path $p) { $paths += $p } } }
-function ScanFolder($root, $depth) {
-  # 폴더 아래 백업 파일(.bak/.trn/.dif/.zip/.7z) 중 최신 파일과 개수·용량
-  $r = @{ path = $root; exists = (Test-Path $root); newest_file = $null; newest_time = $null; count = 0; size = 0; error = '' }
-  if (-not $r.exists) { return $r }
-  try {
-    $gci = @{ Path = $root; Recurse = $true; File = $true; ErrorAction = 'SilentlyContinue' }; if ($depth -gt 0) { $gci.Depth = $depth }   # USB 전체를 훑을 땐 3단계까지만
-    $files = @(Get-ChildItem @gci | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' })
-    $r.count = $files.Count; $r.size = [int64](($files | Measure-Object Length -Sum).Sum)
-    $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($n) { $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\', '/'); $r.newest_time = Iso $n.LastWriteTime; $r.newest_size = [int64]$n.Length }
-    # 복사된 시각: USB 로 복사하면 수정 시각은 원본 그대로지만 생성 시각은 복사한 때가 된다
-    $c = $files | Sort-Object CreationTime -Descending | Select-Object -First 1
-    if ($c) { $r.copied_time = Iso $c.CreationTime; $r.copied_file = $c.FullName.Substring($root.Length).TrimStart('\', '/') }
-  } catch { $r.error = $_.Exception.Message }
-  return $r
-}
 # 파일이 아주 많은 폴더(데이터 증분 백업 등)용 가벼운 확인: 파일을 세지 않고 폴더(2단계까지)와 맨 위 파일의 시각만 본다.
 # 폴더의 수정 시각은 그 안에 파일이 추가·삭제된 때이므로 증분 복사가 돈 시각을 알 수 있다. 개수·용량은 모름(null).
 function ScanLight($root) {
@@ -45,6 +29,24 @@ function ScanLight($root) {
 }
 # 훑기 전에 크기를 가늠: 2단계까지 항목이 3000개를 넘으면 큰 폴더로 보고 가벼운 방식을 쓴다 (3000개에서 멈추므로 싸다)
 function IsBigFolder($root) { try { return @(Get-ChildItem -Path $root -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object -First 3001).Count -gt 3000 } catch { return $false } }
+function ScanFolder($root, $depth) {
+  # 폴더 아래 백업 파일(.bak/.trn/.dif/.zip/.7z) 중 최신 파일과 개수·용량
+  $r = @{ path = $root; exists = (Test-Path $root); newest_file = $null; newest_time = $null; count = 0; size = 0; error = '' }
+  if (-not $r.exists) { return $r }
+  try {
+    $gci = @{ Path = $root; Recurse = $true; File = $true; ErrorAction = 'SilentlyContinue' }; if ($depth -gt 0) { $gci.Depth = $depth }   # USB 전체를 훑을 땐 3단계까지만
+    $all = @(Get-ChildItem @gci | Select-Object -First 20001)   # 2만 개에서 멈춤: 그보다 크면 폴더 시각만 보는 가벼운 방식으로
+    if ($all.Count -gt 20000) { $r = ScanLight $root; $r.big = $true; return $r }
+    $files = @($all | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' })
+    $r.count = $files.Count; $r.size = [int64](($files | Measure-Object Length -Sum).Sum)
+    $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($n) { $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\', '/'); $r.newest_time = Iso $n.LastWriteTime; $r.newest_size = [int64]$n.Length }
+    # 복사된 시각: USB 로 복사하면 수정 시각은 원본 그대로지만 생성 시각은 복사한 때가 된다
+    $c = $files | Sort-Object CreationTime -Descending | Select-Object -First 1
+    if ($c) { $r.copied_time = Iso $c.CreationTime; $r.copied_file = $c.FullName.Substring($root.Length).TrimStart('\', '/') }
+  } catch { $r.error = $_.Exception.Message }
+  return $r
+}
 $files = @(); foreach ($p in $paths) { $files += ScanFolder $p 0 }
 
 # ---- SQL Server msdb 백업 기록 (DB별 마지막 전체/차등/로그 백업) ----
@@ -183,10 +185,10 @@ if ($conf['USB'] -ne '0') {
         $newDrive = (-not $prev) -or ($prev.drive -ne $tg.drive) -or ($prev.path -ne $tg.path)
         if ($ForceUsb -or $inWindow -or $newDrive -or (-not $lastScan) -or (((Get-Date) - $lastScan).TotalMinutes -ge 60)) {
           # 큰 폴더(항목 3000개↑ 또는 지난 훑기 20초↑)는 가벼운 방식. 항목에 |full / |light 로 강제 가능
-          $light = $(if ($tg.mode -eq 'full') { $false } elseif ($tg.mode -eq 'light') { $true } elseif ($u.light -eq $true) { $true } elseif ($newDrive -or -not $lastScan) { IsBigFolder $tg.path } else { $false })
+          $light = $(if ($tg.mode -eq 'full') { $false } elseif ($tg.mode -eq 'light') { $true } elseif ($u.light -eq $true) { $true } elseif ($u.light -eq $false -and -not $newDrive) { $false } else { IsBigFolder $tg.path })
           $sw = [System.Diagnostics.Stopwatch]::StartNew()
           $scan = $(if ($light) { ScanLight $tg.path } else { ScanFolder $tg.path $(if ($tg.path -match '^[A-Z]:\\$') { 3 } else { 0 }) })
-          $sw.Stop(); if (-not $light -and $tg.mode -ne 'full' -and $sw.ElapsedMilliseconds -gt 20000) { $light = $true; Log "USB $($tg.name) 훑기 $([int]($sw.ElapsedMilliseconds / 1000))초 — 다음부터 폴더 시각만 확인" }
+          $sw.Stop(); if (-not $light -and $tg.mode -ne 'full' -and ($scan.big -or $sw.ElapsedMilliseconds -gt 20000)) { $light = $true; Log "USB $($tg.name) 훑기 $([int]($sw.ElapsedMilliseconds / 1000))초, 파일 많음 - 다음부터 폴더 시각만 확인" }
           $u.light = $light
           $u.newest_file = $scan.newest_file; $u.newest_time = $scan.newest_time; $u.copied_time = $scan.copied_time; $u.copied_file = $scan.copied_file; $u.count = $scan.count; $u.size = $scan.size; $u.last_scan = Iso (Get-Date)
           if ($scan.error) { $u.error = $scan.error }

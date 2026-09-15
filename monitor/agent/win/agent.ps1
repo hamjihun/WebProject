@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.6.3"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.6.4"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
