@@ -1,0 +1,1044 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>서버 장애 직원 대응 매뉴얼</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#F4F5F7; --surface:#FFFFFF; --surface-2:#EDEFF3;
+    --ink:#1A2130; --ink-2:#3C4658; --muted:#68727F; --line:#D5DAE2; --line-2:#E6E9EE;
+    --copper:#B5601C; --copper-ink:#8E4A14; --copper-soft:#F8ECE0;
+    --crit:#C2382C; --crit-soft:#FBE7E4;
+    --warn:#B87A0A; --warn-soft:#FBF0D6;
+    --ok:#1F7A4D; --ok-soft:#DFF2E7;
+    --info:#2D5DA6; --info-soft:#E3EBF8;
+    --shadow:0 1px 2px rgba(20,28,40,.06), 0 8px 24px -12px rgba(20,28,40,.18);
+    --radius:6px;
+    --display:"IBM Plex Sans KR","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    --body:"Noto Sans KR","IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#12161D; --surface:#1A202A; --surface-2:#232B37;
+      --ink:#E8EBF0; --ink-2:#C3CAD5; --muted:#8F9AAA; --line:#333D4B; --line-2:#2A3340;
+      --copper:#DD9250; --copper-ink:#F0B57E; --copper-soft:#2E2318;
+      --crit:#F07C6E; --crit-soft:#3A1F1C;
+      --warn:#E5B34C; --warn-soft:#382D14;
+      --ok:#5CC48E; --ok-soft:#173226;
+      --info:#7FA8EA; --info-soft:#1B2A42;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#12161D; --surface:#1A202A; --surface-2:#232B37;
+    --ink:#E8EBF0; --ink-2:#C3CAD5; --muted:#8F9AAA; --line:#333D4B; --line-2:#2A3340;
+    --copper:#DD9250; --copper-ink:#F0B57E; --copper-soft:#2E2318;
+    --crit:#F07C6E; --crit-soft:#3A1F1C;
+    --warn:#E5B34C; --warn-soft:#382D14;
+    --ok:#5CC48E; --ok-soft:#173226;
+    --info:#7FA8EA; --info-soft:#1B2A42;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.7;word-break:keep-all;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding-block:32px 96px;padding-inline:20px}
+  h1,h2,h3,h4{font-family:var(--display);line-height:1.3;text-wrap:balance;margin:0}
+  h1{font-size:clamp(26px,3.4vw,38px);font-weight:700;letter-spacing:-.01em}
+  h2{font-size:22px;font-weight:700;letter-spacing:-.005em;padding-top:8px}
+  h3{font-size:17px;font-weight:600;margin-top:28px}
+  h4{font-size:15px;font-weight:600;margin-top:16px}
+  p{margin:10px 0;max-width:72ch}
+  ul,ol{margin:8px 0 8px 0;padding-left:22px;max-width:76ch}
+  li{margin:4px 0}
+  li>ul,li>ol{margin:4px 0}
+  strong{font-weight:700}
+  a{color:var(--info)}
+  code,.mono{font-family:var(--mono);font-size:.92em}
+  .eyebrow{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--copper);margin:0 0 6px}
+  .secno{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--copper);margin-right:10px}
+
+  /* masthead */
+  .masthead{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--copper);border-radius:var(--radius);padding:28px 28px 22px;box-shadow:var(--shadow)}
+  .masthead .lead{color:var(--ink-2);margin-top:12px;font-size:15.5px}
+  .docctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;border:1px solid var(--line);border-radius:var(--radius);margin-top:22px;overflow:hidden}
+  .docctl div{padding:10px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface)}
+  .docctl dt{font-family:var(--display);font-size:11.5px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+  .docctl dd{margin:2px 0 0;font-weight:600;font-family:var(--display);font-size:14px}
+  .docctl dd .mono{font-weight:500}
+
+  /* layout */
+  .layout{display:grid;grid-template-columns:1fr;gap:28px;margin-top:28px}
+  @media (min-width:1000px){.layout{grid-template-columns:230px minmax(0,1fr)}}
+  nav.toc{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;font-size:13.5px;display:none}
+  @media (min-width:1000px){nav.toc{display:block}}
+  nav.toc ol{list-style:none;padding:0;margin:0;border-left:2px solid var(--line)}
+  nav.toc li{margin:0}
+  nav.toc a{display:block;padding:6px 12px;color:var(--ink-2);text-decoration:none;border-left:2px solid transparent;margin-left:-2px;line-height:1.4}
+  nav.toc a:hover,nav.toc a:focus-visible{color:var(--copper-ink);border-left-color:var(--copper);outline:none}
+  nav.toc .n{font-family:var(--mono);font-size:12px;color:var(--muted);margin-right:8px}
+  main{min-width:0}
+  section{scroll-margin-top:16px;margin-bottom:56px}
+  section>h2{border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:16px}
+
+  /* poster */
+  .poster{background:var(--surface);border:2px solid var(--ink);border-radius:var(--radius);padding:22px 24px;margin-top:8px}
+  .poster h2{border:0;padding:0;margin:0 0 4px;font-size:20px}
+  .poster .sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;list-style:none;padding:0;margin:0;max-width:none}
+  .steps li{background:var(--surface-2);border-radius:var(--radius);padding:14px 14px 12px;margin:0;display:flex;flex-direction:column;gap:6px}
+  .steps .k{font-family:var(--display);font-weight:700;font-size:26px;line-height:1;color:var(--copper)}
+  .steps .t{font-family:var(--display);font-weight:600;font-size:15px}
+  .steps .d{font-size:13.5px;color:var(--ink-2);line-height:1.5}
+  .poster .hot{margin-top:16px;display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px;border-top:1px dashed var(--line);padding-top:12px}
+  .poster .hot b{font-family:var(--display)}
+
+  /* tables */
+  .tw{overflow-x:auto;margin:14px 0 6px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:13.8px;line-height:1.55}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line-2);vertical-align:top;text-align:left}
+  th{font-family:var(--display);font-weight:600;font-size:12.5px;letter-spacing:.02em;color:var(--ink-2);background:var(--surface-2);white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  td .mono{color:var(--muted)}
+  td ul{margin:0;padding-left:16px;max-width:none}
+  td ul li{margin:2px 0}
+  .num{font-variant-numeric:tabular-nums}
+  .tbl-caption{font-size:12.5px;color:var(--muted);margin:4px 2px 0}
+
+  /* severity pills & callouts */
+  .pill{display:inline-block;font-family:var(--display);font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;line-height:1.6}
+  .pill.crit{background:var(--crit-soft);color:var(--crit)}
+  .pill.warn{background:var(--warn-soft);color:var(--warn)}
+  .pill.ok{background:var(--ok-soft);color:var(--ok)}
+  .pill.info{background:var(--info-soft);color:var(--info)}
+  .pill.copper{background:var(--copper-soft);color:var(--copper-ink)}
+  .callout{border-left:4px solid var(--info);background:var(--info-soft);padding:12px 16px;border-radius:0 var(--radius) var(--radius) 0;margin:16px 0}
+  .callout.crit{border-left-color:var(--crit);background:var(--crit-soft)}
+  .callout.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+  .callout.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+  .callout.copper{border-left-color:var(--copper);background:var(--copper-soft)}
+  .callout p{margin:4px 0}
+  .callout .ttl{font-family:var(--display);font-weight:700;font-size:14px;margin-bottom:4px}
+
+  /* server cards */
+  .srv{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin:18px 0;overflow:hidden}
+  .srv header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 18px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+  .srv header h3{margin:0;font-size:16.5px}
+  .srv header .code{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  .srv header .rto{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+  .srv .body{padding:6px 18px 14px}
+  .kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:0;border-top:1px solid var(--line-2)}
+  .kv>div{padding:10px 0;border-bottom:1px solid var(--line-2)}
+  .kv>div:nth-child(odd){font-family:var(--display);font-weight:600;font-size:13px;color:var(--ink-2);padding-right:12px}
+  .kv>div:nth-child(even){font-size:14px}
+  .kv>div:nth-child(even) ul{margin:0}
+  .kv>div:nth-last-child(-n+2){border-bottom:0}
+  @media (max-width:560px){.kv{grid-template-columns:1fr}.kv>div:nth-child(odd){padding-bottom:0;border-bottom:0}}
+
+  /* figures */
+  figure{margin:20px 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 10px;overflow-x:auto}
+  figure svg{display:block;max-width:100%;height:auto;margin:0 auto;font-family:var(--display);color:var(--ink)}
+  figcaption{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5}
+  figure .box{fill:var(--surface-2);stroke:var(--ink);stroke-width:1.2}
+  figure .box2{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+  figure .decision{fill:var(--copper-soft);stroke:var(--copper);stroke-width:1.4}
+  figure .c-crit{fill:var(--crit-soft);stroke:var(--crit);stroke-width:1.4}
+  figure .c-warn{fill:var(--warn-soft);stroke:var(--warn);stroke-width:1.4}
+  figure .c-ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.4}
+  figure .c-info{fill:var(--info-soft);stroke:var(--info);stroke-width:1.4}
+  figure .c-copper{fill:var(--copper-soft);stroke:var(--copper);stroke-width:1.4}
+  figure text{fill:currentColor;font-size:12.5px}
+  figure text.b{font-weight:600}
+  figure text.s{font-size:11px;fill:var(--muted)}
+  figure text.lbl{font-size:11px;fill:var(--copper-ink);font-weight:600}
+  figure line,figure path.ln,figure polyline{stroke:currentColor;stroke-width:1.3;fill:none}
+  figure .dash{stroke-dasharray:4 4}
+  figure .crit-line{stroke:var(--crit)}
+  figure .copper-line{stroke:var(--copper);stroke-width:2}
+
+  .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:14px 0}
+  .box-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px}
+  .box-card h4{margin-top:0}
+  .box-card ul{margin-bottom:0}
+  .do{border-top:3px solid var(--ok)}
+  .dont{border-top:3px solid var(--crit)}
+
+  .checklist{list-style:none;padding:0;max-width:none}
+  .checklist li{padding-left:28px;position:relative;margin:6px 0}
+  .checklist li::before{content:"";position:absolute;left:2px;top:6px;width:14px;height:14px;border:1.5px solid var(--ink-2);border-radius:3px}
+
+  .form-blank{display:inline-block;min-width:110px;border-bottom:1px solid var(--ink-2);color:var(--muted);font-size:13px;text-align:center}
+  footer.end{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+  @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+  @media print{
+    body{background:#fff;color:#000;font-size:12px}
+    nav.toc{display:none}
+    .wrap{padding:0;max-width:none}
+    .layout{grid-template-columns:1fr}
+    section{break-inside:auto;margin-bottom:28px}
+    .srv,figure,.tw,.poster,.box-card{break-inside:avoid;box-shadow:none}
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">IT 재해·장애 대응 · 전 직원 배포용</p>
+    <h1>서버 장애 직원 대응 매뉴얼</h1>
+    <p class="lead">그룹웨어·ERP·문서중앙화 등 사내 서버가 멈추거나 서버실에 정전·화재 같은 재난이 발생했을 때, 각 직원이 <strong>무엇을 하고, 무엇을 하지 말고, 어떤 대체 수단으로 업무를 이어갈지</strong> 정리한 문서입니다. 1장의 요약 카드는 각 사무실과 생산 현장 게시판에 인쇄해 붙여 두는 것을 권장합니다.</p>
+    <dl class="docctl">
+      <div><dt>문서번호</dt><dd class="mono">IT-BCP-001</dd></div>
+      <div><dt>버전 / 시행일</dt><dd>v1.0 <span class="mono">2026-09-15</span></dd></div>
+      <div><dt>관리부서</dt><dd>IT 담당 (경영지원)</dd></div>
+      <div><dt>적용 범위</dt><dd>본사·공장 전 임직원</dd></div>
+      <div><dt>검토 주기</dt><dd>반기 1회 · 구성 변경 시</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="목차">
+      <ol>
+        <li><a href="#s0"><span class="n">요약</span>1분 요약 카드</a></li>
+        <li><a href="#s1"><span class="n">1</span>장애 등급과 안내 채널</a></li>
+        <li><a href="#s2"><span class="n">2</span>장애 발생 시 공통 행동</a></li>
+        <li><a href="#s3"><span class="n">3</span>서버별 대응 매뉴얼</a></li>
+        <li><a href="#s4"><span class="n">4</span>전체 셧다운(정전·재난)</a></li>
+        <li><a href="#s5"><span class="n">5</span>기타 장애 대응</a></li>
+        <li><a href="#s6"><span class="n">6</span>부서별 대체 업무표</a></li>
+        <li><a href="#s7"><span class="n">7</span>비상 연락·전파 체계</a></li>
+        <li><a href="#s8"><span class="n">8</span>복구 후 사후 조치</a></li>
+        <li><a href="#s9"><span class="n">9</span>IT 담당자 부록</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- ===================== 요약 카드 ===================== -->
+      <section id="s0">
+        <div class="poster">
+          <p class="eyebrow">벽에 붙이는 1분 요약</p>
+          <h2>시스템이 안 될 때, 직원은 이렇게</h2>
+          <p class="sub">세부 내용은 본문 각 장을 참고하세요. 이 카드만 따라도 첫 30분은 안전합니다.</p>
+          <ol class="steps">
+            <li><span class="k">1</span><span class="t">나만 안 되는지 확인</span><span class="d">옆자리·다른 부서에 물어봅니다. 나만 안 되면 PC 재부팅 후 IT에 접수합니다.</span></li>
+            <li><span class="k">2</span><span class="t">공지 채널 확인</span><span class="d">그룹웨어 공지 → 사내 단체 채팅방 → 부서장 전파 순으로 안내가 옵니다. 임의로 판단하지 않습니다.</span></li>
+            <li><span class="k">3</span><span class="t">건드리지 않기</span><span class="d">서버실 출입, 서버·네트워크 장비 전원 조작, 비밀번호 변경, USB 반출은 하지 않습니다.</span></li>
+            <li><span class="k">4</span><span class="t">대체 수단으로 전환</span><span class="d">3장 표대로 수기 양식·엑셀·개인 메일(승인 계정)·전화로 업무를 이어갑니다. 기록은 반드시 남깁니다.</span></li>
+            <li><span class="k">5</span><span class="t">복구 후 사후 입력</span><span class="d">장애 중 처리한 거래·결재·문서를 복구 공지 후 24시간 안에 시스템에 다시 입력합니다.</span></li>
+          </ol>
+          <div class="hot">
+            <span><b>IT 담당</b> <span class="form-blank">이름 / 010-____-____</span></span>
+            <span><b>IT 대리</b> <span class="form-blank">이름 / 010-____-____</span></span>
+            <span><b>사내 비상 단체방</b> <span class="form-blank">카카오톡 「전사 비상연락」</span></span>
+            <span><b>보안사고(랜섬웨어) 의심 시</b> 랜선부터 뽑고 → IT 전화</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 1 ===================== -->
+      <section id="s1">
+        <h2><span class="secno">1</span>장애 등급과 안내 채널</h2>
+        <p>장애는 영향 범위에 따라 4개 등급으로 나눕니다. 등급은 IT 담당이 판단해 공지하며, 등급에 따라 <strong>누가 어떤 채널로 안내하는지</strong>가 정해집니다. 직원은 공지에 적힌 등급을 보고 이 매뉴얼의 해당 장을 펼치면 됩니다.</p>
+        <div class="tw">
+          <table>
+            <thead><tr><th>등급</th><th>상황</th><th>예시</th><th>안내 주체 · 채널</th><th>직원이 볼 장</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pill crit">1등급 · 전사 중단</span></td><td>서버실 전체 또는 네트워크 전체가 멈춰 모든 시스템을 쓸 수 없음</td><td>정전·UPS 소진, 화재, 수해, 코어 스위치·방화벽 고장, 랜섬웨어 확산</td><td>경영진 결정 → IT 담당 + 경영지원팀이 <strong>단체 채팅방·전화 콜트리·사내 방송</strong>으로 전파</td><td>4장, 7장</td></tr>
+              <tr><td><span class="pill warn">2등급 · 핵심 시스템 중단</span></td><td>ERP·그룹웨어·AD(로그인)·인터넷 회선 중 하나가 멈춰 전사 업무에 영향</td><td>ERP 서버 다운, 그룹웨어 메일 불가, 로그인 불가, 인터넷 단절</td><td>IT 담당이 <strong>단체 채팅방 + 부서장 문자</strong>로 즉시 공지, 30분마다 진행 상황 갱신</td><td>3장</td></tr>
+              <tr><td><span class="pill info">3등급 · 일부 시스템 중단</span></td><td>특정 서버나 특정 부서·층만 영향</td><td>문서중앙화 접속 불가, MES 실적 입력 불가, 3층 네트워크 불통, 프린터 불가</td><td>IT 담당이 <strong>그룹웨어 공지(가능 시) + 해당 부서장</strong>에게 안내</td><td>3장, 5장</td></tr>
+              <tr><td><span class="pill ok">4등급 · 개인 장애</span></td><td>한 사람의 PC·계정만 문제</td><td>내 PC 부팅 불가, 내 계정 잠김, 내 자리 랜선 불량</td><td>본인이 <strong>IT 접수(전화·단체방·그룹웨어 IT요청)</strong>, 공지 없음</td><td>5-5절</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>안내 채널 우선순위</h3>
+        <p>그룹웨어가 살아 있으면 그룹웨어 공지가 1순위입니다. 그러나 그룹웨어 자체가 멈추는 경우가 많으므로 <strong>그룹웨어와 무관한 채널을 반드시 두 개 이상</strong> 운영합니다.</p>
+        <div class="tw">
+          <table>
+            <thead><tr><th>순위</th><th>채널</th><th>쓰는 경우</th><th>비고</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td>그룹웨어 전사 공지 · 팝업</td><td>그룹웨어 정상, 다른 서버 장애</td><td>가장 기록이 잘 남음</td></tr>
+              <tr><td class="num">2</td><td>사내 비상 단체 채팅방 (카카오톡·네이버웍스 등, 스마트폰)</td><td>그룹웨어·네트워크 장애, 정전</td><td>회사 회선과 무관한 이동통신망이라 정전 시에도 동작. <strong>전 직원 사전 가입 필수</strong></td></tr>
+              <tr><td class="num">3</td><td>부서장 전화·문자 콜트리</td><td>단체방 미가입자, 현장 근무자</td><td>7장 연락망 사용. 부서장은 팀원 수신 확인까지 책임</td></tr>
+              <tr><td class="num">4</td><td>사내 방송 · 게시판 · 현장 구두 전파</td><td>공장 생산 현장, 전사 동시 안내</td><td>방송 설비가 정전 시 동작하는지 사전 확인</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== 2 ===================== -->
+      <section id="s2">
+        <h2><span class="secno">2</span>장애 발생 시 공통 행동 요령</h2>
+        <p>어떤 시스템이 멈추든 직원의 첫 행동은 같습니다. 아래 흐름도대로 <strong>범위를 확인하고, 보고하고, 공지를 기다린 뒤, 대체 수단으로 전환</strong>합니다. 이 순서를 지키면 IT 담당에게 같은 문의가 수십 건 몰리는 것을 막고 복구가 빨라집니다.</p>
+
+        <figure>
+          <svg viewBox="0 0 900 470" role="img" aria-label="직원 판단 흐름도: 시스템 이상 발견 후 나만 안 되는지 확인하고, 로그인·인터넷 여부에 따라 개인 장애, 전체 장애, 서버별 장애로 나뉘어 각각 IT 접수, 4장, 3장으로 연결된다">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+            </defs>
+            <!-- start -->
+            <rect x="330" y="18" width="240" height="44" rx="22" class="box"/>
+            <text x="450" y="45" text-anchor="middle" class="b">업무 시스템이 안 된다</text>
+            <line x1="450" y1="62" x2="450" y2="92" marker-end="url(#ar)"/>
+            <!-- decision 1 -->
+            <polygon points="450,92 620,140 450,188 280,140" class="decision"/>
+            <text x="450" y="135" text-anchor="middle" class="b">옆자리·다른 부서도</text>
+            <text x="450" y="153" text-anchor="middle" class="b">안 되나?</text>
+            <!-- no -> personal -->
+            <line x1="280" y1="140" x2="170" y2="140" marker-end="url(#ar)"/>
+            <text x="225" y="132" text-anchor="middle" class="lbl">아니오, 나만</text>
+            <rect x="30" y="112" width="140" height="56" rx="4" class="c-ok"/>
+            <text x="100" y="134" text-anchor="middle" class="b">4등급 개인 장애</text>
+            <text x="100" y="152" text-anchor="middle" class="s">PC 재부팅 → IT 접수</text>
+            <!-- yes -> decision 2 -->
+            <line x1="450" y1="188" x2="450" y2="218" marker-end="url(#ar)"/>
+            <text x="468" y="208" class="lbl">예, 여럿</text>
+            <polygon points="450,218 640,266 450,314 260,266" class="decision"/>
+            <text x="450" y="261" text-anchor="middle" class="b">PC 로그인·인터넷·전화까지</text>
+            <text x="450" y="279" text-anchor="middle" class="b">전부 안 되나?</text>
+            <!-- yes -> total -->
+            <line x1="640" y1="266" x2="730" y2="266" marker-end="url(#ar)"/>
+            <text x="685" y="258" text-anchor="middle" class="lbl">예</text>
+            <rect x="730" y="238" width="150" height="56" rx="4" class="c-crit"/>
+            <text x="805" y="260" text-anchor="middle" class="b">1등급 전체 장애</text>
+            <text x="805" y="278" text-anchor="middle" class="s">4장 · 정전·네트워크</text>
+            <!-- no -> specific -->
+            <line x1="260" y1="266" x2="170" y2="266" marker-end="url(#ar)"/>
+            <text x="215" y="258" text-anchor="middle" class="lbl">아니오</text>
+            <rect x="20" y="238" width="150" height="56" rx="4" class="c-warn"/>
+            <text x="95" y="260" text-anchor="middle" class="b">2·3등급 서버 장애</text>
+            <text x="95" y="278" text-anchor="middle" class="s">3장 · 서버별 카드</text>
+            <!-- common actions -->
+            <line x1="95" y1="294" x2="95" y2="356" marker-end="url(#ar)"/>
+            <line x1="805" y1="294" x2="805" y2="356" marker-end="url(#ar)"/>
+            <line x1="450" y1="314" x2="450" y2="356" class="dash" marker-end="url(#ar)"/>
+            <rect x="95" y="356" width="710" height="0" />
+            <rect x="60" y="356" width="780" height="92" rx="4" class="box"/>
+            <text x="450" y="382" text-anchor="middle" class="b">공통 행동</text>
+            <text x="120" y="408" class="b">① 부서장에게 보고</text>
+            <text x="120" y="428" class="s">증상·시각·범위 한 줄로</text>
+            <text x="330" y="408" class="b">② 공지 채널 확인</text>
+            <text x="330" y="428" class="s">단체방 · 부서장 · 방송</text>
+            <text x="540" y="408" class="b">③ 장비 건드리지 않기</text>
+            <text x="540" y="428" class="s">전원·비밀번호·USB 금지</text>
+            <text x="720" y="408" class="b">④ 대체 수단 전환</text>
+            <text x="720" y="428" class="s">기록 남기며 업무</text>
+          </svg>
+          <figcaption>그림 2-1. 직원 판단 흐름도. 두 가지 질문(나만 안 되는가, 전부 안 되는가)만으로 개인 장애·서버 장애·전체 장애를 구분하고, 어느 경우든 아래 네 가지 공통 행동으로 이어집니다.</figcaption>
+        </figure>
+
+        <h3>보고할 때 말할 것 (한 줄이면 충분)</h3>
+        <p>「<strong>어떤 시스템</strong>이 · <strong>몇 시부터</strong> · <strong>어떤 화면(메시지)</strong>으로 · <strong>누구까지</strong> 안 되는지」를 부서장 또는 IT 담당에게 전합니다. 예: “ERP 로그인 화면에서 ‘서버에 연결할 수 없습니다’ 나옴, 9시 40분부터, 영업팀 전원.” 화면을 스마트폰으로 찍어 단체방에 올리면 원인 파악이 훨씬 빨라집니다.</p>
+
+        <div class="two">
+          <div class="box-card do">
+            <h4>해야 할 것</h4>
+            <ul>
+              <li>작업 중이던 문서·엑셀은 <strong>내 PC에 즉시 저장</strong>(다른 이름으로 저장 → 바탕화면 「장애임시」 폴더)</li>
+              <li>부서장 보고 후 공지 대기, 공지에 적힌 대체 수단으로 전환</li>
+              <li>장애 중 처리한 업무는 <strong>수기 대장·엑셀에 기록</strong>(복구 후 입력용)</li>
+              <li>정전 시 노트북은 배터리로 저장 후 덮개 닫기, 데스크톱은 그대로 두기</li>
+              <li>보안사고 의심 시 랜선 분리 후 즉시 신고</li>
+            </ul>
+          </div>
+          <div class="box-card dont">
+            <h4>하지 말아야 할 것</h4>
+            <ul>
+              <li>서버실·네트워크 장비함 출입, 장비 전원·케이블 조작</li>
+              <li>PC 반복 재부팅, 로그인 반복 시도(계정 잠김 유발), 비밀번호 변경</li>
+              <li>도면(Gerber·CAM)·원가·고객 정보를 <strong>개인 USB·개인 클라우드·개인 메일</strong>로 반출</li>
+              <li>IT 담당에게 개별 전화 반복(부서장 통해 취합), 확인되지 않은 소문 전파</li>
+              <li>임의 소프트웨어 설치, 방화벽·백신 끄기</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 3 ===================== -->
+      <section id="s3">
+        <h2><span class="secno">3</span>서버별 장애 대응 매뉴얼</h2>
+        <p>사내 서버 11대를 기준으로 작성했습니다. 서버 코드(<span class="mono">SRV-01</span> 등)는 IT 공지에 그대로 사용하며, 실제 구성과 다른 항목은 IT 담당이 수정합니다. 각 서버가 멈췄을 때 <strong>직원이 겪는 증상 → 대체 수단 → 복구 후 할 일</strong> 순서로 정리했습니다.</p>
+
+        <div class="callout copper">
+          <div class="ttl">서버 구성 가정 (실제 구성에 맞게 조정)</div>
+          <p>그룹웨어, ERP(앱), ERP DB, 문서중앙화(ECM), MES(생산관리), 파일서버(CAM·부서 공유), AD 도메인 컨트롤러(DNS·DHCP 겸용), Veeam 백업, 보안 관리(백신·DLP·NAC), 홈페이지(DMZ), 출입·근태 서버. 이 외 방화벽·코어 스위치·인터넷 회선·전화(IP-PBX)는 5장에서 다룹니다.</p>
+        </div>
+
+        <h3>3-1. 한눈에 보는 요약표</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>코드</th><th>서버</th><th>멈추면 안 되는 업무</th><th>직원 대체 수단</th><th>목표 복구시간</th><th>영향</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">SRV-01</td><td>그룹웨어</td><td>메일, 전자결재, 일정·회의실, 게시판, 주소록</td><td>승인된 개인 메일 계정 임시 사용, 종이 긴급결재, 단체방 공지, 전화</td><td class="num">4시간</td><td><span class="pill warn">2등급</span></td></tr>
+              <tr><td class="mono">SRV-02</td><td>ERP (업무 앱)</td><td>수주·견적, 작업지시, 자재 입출고, 출하, 회계, 구매</td><td>수기 전표·엑셀 템플릿, 마지막 출력 작업지시서, 수기 거래명세서, 홈택스·인터넷뱅킹</td><td class="num">4시간</td><td><span class="pill warn">2등급</span></td></tr>
+              <tr><td class="mono">SRV-03</td><td>ERP DB</td><td>ERP 전체(SRV-02와 동일), MES 연동</td><td>SRV-02와 동일</td><td class="num">4시간</td><td><span class="pill warn">2등급</span></td></tr>
+              <tr><td class="mono">SRV-04</td><td>문서중앙화 (ECM)</td><td>모든 사내 문서 열람·저장, 도면·사양서 조회</td><td>오프라인 캐시 문서, 로컬 「장애임시」 폴더에 저장 후 복구 시 업로드</td><td class="num">8시간</td><td><span class="pill info">3등급</span></td></tr>
+              <tr><td class="mono">SRV-05</td><td>MES (생산관리)</td><td>공정 실적 입력, LOT 추적, 바코드 스캔, 설비 가동 현황</td><td>수기 공정 이동표·작업일지, LOT 라벨 육안 대조</td><td class="num">4시간</td><td><span class="pill info">3등급</span></td></tr>
+              <tr><td class="mono">SRV-06</td><td>파일서버 (CAM·부서 공유)</td><td>Gerber·CAM 데이터, 부서 공유 폴더, 검사 성적서</td><td>CAM실 로컬 복사본, 로컬 저장 후 사후 이동, 부서 내 전달은 IT 승인 USB</td><td class="num">8시간</td><td><span class="pill info">3등급</span></td></tr>
+              <tr><td class="mono">SRV-07</td><td>AD 도메인 (DNS·DHCP)</td><td>PC 로그인, 사내 주소로 접속, 프린터, 공유폴더 권한</td><td>로그인된 PC는 끄지 않기, IP 주소로 접속, 프린터는 USB 직결</td><td class="num">2시간</td><td><span class="pill warn">2등급</span></td></tr>
+              <tr><td class="mono">SRV-08</td><td>Veeam 백업</td><td>직원 업무 영향 없음 (백업만 중단)</td><td>해당 없음 · IT만 조치</td><td class="num">24시간</td><td><span class="pill ok">IT 내부</span></td></tr>
+              <tr><td class="mono">SRV-09</td><td>보안 관리 (백신·DLP·NAC)</td><td>NAC 다운 시 네트워크 접속 차단 가능, 백신 업데이트</td><td>IT가 NAC 긴급 예외 처리, 직원은 USB·외부 파일 사용 자제</td><td class="num">8시간</td><td><span class="pill info">3등급</span></td></tr>
+              <tr><td class="mono">SRV-10</td><td>홈페이지 (DMZ)</td><td>대외 홈페이지, 온라인 문의</td><td>영업팀이 주요 거래처에 전화·메일 안내</td><td class="num">24시간</td><td><span class="pill ok">외부만</span></td></tr>
+              <tr><td class="mono">SRV-11</td><td>출입통제·근태</td><td>출입문 카드 인식, 근태 기록</td><td>경비실 수동 개방, 근태 수기 기록 후 총무 사후 반영</td><td class="num">8시간</td><td><span class="pill info">3등급</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tbl-caption">목표 복구시간(RTO)은 백업·이중화 수준에 따라 IT 담당이 확정합니다. 표의 값은 300명 규모 제조사의 일반적인 기준입니다.</p>
+
+        <h3>3-2. 서버별 상세 카드</h3>
+
+        <!-- SRV-01 -->
+        <article class="srv">
+          <header><span class="code">SRV-01</span><h3>그룹웨어 서버</h3><span class="pill warn">2등급</span><span class="rto">RTO 4h · RPO 24h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>그룹웨어 로그인 화면이 안 뜨거나 “서버 응답 없음”, 메일 송수신 멈춤, 결재 상신·승인 불가, 일정·회의실 예약 불가, 아웃룩 연동 시 동기화 오류.</div>
+              <div>직원 대응</div><div>
+                <ul>
+                  <li><strong>메일</strong>: 회사가 사전에 승인한 <strong>개인(임시) 메일 계정</strong>을 사용합니다. 규칙 ① 제목 앞에 <code>[임시발송]</code> 표기 ② 서명에 회사명·부서·전화번호 기재 ③ 견적서·도면 첨부는 반드시 <strong>암호 ZIP</strong> 후 암호는 전화·문자로 별도 전달 ④ 거래처에는 “그룹웨어 장애로 임시 계정에서 보냅니다. 회신은 이 주소로 주세요” 한 줄 안내 ⑤ 발송 메일은 <code>회사메일주소</code>를 숨은참조(BCC)에 넣어 복구 후 사내 메일함에 남게 합니다.</li>
+                  <li><strong>긴급 수신 확인</strong>: 발주·납기 회신처럼 급한 건은 거래처에 전화로 “메일 보냈는지” 확인합니다. 도착하지 않은 메일은 복구 후 대부분 순차 수신되지만, 4시간 이상 장애 시 재발송을 요청합니다.</li>
+                  <li><strong>전자결재</strong>: 총무팀이 보관하는 <strong>「긴급 수기 결재 용지」</strong>에 작성해 결재권자 서명을 받습니다. 결재권자가 외부에 있으면 문자·카카오톡으로 내용을 보내 “승인” 답을 받고 <strong>화면을 캡처</strong>해 보관합니다. 복구 후 소급 상신하며 제목에 <code>[소급/장애 09-15]</code>를 붙입니다.</li>
+                  <li><strong>일정·회의실</strong>: 부서 화이트보드와 단체방으로 조율합니다. 회의실은 총무팀이 종이 예약표로 임시 운영합니다.</li>
+                  <li><strong>공지·게시판</strong>: 전사 공지는 사내 비상 단체방, 부서 공지는 부서 단체방을 씁니다.</li>
+                  <li><strong>주소록</strong>: 스마트폰 연락처와 명함 관리 앱, 거래처 대표번호를 사용합니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>서비스·DB·디스크 용량 확인 → 서비스 재시작 → 실패 시 Veeam 스냅샷 복원(전일 시점) → 메일 릴레이·MX 큐 확인(외부 메일이 스팸 게이트웨이/통신사 큐에 대기 중인지) → 복구 공지.</div>
+              <div>복구 후 할 일</div><div>임시 계정으로 주고받은 메일 중 업무 기록이 필요한 것은 사내 메일로 전달(Forward), 수기 결재는 24시간 내 소급 상신, 임시 계정에 남은 회사 자료는 삭제.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-02/03 -->
+        <article class="srv">
+          <header><span class="code">SRV-02 · SRV-03</span><h3>ERP 서버 · ERP DB 서버</h3><span class="pill warn">2등급</span><span class="rto">RTO 4h · RPO 1h(DB 로그)</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>ERP 클라이언트 로그인 불가, “DB 연결 오류”, 조회는 되나 저장 시 멈춤(DB 장애), 작업지시서·거래명세서 출력 불가, MES 실적이 ERP에 반영되지 않음.</div>
+              <div>직원 대응</div><div>
+                <p style="margin-top:0">모든 부서 공통 원칙은 <strong>“종이·엑셀에 먼저 적고, 복구 후 순서대로 입력”</strong>입니다. 부서별 수기 양식은 총무팀 서랍과 문서중앙화 「비상양식」 폴더(오프라인 사본은 각 부서 PC)에 둡니다.</p>
+                <ul>
+                  <li><strong>영업·수주</strong>: 엑셀 견적 템플릿으로 견적 발행(견적번호는 <code>임시-YYMMDD-부서-일련</code>). 수주는 「수기 수주장」에 고객·품번·수량·납기 기록. 고객 PO(발주서) 원본은 반드시 보관.</li>
+                  <li><strong>생산관리</strong>: 장애 직전에 출력된 <strong>작업지시서·생산계획</strong>을 기준으로 생산 진행. 신규 지시는 생산관리팀장이 수기 작업지시서를 발행하고 번호를 채번. 긴급 오더는 영업→생산관리 전화 확인 후 수기 지시.</li>
+                  <li><strong>자재·구매</strong>: 「수기 입출고 대장」(품목·LOT·수량·출고처·서명) 기록. 원자재(동박적층판, 드라이필름, 잉크, 약품) 불출은 반드시 대장 기재 후 이동. 발주는 엑셀 발주서로 협력사에 메일·팩스 발송.</li>
+                  <li><strong>출하·물류</strong>: 엑셀 <strong>「수기 거래명세서」</strong> 양식으로 출하(2부 출력, 1부 고객 서명 회수). 출하 LOT·수량을 반드시 기록해 복구 후 ERP 출하 처리. 수출 건은 인보이스·패킹리스트 엑셀 양식 사용.</li>
+                  <li><strong>품질</strong>: 검사 성적서는 엑셀 양식으로 발행, 부적합은 수기 부적합 보고서로 기록.</li>
+                  <li><strong>회계·경리</strong>: 세금계산서는 <strong>국세청 홈택스</strong>에서 직접 발행, 입출금은 인터넷뱅킹으로 처리하고 「수기 전표」에 기록. 급여·마감 기한이 겹치면 회계팀장이 경영진과 일정 조정.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>앱 서버·DB 서버 어느 쪽인지 분리 확인 → 서비스 재기동 → DB 무결성 점검 → 필요 시 최근 DB 백업 + 트랜잭션 로그로 복원 → ERP 벤더 긴급 지원 요청(계약 연락처 9장) → 복구 후 <strong>마지막 정상 저장 시각</strong>을 공지(그 이후 입력분은 재입력 대상).</div>
+              <div>복구 후 할 일</div><div>IT가 공지한 “마지막 정상 저장 시각” 이후 건을 부서별 담당자가 <strong>수주 → 작업지시 → 입출고 → 출하 → 회계</strong> 순서로 입력(순서가 바뀌면 재고·매출이 틀어짐). 임시 번호는 정식 번호로 대체하고 대응표를 남깁니다. 자재팀은 복구 후 3일 내 주요 자재 실사.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-04 -->
+        <article class="srv">
+          <header><span class="code">SRV-04</span><h3>문서중앙화 서버 (ECM)</h3><span class="pill info">3등급</span><span class="rto">RTO 8h · RPO 24h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>가상 드라이브(문서중앙화 드라이브)가 사라지거나 “연결 끊김”, 문서를 열면 응답 없음, 저장 시 오류, 결재·반출 승인 기능 불가.</div>
+              <div>직원 대응</div><div>
+                <ul>
+                  <li>이미 열려 있는 문서는 <strong>즉시 「다른 이름으로 저장」 → 내 PC 바탕화면 「장애임시」 폴더</strong>에 저장합니다. 문서중앙화 드라이브로는 저장하지 마세요(저장 실패로 내용이 날아갈 수 있음).</li>
+                  <li>새 문서는 「장애임시」 폴더에서 작성하고, <strong>파일명 앞에 작성일과 이름</strong>(<code>260915_홍길동_견적서.xlsx</code>)을 붙여 복구 후 업로드가 쉽도록 합니다.</li>
+                  <li>제품 사양서·도면·작업표준서가 필요하면 최근 열어 본 <strong>오프라인 캐시</strong>를 확인하고, 없으면 해당 문서 관리 부서(기술·품질)에 전화해 인쇄본을 요청합니다. 현장은 공정별 비치된 <strong>인쇄 작업표준서</strong>로 진행합니다.</li>
+                  <li>문서 외부 반출 규정은 장애 중에도 유지됩니다. 고객 제출이 급한 문서는 부서장 승인 후 IT가 지정한 방법(암호 ZIP 메일)으로만 보냅니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>스토리지·서비스 상태 확인 → 서비스 재시작 → 스토리지 장애 시 Veeam 복원 → 복구 후 클라이언트 재접속 안내.</div>
+              <div>복구 후 할 일</div><div>「장애임시」 폴더의 파일을 원래 위치에 업로드하고, 같은 문서를 여러 명이 수정했으면 부서 담당자가 병합 후 로컬 사본 삭제. 로컬 사본은 <strong>복구 후 7일 내 삭제</strong>(보안 규정).</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-05 -->
+        <article class="srv">
+          <header><span class="code">SRV-05</span><h3>MES 서버 (생산관리)</h3><span class="pill info">3등급</span><span class="rto">RTO 4h · RPO 1h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>공정 현장 단말에서 실적 입력 불가, LOT 바코드 스캔 시 “서버 오류”, 설비 가동 현황판(대시보드) 멈춤, 작업지시 조회 불가.</div>
+              <div>직원 대응</div><div>
+                <ul>
+                  <li>생산은 멈추지 않습니다. 각 공정(재단·드릴·도금·노광·에칭·PSR·표면처리·외형가공·검사)은 <strong>「수기 공정 이동표」</strong>(LOT 번호·품번·투입/양품/불량 수량·작업자·시작/종료 시각·설비)를 LOT 여행표에 끼워 다음 공정으로 넘깁니다.</li>
+                  <li>LOT 라벨은 바코드 대신 <strong>번호를 눈으로 대조</strong>하고 이동표에 옮겨 적습니다. 라벨 발행이 안 되면 라인 리더가 수기 라벨(LOT 번호 + 품번 + 수량)을 작성합니다.</li>
+                  <li>설비 파라미터·레시피가 MES에서 내려오는 공정은 <strong>마지막 적용값을 설비에 그대로 유지</strong>하고, 신규 품번은 기술팀이 인쇄 사양서로 확인 후 수동 설정합니다.</li>
+                  <li>교대 인계 시 이동표 사본을 생산관리팀에 제출해 실적 누락을 막습니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>MES 앱·DB·현장 단말 네트워크 분리 확인 → 서비스 재기동 → ERP 연동 큐 상태 확인 → 복구 후 실적 재전송 여부 벤더와 확인.</div>
+              <div>복구 후 할 일</div><div>생산관리팀이 이동표 기준으로 실적을 공정 순서대로 입력하고, 재공(WIP) 수량을 현장 실물과 대조. 입력 완료 전까지 ERP 재고와 차이가 날 수 있음을 영업·자재에 공유.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-06 -->
+        <article class="srv">
+          <header><span class="code">SRV-06</span><h3>파일서버 (CAM 데이터 · 부서 공유)</h3><span class="pill info">3등급</span><span class="rto">RTO 8h · RPO 24h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>네트워크 드라이브(예: <code>Z:</code>)가 열리지 않음, “네트워크 경로를 찾을 수 없습니다”, CAM 작업 파일 저장 불가.</div>
+              <div>직원 대응</div><div>
+                <ul>
+                  <li><strong>CAM실</strong>: 작업 중인 Gerber·드릴 데이터·필름 데이터는 CAM PC 로컬에 저장하고 일지에 기록합니다. 노광·드릴 설비로 데이터 전송이 필요하면 <strong>IT 승인 하에 회사 지급 암호화 USB</strong>로만 이동(개인 USB 금지).</li>
+                  <li><strong>일반 부서</strong>: 공유 폴더 파일이 급히 필요하면 최근 열었던 사람의 로컬 사본을 확인합니다. 새 파일은 로컬 「장애임시」 폴더에 저장합니다.</li>
+                  <li>공유 폴더는 살아 있는데 이름으로만 안 열린다면 AD/DNS 장애일 수 있습니다(SRV-07 카드). IT 공지에 따라 IP 주소(<code>\\192.168.x.x\공유</code>)로 접속합니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>스토리지·RAID·SMB 서비스 확인 → 재기동 → 디스크 장애 시 Veeam 복원 → 권한 검증 후 공지.</div>
+              <div>복구 후 할 일</div><div>로컬 저장분을 원 위치로 이동, CAM 데이터는 파일명·버전 대조 후 이전 버전 덮어쓰기 금지(새 버전으로 저장), 임시 USB는 IT에 반납.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-07 -->
+        <article class="srv">
+          <header><span class="code">SRV-07</span><h3>AD 도메인 컨트롤러 (DNS · DHCP)</h3><span class="pill warn">2등급</span><span class="rto">RTO 2h · RPO 24h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>PC 로그인 시 “도메인을 사용할 수 없습니다”, 사내 시스템 주소(<code>erp.회사.local</code> 등)로 접속 불가, 인터넷도 안 됨, 프린터 안 잡힘, 공유 폴더 권한 오류. 로그인이 되어 있던 PC는 당장은 쓸 수 있는 경우가 많습니다.</div>
+              <div>직원 대응</div><div>
+                <div class="callout crit" style="margin:6px 0 10px"><div class="ttl">가장 중요한 규칙: 로그인되어 있는 PC는 끄지도, 재부팅하지도, 잠그지도 않습니다.</div><p>다시 로그인할 때 서버가 없어 못 들어올 수 있습니다. 자리를 비울 때는 화면 잠금 대신 모니터만 끄고 부서장에게 알립니다.</p></div>
+                <ul>
+                  <li>비밀번호 변경·계정 잠금 해제 시도를 하지 않습니다(복구 후 계정 충돌 원인).</li>
+                  <li>IT 공지에 따라 ERP·그룹웨어는 <strong>IP 주소</strong>로 접속합니다. IT는 공지문에 주소 목록을 함께 올립니다.</li>
+                  <li>급한 출력은 프린터에 USB 직결하거나 부서 내 공유 프린터 담당 PC에서 출력합니다.</li>
+                  <li>새로 켜야 하는 PC(현장 단말 등)는 부팅 후 로그인 화면에서 기다리지 말고 IT에 연락합니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>보조 DC로 자동 절체 여부 확인(단일 DC라면 최우선 복구) → DNS·DHCP 서비스 상태 → AD 복원은 반드시 <strong>권한 있는 복원 절차</strong>대로(무단 스냅샷 롤백 금지, USN 롤백 위험) → 복구 후 PC 재로그인 안내.</div>
+              <div>복구 후 할 일</div><div>공지에 따라 PC 재부팅 및 재로그인, 로그인 안 되는 사용자는 IT 접수. IP 접속으로 바꿔 둔 즐겨찾기는 원래 주소로 복원.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-08 -->
+        <article class="srv">
+          <header><span class="code">SRV-08</span><h3>Veeam 백업 서버</h3><span class="pill ok">IT 내부</span><span class="rto">RTO 24h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>직원이 느끼는 증상은 없습니다. 백업 작업 실패 알림이 IT에게만 옵니다.</div>
+              <div>직원 대응</div><div>별도 안내 없음. 단, 백업이 멈춘 기간에는 <strong>실수로 지운 파일을 되살릴 수 없으므로</strong> IT가 부서장에게 “중요 문서 삭제·대량 변경 자제” 안내를 할 수 있습니다.</div>
+              <div>IT 조치</div><div>백업 리포지토리 용량·서비스·라이선스 확인 → 서비스 재시작 → 리포지토리 디스크 장애 시 오프사이트(2차) 사본 상태 확인 → 복구 전까지 ERP DB·문서중앙화·파일서버는 <strong>수동 스냅샷 또는 임시 복사</strong>로 보호 → 정상화 후 전체 백업 1회 강제 실행 및 복원 테스트.</div>
+              <div>복구 후 할 일</div><div>IT: 백업 성공 로그 확인, 3-2-1 원칙(사본 3개·매체 2종·오프사이트 1개) 충족 여부 점검.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-09 -->
+        <article class="srv">
+          <header><span class="code">SRV-09</span><h3>보안 관리 서버 (백신 · DLP · NAC)</h3><span class="pill info">3등급</span><span class="rto">RTO 8h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>NAC 장애 시 PC가 갑자기 네트워크에서 차단되거나 “인증 필요” 화면 반복. 백신·DLP 장애 시 업데이트 실패 알림, USB·출력 승인 요청이 처리되지 않음.</div>
+              <div>직원 대응</div><div>
+                <ul>
+                  <li>차단 화면이 뜨면 재부팅을 반복하지 말고 IT에 알립니다. IT가 NAC를 <strong>긴급 허용 모드</strong>로 전환하거나 예외 등록합니다.</li>
+                  <li>백신이 꺼져 있다는 경고가 떠도 직접 끄거나 삭제하지 않습니다. 장애 기간에는 <strong>외부 파일·USB·모르는 메일 첨부</strong>를 열지 않습니다(보호막이 없는 상태).</li>
+                  <li>DLP 반출 승인이 안 되면 부서장 서면 승인 후 IT를 통해 반출합니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>NAC 페일오픈(fail-open) 설정 확인 및 전환 → 백신 관리서버 복구 → 정책 배포 재개 → 장애 기간 중 미검사 파일 전체 스캔 예약.</div>
+              <div>복구 후 할 일</div><div>IT: 임시 예외 등록 해제, 전 PC 백신 정의 업데이트 확인.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-10 -->
+        <article class="srv">
+          <header><span class="code">SRV-10</span><h3>홈페이지 서버 (DMZ)</h3><span class="pill ok">외부만</span><span class="rto">RTO 24h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>회사 홈페이지 접속 불가, 온라인 문의 폼 미수신. 사내 업무에는 영향 없음.</div>
+              <div>직원 대응</div><div>영업팀은 거래처 문의가 홈페이지 폼으로 오는 경우 주요 고객에게 대표 메일·전화로 안내합니다. 대표전화 응대자는 “홈페이지 점검 중, 메일·전화로 문의 가능” 멘트를 사용합니다.</div>
+              <div>IT 조치</div><div>웹 서비스·인증서 만료·호스팅 상태 확인 → 재기동 → 변조 흔적이 있으면 즉시 차단 후 백업본으로 재배포.</div>
+              <div>복구 후 할 일</div><div>홈페이지 폼 미수신 기간의 문의는 메일 서버 로그로 확인해 회신.</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- SRV-11 -->
+        <article class="srv">
+          <header><span class="code">SRV-11</span><h3>출입통제 · 근태 서버</h3><span class="pill info">3등급</span><span class="rto">RTO 8h</span></header>
+          <div class="body">
+            <div class="kv">
+              <div>증상</div><div>사원증 태그가 안 되어 출입문이 열리지 않음(또는 반대로 열려 있음), 출퇴근 기록이 남지 않음.</div>
+              <div>직원 대응</div><div>
+                <ul>
+                  <li>출입은 <strong>경비실이 수동 개방</strong>합니다. 클린룸·약품 창고 등 통제구역은 해당 부서장이 열쇠로 관리하고 출입자를 종이 대장에 기록합니다.</li>
+                  <li>근태는 부서별 <strong>수기 출퇴근 명부</strong>에 서명하고, 총무팀이 복구 후 일괄 반영합니다. 외근·연차는 부서장 승인 문자 캡처로 대체합니다.</li>
+                  <li>보안상 문이 열린 채 고정되면 부서 막내가 아니라 <strong>경비 인력이 상주</strong>하도록 총무팀이 조치합니다.</li>
+                </ul>
+              </div>
+              <div>IT 조치</div><div>컨트롤러·서버 통신 확인 → 서비스 재기동 → 페일세이프(정전 시 열림)/페일시큐어(잠김) 설정을 소방 규정과 대조.</div>
+              <div>복구 후 할 일</div><div>총무팀이 수기 명부를 근태 시스템에 반영, 통제구역 출입 대장은 보안 기록으로 보관.</div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ===================== 4 ===================== -->
+      <section id="s4">
+        <h2><span class="secno">4</span>전체 셧다운 대응 (정전 · 화재 · 수해 · 냉방 고장)</h2>
+        <p>서버실 전체가 멈추는 1등급 상황입니다. 이때는 <strong>사람의 안전 → 데이터 보호(정상 종료) → 업무 연속(수기 전환) → 순서대로 복구</strong>의 순서를 지킵니다. 정전은 UPS가 버티는 시간(보통 10~30분) 안에 서버를 정상 종료해야 데이터가 깨지지 않으므로, 직원이 IT를 부르러 서버실에 오는 것보다 <strong>IT가 서버실에 집중할 수 있게 두는 것</strong>이 가장 큰 도움입니다.</p>
+
+        <figure>
+          <svg viewBox="0 0 960 300" role="img" aria-label="정전 시 타임라인: 발생 즉시부터 5분, 15분, 60분, 복구 시점까지 직원과 IT 담당의 행동을 시간 순으로 나열">
+            <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+            <line x1="40" y1="60" x2="930" y2="60" class="copper-line" marker-end="url(#ar2)"/>
+            <!-- ticks -->
+            <g>
+              <line x1="60" y1="50" x2="60" y2="70" class="copper-line"/><text x="60" y="40" text-anchor="middle" class="b">T+0</text>
+              <line x1="250" y1="50" x2="250" y2="70" class="copper-line"/><text x="250" y="40" text-anchor="middle" class="b">T+5분</text>
+              <line x1="440" y1="50" x2="440" y2="70" class="copper-line"/><text x="440" y="40" text-anchor="middle" class="b">T+15분</text>
+              <line x1="630" y1="50" x2="630" y2="70" class="copper-line"/><text x="630" y="40" text-anchor="middle" class="b">T+60분</text>
+              <line x1="820" y1="50" x2="820" y2="70" class="copper-line"/><text x="820" y="40" text-anchor="middle" class="b">전원 복구</text>
+            </g>
+            <text x="20" y="108" class="s">직원</text>
+            <text x="20" y="218" class="s">IT 담당</text>
+            <!-- employee row -->
+            <rect x="60" y="86" width="170" height="86" rx="4" class="c-ok"/>
+            <text x="70" y="106" class="b">저장 · 안전 확보</text>
+            <text x="70" y="124">노트북 저장 후 덮기</text>
+            <text x="70" y="140">설비는 안전정지 절차</text>
+            <text x="70" y="156">서버실에 가지 않기</text>
+            <rect x="250" y="86" width="170" height="86" rx="4" class="c-ok"/>
+            <text x="260" y="106" class="b">공지 대기</text>
+            <text x="260" y="124">단체방·부서장 안내</text>
+            <text x="260" y="140">PC 전원 조작 금지</text>
+            <text x="260" y="156">현장 인원 점검</text>
+            <rect x="440" y="86" width="170" height="86" rx="4" class="c-ok"/>
+            <text x="450" y="106" class="b">수기 업무 전환</text>
+            <text x="450" y="124">3장·6장 대체 수단</text>
+            <text x="450" y="140">거래처 전화 안내</text>
+            <text x="450" y="156">기록 남기기</text>
+            <rect x="630" y="86" width="170" height="86" rx="4" class="c-ok"/>
+            <text x="640" y="106" class="b">경영진 판단 대기</text>
+            <text x="640" y="124">대기·재택·조기퇴근</text>
+            <text x="640" y="140">부서장이 전달</text>
+            <text x="640" y="156">교대 근무 조정</text>
+            <rect x="820" y="86" width="120" height="86" rx="4" class="c-ok"/>
+            <text x="830" y="106" class="b">복구 공지 대기</text>
+            <text x="830" y="124">PC 순차 기동</text>
+            <text x="830" y="140">사후 입력 시작</text>
+            <!-- IT row -->
+            <rect x="60" y="196" width="170" height="86" rx="4" class="c-copper"/>
+            <text x="70" y="216" class="b">상황 파악</text>
+            <text x="70" y="234">정전 범위·예상 시간</text>
+            <text x="70" y="250">UPS 잔량 확인</text>
+            <text x="70" y="266">경영지원에 1차 보고</text>
+            <rect x="250" y="196" width="170" height="86" rx="4" class="c-copper"/>
+            <text x="260" y="216" class="b">종료 판단</text>
+            <text x="260" y="234">15분 내 복전 불확실 →</text>
+            <text x="260" y="250">서버 정상종료 시작</text>
+            <text x="260" y="266">단체방 1등급 공지</text>
+            <rect x="440" y="196" width="170" height="86" rx="4" class="c-copper"/>
+            <text x="450" y="216" class="b">정상 종료 완료</text>
+            <text x="450" y="234">백업→앱→DB→AD 순</text>
+            <text x="450" y="250">스토리지·스위치 종료</text>
+            <text x="450" y="266">UPS 배터리 보존</text>
+            <rect x="630" y="196" width="170" height="86" rx="4" class="c-copper"/>
+            <text x="640" y="216" class="b">복전 대기</text>
+            <text x="640" y="234">한전·시설팀 확인</text>
+            <text x="640" y="250">30분마다 상황 공지</text>
+            <text x="640" y="266">냉방·습도 확인</text>
+            <rect x="820" y="196" width="120" height="86" rx="4" class="c-copper"/>
+            <text x="830" y="216" class="b">순차 기동</text>
+            <text x="830" y="234">그림 4-2 순서</text>
+            <text x="830" y="250">검증 후 공지</text>
+          </svg>
+          <figcaption>그림 4-1. 정전 시 시간대별 행동. 직원 행동(위)과 IT 담당 행동(아래)이 같은 시각에 무엇을 하는지 나란히 보여 줍니다. 15분 안에 복전이 확실하지 않으면 IT는 서버 정상 종료를 시작합니다.</figcaption>
+        </figure>
+
+        <h3>4-1. 직원 행동 (시간대별 상세)</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>시점</th><th>사무직</th><th>생산 현장</th><th>부서장</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">T+0 ~ 5분</td><td>노트북: 작업 저장 후 절전. 데스크톱(UPS 없음): 이미 꺼졌으므로 손대지 않음. 전화·인터넷 안 됨을 전제로 스마트폰 단체방 확인.</td><td>각 설비의 <strong>안전 정지 절차</strong>(생산팀 설비 매뉴얼) 수행. 도금·에칭 라인은 약품 순환 정지 상태 확인, 인라인 제품은 공정 중단 위치 기록. 인명 안전 우선.</td><td>인원 확인, 부상자 여부, 단체방에 “○○부서 이상 없음” 보고. 서버실·전기실에 직원이 접근하지 않도록 통제.</td></tr>
+              <tr><td class="mono">T+5 ~ 15분</td><td>공지 대기. 거래처 긴급 연락은 개인 휴대폰으로. 이 시간엔 IT에 문의하지 않음(IT는 서버 종료 중).</td><td>라인 리더가 재공 위치·수량을 수기 기록. 비상 조명 확인.</td><td>경영지원팀으로부터 예상 정전 시간 수신, 팀원에게 전파.</td></tr>
+              <tr><td class="mono">T+15 ~ 60분</td><td>수기·엑셀(노트북)·개인 메일로 업무 전환(3장). 납기 임박 고객에게 전화로 상황 안내.</td><td>복전 시 재가동 순서 준비, 약품 온도·농도 유지가 필요한 라인은 담당자 점검.</td><td>부서 필수 업무 중 오늘 안에 반드시 처리할 건 목록화해 경영지원팀에 공유.</td></tr>
+              <tr><td class="mono">T+60분 이상</td><td>경영진 결정(대기·재택·조기 퇴근)에 따름. 재택 시 노트북·핫스팟으로 개인 메일 업무.</td><td>생산 재개 시점은 생산본부장이 결정. 교대조 출근 조정 안내를 단체방으로 수신.</td><td>팀원 귀가·대기 여부 확인, 익일 업무 계획 공유.</td></tr>
+              <tr><td class="mono">전원 복구</td><td>“복구 완료” 공지 전까지 PC를 켜지 않음(순간 과부하·서버 미기동 상태). 공지 후 PC를 켜고 3장 사후 입력 시작.</td><td>설비 재가동은 설비팀 점검 후. MES 재접속 확인.</td><td>사후 입력 담당자 지정, 8장 체크리스트 진행.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>4-2. IT 담당 조치와 복구 순서</h3>
+        <p>서버는 서로 의존합니다. 네트워크와 AD가 없으면 ERP도 그룹웨어도 로그인할 수 없고, DB가 뜨기 전에 ERP 앱을 켜면 오류가 납니다. 그래서 <strong>종료는 아래 그림의 역순, 기동은 그림 순서대로</strong> 진행하며, 각 단계에서 정상을 확인한 뒤 다음 단계로 넘어갑니다.</p>
+
+        <figure>
+          <svg viewBox="0 0 960 250" role="img" aria-label="복구 순서: 전원·UPS·냉방 확인 후 네트워크 장비, AD·DNS·DHCP, DB, 업무 서버, 파일·문서 서버, 백업·보안 서버 순으로 기동하고 마지막에 직원 공지. 종료는 역순">
+            <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+            <text x="30" y="30" class="lbl">기동 순서 → (정상 확인 후 다음 단계)</text>
+            <text x="930" y="230" text-anchor="end" class="lbl">← 종료 순서 (정전 시 역순으로 정상 종료)</text>
+            <g>
+              <rect x="20" y="60" width="118" height="110" rx="4" class="c-copper"/>
+              <text x="79" y="82" text-anchor="middle" class="b">① 전원·환경</text>
+              <text x="79" y="104" text-anchor="middle" class="s">전압 안정 확인</text>
+              <text x="79" y="120" text-anchor="middle" class="s">UPS 충전 시작</text>
+              <text x="79" y="136" text-anchor="middle" class="s">냉방 가동 · 온도</text>
+              <text x="79" y="152" text-anchor="middle" class="s">누수·탄 냄새 점검</text>
+
+              <line x1="138" y1="115" x2="158" y2="115" marker-end="url(#ar3)"/>
+              <rect x="158" y="60" width="118" height="110" rx="4" class="box"/>
+              <text x="217" y="82" text-anchor="middle" class="b">② 네트워크</text>
+              <text x="217" y="104" text-anchor="middle" class="s">방화벽 · 코어 스위치</text>
+              <text x="217" y="120" text-anchor="middle" class="s">스토리지(SAN/NAS)</text>
+              <text x="217" y="136" text-anchor="middle" class="s">가상화 호스트</text>
+              <text x="217" y="152" text-anchor="middle" class="s">인터넷 회선 확인</text>
+
+              <line x1="276" y1="115" x2="296" y2="115" marker-end="url(#ar3)"/>
+              <rect x="296" y="60" width="118" height="110" rx="4" class="box"/>
+              <text x="355" y="82" text-anchor="middle" class="b">③ AD · DNS · DHCP</text>
+              <text x="355" y="104" text-anchor="middle" class="s">SRV-07</text>
+              <text x="355" y="120" text-anchor="middle" class="s">이름 풀이 테스트</text>
+              <text x="355" y="136" text-anchor="middle" class="s">시간 동기화(NTP)</text>
+              <text x="355" y="152" text-anchor="middle" class="s">테스트 PC 로그인</text>
+
+              <line x1="414" y1="115" x2="434" y2="115" marker-end="url(#ar3)"/>
+              <rect x="434" y="60" width="118" height="110" rx="4" class="box"/>
+              <text x="493" y="82" text-anchor="middle" class="b">④ DB</text>
+              <text x="493" y="104" text-anchor="middle" class="s">SRV-03 ERP DB</text>
+              <text x="493" y="120" text-anchor="middle" class="s">무결성 · 복구 로그</text>
+              <text x="493" y="136" text-anchor="middle" class="s">마지막 커밋 시각</text>
+              <text x="493" y="152" text-anchor="middle" class="s">기록 → 공지에 포함</text>
+
+              <line x1="552" y1="115" x2="572" y2="115" marker-end="url(#ar3)"/>
+              <rect x="572" y="60" width="118" height="110" rx="4" class="box"/>
+              <text x="631" y="82" text-anchor="middle" class="b">⑤ 업무 서버</text>
+              <text x="631" y="104" text-anchor="middle" class="s">SRV-02 ERP</text>
+              <text x="631" y="120" text-anchor="middle" class="s">SRV-01 그룹웨어</text>
+              <text x="631" y="136" text-anchor="middle" class="s">SRV-05 MES</text>
+              <text x="631" y="152" text-anchor="middle" class="s">SRV-11 출입·근태</text>
+
+              <line x1="690" y1="115" x2="710" y2="115" marker-end="url(#ar3)"/>
+              <rect x="710" y="60" width="118" height="110" rx="4" class="box"/>
+              <text x="769" y="82" text-anchor="middle" class="b">⑥ 파일 · 문서</text>
+              <text x="769" y="104" text-anchor="middle" class="s">SRV-04 문서중앙화</text>
+              <text x="769" y="120" text-anchor="middle" class="s">SRV-06 파일서버</text>
+              <text x="769" y="136" text-anchor="middle" class="s">SRV-10 홈페이지</text>
+              <text x="769" y="152" text-anchor="middle" class="s">공유 권한 확인</text>
+
+              <line x1="828" y1="115" x2="848" y2="115" marker-end="url(#ar3)"/>
+              <rect x="848" y="60" width="98" height="110" rx="4" class="c-ok"/>
+              <text x="897" y="82" text-anchor="middle" class="b">⑦ 보호</text>
+              <text x="897" y="104" text-anchor="middle" class="s">SRV-09 보안</text>
+              <text x="897" y="120" text-anchor="middle" class="s">SRV-08 백업</text>
+              <text x="897" y="136" text-anchor="middle" class="s">→ 직원 공지</text>
+              <text x="897" y="152" text-anchor="middle" class="s">→ 백업 1회 실행</text>
+            </g>
+            <line x1="897" y1="190" x2="79" y2="190" class="dash" marker-end="url(#ar3)"/>
+            <text x="488" y="210" text-anchor="middle" class="s">종료: ⑦ → ⑥ → ⑤ → ④ → ③ → ② (UPS 잔량 20% 전까지 완료)</text>
+          </svg>
+          <figcaption>그림 4-2. 서버 기동·종료 순서. 각 단계 아래에 “정상”으로 볼 기준을 적었습니다. 단계를 건너뛰면 ERP 로그인 오류, 시간 불일치로 인한 인증 실패, DB 손상이 생길 수 있습니다.</figcaption>
+        </figure>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>단계</th><th>IT 담당 조치</th><th>정상 판단 기준</th></tr></thead>
+            <tbody>
+              <tr><td>정전 인지 직후</td><td>UPS 관리 화면(또는 전면 표시)에서 잔여 시간 확인. 시설 담당에게 정전 범위(건물 전체·한전 측·차단기)와 예상 복전 시간 확인. 경영지원팀장에게 1차 보고.</td><td>예상 복전 시간이 UPS 잔여 시간의 절반 이내면 대기, 아니면 즉시 종료 착수.</td></tr>
+              <tr><td>정상 종료 (역순)</td><td>백업·보안 → 홈페이지·파일·문서 → ERP·그룹웨어·MES·출입 → DB(반드시 앱 종료 후) → AD → 가상화 호스트 → 스토리지 → 스위치·방화벽. 가상화 환경이면 하이퍼바이저의 정상 종료 스크립트 사용. UPS 자동 종료 연동(PowerChute 등)이 설정되어 있다면 그 순서와 일치하는지 사전 점검.</td><td>UPS 잔량 20% 이상 남긴 상태에서 모든 서버 전원 LED 소등.</td></tr>
+              <tr><td>복전 후 기동</td><td>그림 4-2 순서. 전원 복구 직후 <strong>5분간 전압 안정</strong>을 기다린 뒤 스토리지→호스트→네트워크→AD 순으로 기동. 각 단계마다 로그인·이름 풀이·DB 접속을 테스트.</td><td>테스트 PC에서 도메인 로그인, ERP 로그인·저장, 그룹웨어 메일 발송·수신, 문서중앙화 열기·저장이 모두 성공.</td></tr>
+              <tr><td>공지</td><td>복구 완료 공지에 <strong>① 복구 시각 ② ERP 마지막 정상 저장 시각 ③ 재입력 대상 기간 ④ 재로그인 방법</strong>을 포함.</td><td>부서장 전원 수신 확인.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>4-3. 재난 유형별 특이 사항</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>유형</th><th>즉시 행동 (모든 직원)</th><th>IT · 시설 조치</th><th>절대 금지</th></tr></thead>
+            <tbody>
+              <tr><td><strong>정전 · UPS 소진</strong></td><td>4-1절 타임라인대로. 엘리베이터 사용 금지.</td><td>4-2절 종료·기동 순서. 발전기가 있으면 서버실·냉방 우선 급전 확인.</td><td>복전 직후 모든 PC·설비 동시 기동(돌입 전류로 재차 차단).</td></tr>
+              <tr><td><strong>화재 (서버실·인접)</strong></td><td>인명 대피 최우선, 119 신고, 소방 대피 경로로 이동, 집결지 인원 점검. 서버실 화재는 <strong>물·일반 소화기 사용 금지</strong>(감전·장비 손상), 가스식 소화 설비 작동 시 즉시 퇴실.</td><td>안전 확보 후 전원 차단(주 차단기). 진화 후 장비 반입 전 그을음·습기 점검, 보험사·벤더 연락. 오프사이트 백업에서 복구 준비(9장 RPO 기준).</td><td>장비 구출 목적의 재진입, 가스 소화 작동 중 출입.</td></tr>
+              <tr><td><strong>수해 · 누수 · 결로</strong></td><td>서버실·전기실 접근 금지(감전). 젖은 바닥에서 전원 스위치 조작 금지.</td><td>전원 차단 → 누수 원인 차단(상부 배관·에어컨 드레인) → 장비 건조 후 벤더 점검 → 기동. 서버실 누수 감지기 알림 확인.</td><td>젖은 장비 전원 투입, 헤어드라이어 등 급속 건조.</td></tr>
+              <tr><td><strong>서버실 냉방 고장</strong></td><td>영향 없음. 단, IT 공지에 따라 일부 시스템이 예방 종료될 수 있음(3등급 공지).</td><td>실내 온도 <strong>30 °C 초과</strong> 시 비필수 서버(홈페이지·백업·개발·테스트)부터 종료, 이동식 냉방기 투입, 문 개방 + 송풍. 35 °C 초과 시 핵심 서버도 정상 종료. 온습도 원격 알림 임계값 27 °C 권장.</td><td>온도 경보 무시, 서버실 문을 열어 둔 채 무인 방치(보안).</td></tr>
+              <tr><td><strong>지진</strong></td><td>진동 중 책상 밑 대피, 진동 후 대피 경로로 이동. 랙 전도 위험이 있으므로 서버실 접근 금지.</td><td>랙 고정 상태·케이블·스토리지 상태 확인 후 기동. 여진 대비 백업 즉시 실행.</td><td>진동 직후 서버실 진입.</td></tr>
+              <tr><td><strong>랜섬웨어 확산 (전사)</strong></td><td>5-1절. 랜선 분리, 전원은 유지, 즉시 신고.</td><td>코어 스위치에서 서버 VLAN 격리, 백업 서버 네트워크 분리(백업본 보호), 침해 범위 파악 후 복원. 필요 시 KISA 118·경찰 신고.</td><td>몸값 지불 판단을 IT 단독으로, 감염 PC 재부팅·포맷(증거 소실).</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== 5 ===================== -->
+      <section id="s5">
+        <h2><span class="secno">5</span>기타 장애 대응</h2>
+        <p>서버 자체가 아니라 그 앞뒤(네트워크·회선·보안·개인 PC)에서 생기는 장애입니다. 겉으로는 “ERP가 안 된다”로 보여도 원인이 다르면 대응도 다릅니다.</p>
+
+        <h3>5-1. 랜섬웨어 · 악성코드 감염 의심</h3>
+        <div class="callout crit">
+          <div class="ttl">30초 안에 할 세 가지: ① 랜선 뽑기(노트북은 Wi-Fi 끄기) ② 전원은 그대로 두기 ③ IT에 전화</div>
+          <p>파일 확장자가 낯선 것으로 바뀌고, 열리지 않으며, 바탕화면에 영문 협박 문구가 뜨면 랜섬웨어입니다. 랜선을 뽑으면 공유 폴더·문서중앙화로 번지는 것을 막을 수 있고, 전원을 유지하면 IT가 감염 경로를 분석할 수 있습니다.</p>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>대상</th><th>해야 할 것</th><th>하지 말 것</th></tr></thead>
+            <tbody>
+              <tr><td>감염 의심 PC 사용자</td><td>랜선 분리, IT 신고, 마지막으로 열었던 메일·파일·USB를 IT에 설명, 자리 이탈 시 PC에 “접근 금지” 메모.</td><td>재부팅·포맷·백신 수동 실행·파일 삭제·USB로 파일 백업.</td></tr>
+              <tr><td>같은 부서 직원</td><td>공유 폴더·문서중앙화 저장 잠시 중단(IT 안내까지), 의심 메일 삭제, 열려 있는 문서 로컬 저장.</td><td>“나도 괜찮은지 보자”며 의심 파일 열기.</td></tr>
+              <tr><td>IT 담당</td><td>감염 PC 격리 → 서버 VLAN 및 백업 서버 네트워크 차단 → 변조 파일 범위(공유 폴더 타임스탬프) 확인 → 백신 벤더 신고·샘플 제출 → 오프라인/불변 백업에서 복원 → 전 PC 전체 검사 → 경영진 보고, 개인정보 포함 시 법적 신고 검토.</td><td>백업 서버를 그대로 네트워크에 두기, 감염 확인 전 대규모 복원.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>5-2. 피싱 · 계정 탈취 의심</h3>
+        <p>“내가 보내지 않은 메일이 거래처에 갔다”, “로그인 알림이 낯선 곳에서 왔다”면 계정이 탈취된 것입니다. <strong>즉시 IT에 알리고 IT 안내에 따라 비밀번호를 변경</strong>합니다(AD 장애 중에는 IT가 먼저 판단). 거래처 계좌 변경 요청 메일은 반드시 <strong>거래처 담당자에게 전화로 확인</strong>합니다. 회계팀은 계좌 변경 시 2인 확인 규정을 장애 중에도 유지합니다.</p>
+
+        <h3>5-3. 네트워크 장애 (특정 층·부서·현장만)</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>증상</th><th>가능한 원인</th><th>직원 대응</th><th>IT 조치</th></tr></thead>
+            <tbody>
+              <tr><td>우리 층(부서)만 인터넷·ERP 모두 안 됨</td><td>층 스위치 고장·전원 빠짐, 광케이블 절단</td><td>부서장 통해 IT 접수. 급한 업무는 다른 층 PC 또는 노트북+핫스팟. 장비함을 열어보지 않음.</td><td>스위치 전원·업링크 확인, 예비 스위치 교체(예비품 보관 9장).</td></tr>
+              <tr><td>현장 MES 단말·바코드만 안 됨</td><td>현장 무선 AP 장애, 산업용 스위치 과열</td><td>수기 공정 이동표(SRV-05 카드).</td><td>AP·PoE 스위치 재기동, 예비 AP 교체.</td></tr>
+              <tr><td>내 자리만 안 됨</td><td>랜선·포트 불량, IP 충돌</td><td>랜선 양쪽 다시 꽂기 → 안 되면 IT 접수(4등급).</td><td>포트·케이블 교체.</td></tr>
+              <tr><td>전사 모두 사내 시스템 안 됨, 인터넷도 안 됨</td><td>코어 스위치·방화벽·AD</td><td>1등급으로 취급, 4장.</td><td>코어·방화벽 이중화 절체, HA 상태 확인.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>5-4. 인터넷 회선 장애 (사내 시스템은 정상)</h3>
+        <p>ERP·문서중앙화는 되는데 외부 메일·홈택스·거래처 사이트·화상회의만 안 되면 인터넷 회선(통신사) 또는 방화벽 문제입니다.</p>
+        <ul>
+          <li><strong>직원</strong>: 외부 업무는 <strong>스마트폰 핫스팟(테더링)</strong>으로 노트북을 연결해 처리합니다. 핫스팟 사용 중에는 사내 네트워크 랜선을 뽑아 두 망이 동시에 붙지 않게 합니다(보안 규정). 대용량 도면 전송은 회선 복구 후로 미룹니다.</li>
+          <li><strong>회계·영업</strong>: 홈택스·인터넷뱅킹·수출 서류는 핫스팟 노트북 1대를 부서 공용으로 지정해 처리합니다.</li>
+          <li><strong>IT</strong>: 통신사 장애 접수(주회선·예비회선 번호 9장), 예비 회선(LTE 라우터·2차 ISP)으로 절체, 방화벽 세션·인증서·DNS 포워더 확인.</li>
+        </ul>
+
+        <h3>5-5. 개인 PC · 계정 장애 (4등급)</h3>
+        <p>IT에 접수하기 전에 아래 세 가지만 확인하면 절반은 해결됩니다.</p>
+        <ol>
+          <li>랜선(또는 Wi-Fi)·전원·모니터 케이블이 꽂혀 있는지 확인하고, <strong>PC를 완전히 껐다가 1분 뒤 켭니다</strong>(재시작이 아니라 종료 후 켜기).</li>
+          <li>옆자리 PC에서 같은 시스템이 되는지 확인합니다. 옆자리도 안 되면 개인 장애가 아니므로 부서장에게 알립니다.</li>
+          <li>계정이 잠겼다는 메시지면 15분간 로그인 시도를 멈춥니다(대부분 자동 해제). 비밀번호를 여러 번 틀려 반복 잠기면 IT 접수.</li>
+        </ol>
+        <p>IT 접수 방법: 그룹웨어 「IT 요청」 게시판 → 안 되면 사내 단체방에 <code>[PC장애] 부서/이름/증상</code> → 급하면 IT 내선. 접수 시 <strong>화면 사진</strong>을 같이 보냅니다. 업무가 급하면 부서 예비 PC(각 부서 1대 지정 권장)로 로그인해 일합니다.</p>
+
+        <h3>5-6. 프린터 · 복합기 · 라벨 프린터</h3>
+        <p>인쇄가 안 되면 ① 프린터 화면 오류(용지·토너·걸림) 확인 ② PC에서 인쇄 대기열 취소 ③ 다른 PC에서 출력 시도. 여러 사람이 동시에 안 되면 AD·네트워크 장애일 수 있으니 부서장에게 알립니다. 출하 라벨·LOT 라벨 프린터는 USB 직결 노트북 1대를 <strong>출하장·생산관리에 예비로</strong> 준비해 둡니다.</p>
+
+        <h3>5-7. 전화 (IP 전화 · 인터넷 전화) 장애</h3>
+        <p>대표번호와 내선이 안 되면 통신사 고객센터에서 <strong>대표번호를 총무팀 휴대폰으로 착신전환</strong>합니다(사전에 절차와 비밀번호를 총무팀이 보관). 영업 담당자는 주요 거래처에 휴대폰 번호를 문자로 안내합니다. 팩스 수신은 인터넷 팩스 서비스 또는 거래처에 메일 발송을 요청합니다.</p>
+
+        <h3>5-8. 클라우드·외부 서비스 장애 (홈택스, 은행, 통신사, 협력사 포털)</h3>
+        <p>우리 잘못이 아니지만 업무는 멈춥니다. 회계팀은 세금계산서 발행 마감(익월 10일)이 겹치면 국세청 공지를 확인해 가산세 유예 여부를 파악하고, 영업은 고객 포털 장애 시 메일·전화로 납기 회신을 남겨 증빙을 확보합니다.</p>
+      </section>
+
+      <!-- ===================== 6 ===================== -->
+      <section id="s6">
+        <h2><span class="secno">6</span>부서별 핵심 업무 대체표</h2>
+        <p>“오늘 안에 반드시 끝나야 하는 업무”를 부서별로 정리했습니다. 각 부서장은 이 표를 기준으로 장애 시 <strong>누가 어떤 수기 양식을 맡는지</strong> 미리 정해 두고, 반기 점검 때 갱신합니다.</p>
+        <div class="tw">
+          <table>
+            <thead><tr><th>부서</th><th>멈추면 안 되는 업무</th><th>필요한 시스템</th><th>대체 수단</th><th>비상 양식·도구</th></tr></thead>
+            <tbody>
+              <tr><td><strong>영업 · 영업관리</strong></td><td>견적 회신, 수주 접수, 납기 회신, 출하 지시</td><td>그룹웨어 메일, ERP</td><td>승인 개인 메일 + 전화, 엑셀 견적서, 수기 수주장, 전화로 생산관리에 출하 지시</td><td>엑셀 견적 템플릿, 수기 수주장, 거래처 비상 연락처 인쇄본</td></tr>
+              <tr><td><strong>생산관리 · 생산</strong></td><td>작업지시, 공정 진행, 재공 파악, 교대 인계</td><td>ERP, MES</td><td>마지막 출력 작업지시서, 수기 작업지시서, 수기 공정 이동표, 화이트보드 재공 현황</td><td>공정 이동표(공정별 비치), 수기 작업지시서, 수기 LOT 라벨</td></tr>
+              <tr><td><strong>CAM · 기술</strong></td><td>신규 오더 CAM 작업, 설비 데이터 전송, 사양서 조회</td><td>파일서버, 문서중앙화, ERP</td><td>로컬 작업 후 승인 USB 전송, 인쇄 사양서, 고객 데이터는 개인 메일 수신 금지(암호 ZIP·전화 확인)</td><td>회사 지급 암호화 USB, 주요 품번 사양서 인쇄본</td></tr>
+              <tr><td><strong>자재 · 구매</strong></td><td>원자재 불출, 입고 검수, 긴급 발주</td><td>ERP</td><td>수기 입출고 대장, 엑셀 발주서 팩스·메일, 협력사 전화 발주(사후 서면)</td><td>입출고 대장, 발주서 양식, 협력사 연락처</td></tr>
+              <tr><td><strong>품질 · 검사</strong></td><td>출하 검사 판정, 성적서 발행, 부적합 처리</td><td>ERP, MES, 문서중앙화</td><td>엑셀 성적서 양식, 수기 부적합 보고서, 인쇄 검사 기준서</td><td>성적서 양식, 부적합 보고서, 검사 기준서 인쇄본</td></tr>
+              <tr><td><strong>출하 · 물류</strong></td><td>출하 확정, 거래명세서, 송장·라벨</td><td>ERP, 라벨 프린터</td><td>수기 거래명세서 2부, USB 직결 라벨 프린터, 택배·운송사 수기 송장</td><td>거래명세서 양식, 예비 노트북+라벨 프린터</td></tr>
+              <tr><td><strong>회계 · 경리</strong></td><td>세금계산서, 입출금, 급여, 마감</td><td>ERP, 인터넷</td><td>홈택스 직접 발행, 인터넷뱅킹(핫스팟), 수기 전표, 마감 일정 조정</td><td>수기 전표, 핫스팟 공용 노트북, 은행 OTP</td></tr>
+              <tr><td><strong>인사 · 총무</strong></td><td>근태, 출입 통제, 전사 공지, 방문객</td><td>근태·출입 서버, 그룹웨어</td><td>수기 출퇴근 명부, 경비 수동 개방, 단체방·방송 공지, 방문객 수기 대장</td><td>출퇴근 명부, 방문객 대장, 긴급 결재 용지, 콜트리 인쇄본</td></tr>
+              <tr><td><strong>경영진 · 경영지원</strong></td><td>의사결정, 대외 커뮤니케이션, 근무 지시</td><td>—</td><td>IT 담당 30분 단위 보고 수신, 대기·재택·조기퇴근 결정, 주요 고객 안내 승인</td><td>1등급 결정 체크리스트(9장)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== 7 ===================== -->
+      <section id="s7">
+        <h2><span class="secno">7</span>비상 연락 · 전파 체계</h2>
+        <p>전파는 <strong>IT 담당 → 경영지원팀장·경영진 → 각 부서장 → 팀원</strong> 순서의 콜트리로 하며, 단체방과 병행합니다. 부서장은 팀원의 수신 확인(“확인” 답장 또는 통화)까지 책임집니다. 이 페이지는 인쇄해 각 부서장 서랍과 경비실에 비치합니다.</p>
+
+        <figure>
+          <svg viewBox="0 0 900 300" role="img" aria-label="비상 전파 콜트리: 장애 인지자가 IT 담당에게 알리고, IT 담당이 경영지원팀장과 경영진, 각 부서장에게 전파하며, 부서장이 팀원에게 전파한다. 단체방은 모든 단계와 병행">
+            <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+            <rect x="20" y="30" width="150" height="50" rx="4" class="box2"/>
+            <text x="95" y="51" text-anchor="middle" class="b">장애 최초 인지자</text>
+            <text x="95" y="68" text-anchor="middle" class="s">누구든 · 부서장 경유</text>
+            <line x1="170" y1="55" x2="230" y2="55" marker-end="url(#ar4)"/>
+            <text x="200" y="47" text-anchor="middle" class="lbl">신고</text>
+
+            <rect x="230" y="20" width="170" height="70" rx="4" class="c-copper"/>
+            <text x="315" y="45" text-anchor="middle" class="b">IT 담당 (대리: IT 대리)</text>
+            <text x="315" y="63" text-anchor="middle" class="s">등급 판정 · 공지문 작성</text>
+            <text x="315" y="79" text-anchor="middle" class="s">30분마다 상황 갱신</text>
+
+            <line x1="400" y1="40" x2="500" y2="40" marker-end="url(#ar4)"/>
+            <text x="450" y="32" text-anchor="middle" class="lbl">1·2등급 즉시 보고</text>
+            <rect x="500" y="15" width="170" height="50" rx="4" class="box"/>
+            <text x="585" y="36" text-anchor="middle" class="b">경영지원팀장 → 대표이사</text>
+            <text x="585" y="53" text-anchor="middle" class="s">근무 형태 결정 · 대외 승인</text>
+
+            <line x1="400" y1="75" x2="500" y2="110" marker-end="url(#ar4)"/>
+            <text x="470" y="100" text-anchor="middle" class="lbl">문자 + 전화</text>
+            <rect x="500" y="95" width="170" height="50" rx="4" class="box"/>
+            <text x="585" y="116" text-anchor="middle" class="b">시설 · 전기 담당</text>
+            <text x="585" y="133" text-anchor="middle" class="s">정전·냉방·소방 대응</text>
+
+            <line x1="315" y1="90" x2="315" y2="160" marker-end="url(#ar4)"/>
+            <text x="335" y="130" class="lbl">부서장 문자 일괄 발송</text>
+            <rect x="100" y="160" width="430" height="46" rx="4" class="box"/>
+            <text x="315" y="180" text-anchor="middle" class="b">각 부서장 (영업·생산·CAM·자재·품질·출하·회계·총무)</text>
+            <text x="315" y="197" text-anchor="middle" class="s">팀원 전파 · 수신 확인 · 부서 이상 유무 회신</text>
+            <line x1="315" y1="206" x2="315" y2="240" marker-end="url(#ar4)"/>
+            <text x="335" y="228" class="lbl">전화 · 구두 · 현장 방송</text>
+            <rect x="100" y="240" width="430" height="40" rx="4" class="box2"/>
+            <text x="315" y="265" text-anchor="middle" class="b">전 직원 · 교대 근무자 · 협력사 상주 인원</text>
+
+            <rect x="700" y="95" width="180" height="150" rx="4" class="c-info"/>
+            <text x="790" y="120" text-anchor="middle" class="b">사내 비상 단체방</text>
+            <text x="790" y="142" text-anchor="middle" class="s">모든 단계와 병행</text>
+            <text x="790" y="160" text-anchor="middle" class="s">이동통신망 → 정전에도 동작</text>
+            <text x="790" y="178" text-anchor="middle" class="s">공지문 · 화면 사진</text>
+            <text x="790" y="196" text-anchor="middle" class="s">부서별 “이상 없음” 회신</text>
+            <text x="790" y="214" text-anchor="middle" class="s">복구 완료 공지</text>
+            <line x1="530" y1="183" x2="700" y2="183" class="dash" marker-end="url(#ar4)"/>
+            <text x="615" y="175" text-anchor="middle" class="lbl">병행 공지</text>
+          </svg>
+          <figcaption>그림 7-1. 비상 전파 콜트리. 실선은 전화·문자 전파, 점선은 단체방 병행 공지입니다. IT 담당 부재 시 IT 대리가 같은 역할을 맡습니다.</figcaption>
+        </figure>
+
+        <h3>비상 연락망 (인쇄 후 기입)</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>역할</th><th>이름</th><th>휴대폰</th><th>대리자</th><th>대리자 휴대폰</th></tr></thead>
+            <tbody>
+              <tr><td>IT 담당</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td></tr>
+              <tr><td>경영지원팀장</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td></tr>
+              <tr><td>시설·전기 담당</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td></tr>
+              <tr><td>생산본부장</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td></tr>
+              <tr><td>각 부서장 (8명)</td><td colspan="4">7장 콜트리 인쇄본 뒷면에 기재</td></tr>
+              <tr><td>경비실</td><td colspan="4"><span class="form-blank">내선 / 휴대폰</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>외부 기관 · 업체</th><th>연락처</th><th>계약·고객번호</th><th>용도</th></tr></thead>
+            <tbody>
+              <tr><td>한국전력 (정전)</td><td class="mono">123</td><td><span class="form-blank"></span></td><td>정전 범위·복전 예정 확인</td></tr>
+              <tr><td>인터넷 주회선 통신사</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td>회선 장애 접수</td></tr>
+              <tr><td>인터넷 예비회선 · 전화 통신사</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td>절체·착신전환</td></tr>
+              <tr><td>ERP 유지보수 업체</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td>긴급 기술지원(계약 응답시간 기재)</td></tr>
+              <tr><td>그룹웨어 · 문서중앙화 · MES 업체</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td>긴급 기술지원</td></tr>
+              <tr><td>서버·스토리지 하드웨어 벤더</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td>부품 교체(보증 만료일 기재)</td></tr>
+              <tr><td>UPS · 항온항습기 업체</td><td><span class="form-blank"></span></td><td><span class="form-blank"></span></td><td>배터리·냉방 긴급 출동</td></tr>
+              <tr><td>KISA 인터넷침해대응센터</td><td class="mono">118</td><td>—</td><td>랜섬웨어·해킹 신고</td></tr>
+              <tr><td>소방 · 경찰</td><td class="mono">119 · 112</td><td>—</td><td>화재·인명·범죄</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== 8 ===================== -->
+      <section id="s8">
+        <h2><span class="secno">8</span>복구 후 사후 조치</h2>
+        <p>복구 공지가 나가면 장애는 끝난 것이 아니라 <strong>“따라잡기”가 시작</strong>된 것입니다. 장애 중 수기로 처리한 업무를 순서대로 시스템에 넣지 않으면 재고·매출·결재 이력이 어긋납니다.</p>
+        <h3>8-1. 직원 · 부서 체크리스트 (복구 후 24시간)</h3>
+        <ul class="checklist">
+          <li>IT 공지의 <strong>“마지막 정상 저장 시각”</strong>을 확인하고, 그 이후에 처리한 업무 목록을 부서별로 작성한다.</li>
+          <li>ERP 입력 순서: <strong>수주 → 작업지시 → 자재 입출고 → 생산 실적(MES) → 출하 → 세금계산서·회계</strong>. 앞 단계가 끝나야 뒤 단계를 입력한다.</li>
+          <li>임시 번호(견적·작업지시·거래명세서)와 정식 번호의 대응표를 부서에 보관한다.</li>
+          <li>수기 결재는 소급 상신하고 종이 원본을 첨부 스캔으로 붙인다.</li>
+          <li>「장애임시」 폴더 파일을 문서중앙화·파일서버에 올리고, 로컬 사본은 7일 내 삭제한다.</li>
+          <li>개인 메일로 주고받은 업무 메일은 사내 메일로 전달하고 개인 계정에서 회사 자료를 삭제한다.</li>
+          <li>자재팀은 3일 내 주요 원자재·재공 실사를 하고 ERP 재고와 차이를 조정한다.</li>
+          <li>부서장은 “장애 중 못 한 일·문제였던 점”을 한 줄씩 적어 IT에 보낸다(매뉴얼 개선 입력).</li>
+        </ul>
+        <h3>8-2. IT 담당 체크리스트</h3>
+        <ul class="checklist">
+          <li>모든 서비스 정상 확인(로그인·저장·메일 송수신·백업 잡 성공).</li>
+          <li>장애 보고서 작성: 발생 시각·인지 경로·원인·영향 범위·조치·복구 시각·재발 방지책. 48시간 내 경영진 보고.</li>
+          <li>임시 조치 원복: NAC 예외, 방화벽 임시 정책, IP 직접 접속 안내, 임시 계정.</li>
+          <li>백업 전체 1회 실행 및 복원 테스트 1건.</li>
+          <li>매뉴얼·연락망·서버 목록 갱신, 필요 시 훈련 계획 조정.</li>
+        </ul>
+        <h3>8-3. 장애 보고서 양식</h3>
+        <div class="tw">
+          <table>
+            <tbody>
+              <tr><th style="width:160px">장애 번호</th><td class="mono">INC-YYYYMMDD-##</td><th style="width:160px">등급</th><td>1 · 2 · 3 · 4</td></tr>
+              <tr><th>발생 시각 / 인지 시각</th><td colspan="3"><span class="form-blank"></span> / <span class="form-blank"></span> (인지 경로: 모니터링 · 직원 신고 · 벤더)</td></tr>
+              <tr><th>영향 시스템 · 부서</th><td colspan="3"><span class="form-blank" style="min-width:60%"></span></td></tr>
+              <tr><th>원인 (근본 원인)</th><td colspan="3"><span class="form-blank" style="min-width:60%"></span></td></tr>
+              <tr><th>조치 경과</th><td colspan="3">시각별 조치 내역 (누가·무엇을)</td></tr>
+              <tr><th>복구 시각 / 총 중단 시간</th><td colspan="3"><span class="form-blank"></span> / <span class="form-blank"></span></td></tr>
+              <tr><th>업무 영향 (출하 지연 등)</th><td colspan="3"><span class="form-blank" style="min-width:60%"></span></td></tr>
+              <tr><th>재발 방지 · 매뉴얼 반영</th><td colspan="3"><span class="form-blank" style="min-width:60%"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== 9 ===================== -->
+      <section id="s9">
+        <h2><span class="secno">9</span>IT 담당자 부록</h2>
+        <p>직원 배포본에서는 이 장을 빼도 됩니다. IT 담당과 대리자가 매뉴얼을 유지하고 훈련하는 데 필요한 내용입니다.</p>
+
+        <h3>9-1. 복구 목표 (RTO · RPO)와 백업 방식</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>시스템</th><th>RTO (복구 목표시간)</th><th>RPO (허용 데이터 손실)</th><th>백업 방식 (권장)</th><th>복원 테스트</th></tr></thead>
+            <tbody>
+              <tr><td>AD · DNS · DHCP</td><td class="num">2h</td><td class="num">24h</td><td>보조 DC 상시 운영(가장 싼 이중화), Veeam 애플리케이션 인식 백업</td><td>분기</td></tr>
+              <tr><td>ERP · ERP DB</td><td class="num">4h</td><td class="num">1h</td><td>DB 트랜잭션 로그 1시간 주기 + 일 1회 전체, Veeam 이미지 백업</td><td>분기</td></tr>
+              <tr><td>그룹웨어</td><td class="num">4h</td><td class="num">24h</td><td>Veeam 일 1회, 메일 큐는 스팸 게이트웨이·통신사 큐에 의존(대기 시간 확인)</td><td>반기</td></tr>
+              <tr><td>MES</td><td class="num">4h</td><td class="num">1h</td><td>DB 로그 백업 + 이미지 백업</td><td>반기</td></tr>
+              <tr><td>문서중앙화 · 파일서버</td><td class="num">8h</td><td class="num">24h</td><td>Veeam 일 1회 + 스토리지 스냅샷(랜섬웨어 대비 불변 스냅샷)</td><td>반기</td></tr>
+              <tr><td>보안 · 출입 · 홈페이지</td><td class="num">8~24h</td><td class="num">24h</td><td>Veeam 주 1회 + 설정 내보내기</td><td>연 1회</td></tr>
+              <tr><td>백업 자체</td><td>—</td><td>—</td><td><strong>3-2-1</strong>: 사본 3개, 매체 2종, 오프사이트(클라우드 또는 타 건물) 1개. 백업 서버는 도메인 미가입·별도 계정, 불변(immutable) 리포지토리 사용</td><td>월 1회 복원</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>9-2. 사전 준비 점검표 (반기)</h3>
+        <ul class="checklist">
+          <li>UPS 배터리 잔여 시간 실측(부하 상태), 자동 종료 연동 스크립트 순서가 그림 4-2 역순과 일치하는지 확인.</li>
+          <li>서버실 온습도 원격 경보(27 °C), 누수 감지기, 소화 설비 점검 기록.</li>
+          <li>보조 도메인 컨트롤러 존재 여부와 FSMO 역할 점검, AD 복원 절차 문서화.</li>
+          <li>예비품: 스위치 1대, AP 2대, 랜케이블, 예비 PC 부서별 1대, 라벨 프린터용 노트북, LTE 라우터, 회사 지급 암호화 USB.</li>
+          <li>사내 비상 단체방 가입률 100%(입사·퇴사 시 갱신), 콜트리 연락처 최신화.</li>
+          <li>승인 개인 메일 계정 운영 규칙 배포(개인정보·기밀 반출 규정과 충돌 없는지 보안 담당과 확인).</li>
+              <li>비상 양식 인쇄본(수기 결재 용지, 공정 이동표, 입출고 대장, 거래명세서, 성적서, 출퇴근 명부, 방문객 대장)이 부서에 비치되어 있는지 확인, 엑셀 원본은 각 부서 PC에도 사본 보관.</li>
+          <li>벤더 유지보수 계약 응답시간(SLA)·보증 만료일 확인.</li>
+          <li>IT 담당 부재(휴가·퇴사) 시 대리자가 서버실 출입·관리자 계정·백업 복원을 실제로 할 수 있는지 확인(관리자 비밀번호 봉인 보관).</li>
+        </ul>
+
+        <h3>9-3. 훈련 계획</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>훈련</th><th>주기</th><th>참여</th><th>내용</th><th>합격 기준</th></tr></thead>
+            <tbody>
+              <tr><td>탁상 훈련(시나리오 토의)</td><td>반기</td><td>부서장 전원, IT, 경영지원</td><td>“ERP 4시간 중단”, “정전 2시간” 시나리오를 읽고 각 부서가 무엇을 할지 말로 점검</td><td>모든 부서가 대체 수단·양식·담당자를 즉답</td></tr>
+              <tr><td>전파 훈련</td><td>분기</td><td>전 직원</td><td>예고 없이 단체방+콜트리로 “훈련” 공지, 수신 확인 회신 시간 측정</td><td>30분 내 90% 이상 회신</td></tr>
+              <tr><td>백업 복원 훈련</td><td>월</td><td>IT</td><td>임의 서버 1대를 격리 네트워크에 복원해 로그인·데이터 확인</td><td>RTO 내 복원 성공</td></tr>
+              <tr><td>정전 종료·기동 훈련</td><td>연 1회 (휴일)</td><td>IT, 시설</td><td>실제 서버 정상 종료 → 기동 순서 수행, 소요 시간 기록</td><td>UPS 잔량 20% 이상 남기고 종료 완료</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>9-4. 1등급 상황에서 경영진이 결정할 것</h3>
+        <ol>
+          <li>근무 형태: 현장 대기 · 재택 · 조기 퇴근 · 교대조 조정 (IT의 예상 복구 시간 보고 기준, 2시간 단위로 재판단).</li>
+          <li>대외 안내: 주요 고객·협력사에 납기 영향 안내 여부와 문안(영업본부장 초안).</li>
+              <li>보안 사고 시: 외부 전문업체 투입, 법적 신고, 몸값 지불 불가 원칙 확인.</li>
+          <li>비용 승인: 긴급 부품·회선·냉방기·외부 기술지원 비용의 사전 승인 한도(권장: IT 담당 전결 한도를 미리 정해 둠).</li>
+        </ol>
+      </section>
+
+      <footer class="end">
+        본 매뉴얼은 300명 규모 PCB 제조사의 일반적인 서버 구성(11대)을 가정해 작성했습니다. 실제 서버 구성·백업 방식·연락처는 IT 담당이 확정한 뒤 배포하고, 반기마다 검토합니다. 문서번호 <span class="mono">IT-BCP-001</span> · 관리부서 IT 담당.
+      </footer>
+    </main>
+  </div>
+</div>
+</body>
+</html>
