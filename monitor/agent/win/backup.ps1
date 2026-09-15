@@ -31,6 +31,20 @@ function ScanFolder($root, $depth) {
   } catch { $r.error = $_.Exception.Message }
   return $r
 }
+# 파일이 아주 많은 폴더(데이터 증분 백업 등)용 가벼운 확인: 파일을 세지 않고 폴더(2단계까지)와 맨 위 파일의 시각만 본다.
+# 폴더의 수정 시각은 그 안에 파일이 추가·삭제된 때이므로 증분 복사가 돈 시각을 알 수 있다. 개수·용량은 모름(null).
+function ScanLight($root) {
+  $r = @{ path = $root; exists = (Test-Path $root); newest_file = $null; newest_time = $null; copied_time = $null; copied_file = $null; count = $null; size = $null; light = $true; error = '' }
+  if (-not $r.exists) { return $r }
+  try {
+    $items = @(Get-ChildItem -Path $root -Directory -Recurse -Depth 2 -ErrorAction SilentlyContinue) + @(Get-ChildItem -Path $root -File -ErrorAction SilentlyContinue) + @(Get-Item $root)
+    $n = $items | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($n) { $r.newest_time = Iso $n.LastWriteTime; $r.copied_time = $r.newest_time; $r.newest_file = $n.FullName.Substring($root.Length).TrimStart('\', '/'); if (-not $r.newest_file) { $r.newest_file = '(폴더)' }; $r.copied_file = $r.newest_file }
+  } catch { $r.error = $_.Exception.Message }
+  return $r
+}
+# 훑기 전에 크기를 가늠: 2단계까지 항목이 3000개를 넘으면 큰 폴더로 보고 가벼운 방식을 쓴다 (3000개에서 멈추므로 싸다)
+function IsBigFolder($root) { try { return @(Get-ChildItem -Path $root -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object -First 3001).Count -gt 3000 } catch { return $false } }
 $files = @(); foreach ($p in $paths) { $files += ScanFolder $p 0 }
 
 # ---- SQL Server msdb 백업 기록 (DB별 마지막 전체/차등/로그 백업) ----
@@ -116,6 +130,7 @@ if ($conf['USB'] -ne '0') {
     foreach ($ent in @($spec -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
       $name = ''; $loc = $ent
       if ($ent -match '^([^=]+?)\s*=\s*(.+)$') { $name = $matches[1].Trim(); $loc = $matches[2].Trim() }
+      $mode = 'auto'; if ($loc -match '^(.*?)\s*\|\s*(full|light|전체|빠름)\s*$') { $loc = $matches[1]; $mode = $(if ($matches[2] -match 'full|전체') { 'full' } else { 'light' }) }
       $loc = $loc.TrimEnd('\'); $drive = $null; $sub = ''
       if ($loc -match '^([A-Za-z]):(\\.*)?$') { $drive = ($matches[1] + ':').ToUpper(); $sub = [string]$matches[2] }
       elseif ($loc -match '^([^\\:]+):(\\.*)?$') { $lab = $matches[1]; $sub = [string]$matches[2]; $ld = $logical | Where-Object { $_.VolumeName -and $_.VolumeName.ToLower() -eq $lab.ToLower() } | Select-Object -First 1; if ($ld) { $drive = $ld.DeviceID } }
@@ -125,7 +140,7 @@ if ($conf['USB'] -ne '0') {
         foreach ($L in @(UsbLetters)) { if (Test-Path "$L\$rel") { $drive = $L; break } }
       }
       if (-not $name) { $name = $(if ($sub -and $sub -ne '\') { Split-Path $sub -Leaf } elseif ($loc -match '^([^\\:]{2,}):') { $matches[1] } else { $loc }) }
-      $targets += @{ name = $name; spec = $loc; drive = $drive; rel = $(if ($sub -and $sub -ne '\') { $sub.TrimStart('\') } else { '' }); path = $(if ($drive -eq $null) { '' } elseif ($sub -and $sub -ne '\') { "$drive$sub" } else { "$drive\" }) }
+      $targets += @{ name = $name; spec = $loc; mode = $mode; drive = $drive; rel = $(if ($sub -and $sub -ne '\') { $sub.TrimStart('\') } else { '' }); path = $(if ($drive -eq $null) { '' } elseif ($sub -and $sub -ne '\') { "$drive$sub" } else { "$drive\" }) }
     }
   } else {
     # 자동 감지: 후보 드라이브 중 backup/bak/db 폴더가 있는 것 우선 (이동식·USB 인터페이스는 폴더 없어도 후보)
@@ -142,7 +157,7 @@ if ($conf['USB'] -ne '0') {
       if ($cands.Count -gt 0) { $pick = $L; $pickPath = ($cands | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName; break }
       if (-not $pick) { $pick = $L; $pickPath = "$L\" }
     }
-    $targets += @{ name = ''; spec = 'auto'; drive = $pick; path = $pickPath }
+    $targets += @{ name = ''; spec = 'auto'; mode = 'auto'; drive = $pick; path = $pickPath }
   }
   # bat 파일이 복사 직후 usb-done.ps1 을 호출했으면 그 기록(완료 시각, 복사 결과)을 읽어 둔다 (경로별 여러 건)
   $dones = @(); try { if (Test-Path $UsbDone) { $dj = Get-Content $UsbDone -Raw -Encoding UTF8 | ConvertFrom-Json; if ($dj.items) { $dones = @($dj.items) } elseif ($dj.time) { $dones = @($dj) } } } catch {}
@@ -151,7 +166,7 @@ if ($conf['USB'] -ne '0') {
     $prev = $prevList | Where-Object { $_.name -eq $tg.name } | Select-Object -First 1
     if (-not $prev -and $tg.spec -eq 'auto' -and $prevList.Count -gt 0) { $prev = $prevList[0] }
     if (-not $prev) { $prev = $prevList | Where-Object { $tg.path -and (SamePath $_.path $tg.path) } | Select-Object -First 1 }
-    if ($prev) { foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'copied_time', 'copied_file', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan')) { try { if ($prev.$k -ne $null) { $u[$k] = $prev.$k } } catch {} } }
+    if ($prev) { foreach ($k in @('drive', 'label', 'path', 'newest_file', 'newest_time', 'copied_time', 'copied_file', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan', 'light')) { try { if ($prev.$k -ne $null) { $u[$k] = $prev.$k } } catch {} } }
     $u.spec = $tg.spec
     $present = $false
     if ($tg.drive -and (Test-Path "$($tg.drive)\")) { $present = $true } elseif ($tg.drive -eq '' -and $tg.path) { try { $present = Test-Path $tg.path } catch {} }
@@ -165,7 +180,12 @@ if ($conf['USB'] -ne '0') {
         $lastScan = $null; try { if ($u.last_scan) { $lastScan = [datetime]::Parse($u.last_scan) } } catch {}
         $newDrive = (-not $prev) -or ($prev.drive -ne $tg.drive) -or ($prev.path -ne $tg.path)
         if ($ForceUsb -or $inWindow -or $newDrive -or (-not $lastScan) -or (((Get-Date) - $lastScan).TotalMinutes -ge 60)) {
-          $scan = ScanFolder $tg.path $(if ($tg.path -match '^[A-Z]:\\$') { 3 } else { 0 })
+          # 큰 폴더(항목 3000개↑ 또는 지난 훑기 20초↑)는 가벼운 방식. 항목에 |full / |light 로 강제 가능
+          $light = $(if ($tg.mode -eq 'full') { $false } elseif ($tg.mode -eq 'light') { $true } elseif ($u.light -eq $true) { $true } elseif ($newDrive -or -not $lastScan) { IsBigFolder $tg.path } else { $false })
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          $scan = $(if ($light) { ScanLight $tg.path } else { ScanFolder $tg.path $(if ($tg.path -match '^[A-Z]:\\$') { 3 } else { 0 }) })
+          $sw.Stop(); if (-not $light -and $tg.mode -ne 'full' -and $sw.ElapsedMilliseconds -gt 20000) { $light = $true; Log "USB $($tg.name) 훑기 $([int]($sw.ElapsedMilliseconds / 1000))초 — 다음부터 폴더 시각만 확인" }
+          $u.light = $light
           $u.newest_file = $scan.newest_file; $u.newest_time = $scan.newest_time; $u.copied_time = $scan.copied_time; $u.copied_file = $scan.copied_file; $u.count = $scan.count; $u.size = $scan.size; $u.last_scan = Iso (Get-Date)
           if ($scan.error) { $u.error = $scan.error }
         }
@@ -185,7 +205,7 @@ if ($conf['USB'] -ne '0') {
     }
     $usbs += $u
   }
-  try { @{ items = @($usbs | ForEach-Object { $x = @{}; foreach ($k in @('name', 'drive', 'label', 'path', 'newest_file', 'newest_time', 'copied_time', 'copied_file', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan')) { $x[$k] = $_[$k] }; $x }) } | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path $UsbState -Encoding UTF8 } catch {}
+  try { @{ items = @($usbs | ForEach-Object { $x = @{}; foreach ($k in @('name', 'drive', 'label', 'path', 'newest_file', 'newest_time', 'copied_time', 'copied_file', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan', 'light')) { $x[$k] = $_[$k] }; $x }) } | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path $UsbState -Encoding UTF8 } catch {}
   if ($usbs.Count -gt 0) { $usb = $usbs[0] }   # 구버전 수집기 호환 (첫 번째 USB)
 }
 

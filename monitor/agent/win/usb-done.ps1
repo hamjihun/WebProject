@@ -21,8 +21,9 @@ try {
   }
   if ($Path -and (Test-Path $Path)) {
     $r.path = $Path; $r.drive = $Path.Substring(0, 2)
-    $files = @(Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' })
-    $r.count = $files.Count
+    # 파일이 아주 많은 폴더(데이터 증분 백업)는 5000개에서 멈춰 가볍게: 개수·최신 파일은 모름으로 두고 완료 시각·결과만 기록
+    $all = @(Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 5001)
+    if ($all.Count -gt 5000) { $files = @(); $r.count = $null; $r.light = $true } else { $files = @($all | Where-Object { $_.Extension -match '^\.(bak|trn|dif|zip|7z|rar|bkf|sql)$' }); $r.count = $files.Count }
     $n = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($n) { $r.newest_file = $n.FullName.Substring($Path.Length).TrimStart('\'); $r.newest_time = Iso $n.LastWriteTime }
     $c = $files | Sort-Object CreationTime -Descending | Select-Object -First 1
@@ -35,4 +36,4 @@ $items = @(); try { if (Test-Path $Out) { $pj = Get-Content $Out -Raw -Encoding 
 $items = @($items | Where-Object { -not $_.path -or -not $r.path -or ([string]$_.path).TrimEnd('\').ToLower() -ne $r.path.TrimEnd('\').ToLower() })
 $items = @(,$r) + @($items | Select-Object -First 9)
 try { @{ items = @($items) } | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path $Out -Encoding UTF8 } catch {}
-Log "복사 완료 기록 ($Tool): 코드 $Code ($(if ($r.ok) { '정상' } elseif ($Tool -eq 'xcopy' -and $Code -eq 1) { '복사할 새 파일 없음' } else { '실패' })), $($r.path), 파일 $($r.count)개, 최신 $($r.newest_time)"
+Log "복사 완료 기록 ($Tool): 코드 $Code ($(if ($r.ok) { '정상' } elseif ($Tool -eq 'xcopy' -and $Code -eq 1) { '복사할 새 파일 없음' } else { '실패' })), $($r.path), 파일 $(if ($r.count -eq $null) { '5000개 이상(세지 않음)' } else { "$($r.count)개" }), 최신 $($r.newest_time)"

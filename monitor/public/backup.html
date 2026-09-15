@@ -98,7 +98,7 @@ function tipText(row, k, c) {
   if (c.st === 'future') return '';
   let t = `${k} · ${row.label}\n`;
   if (row.stage === 'sql' && e.sql) t += `백업 파일 ${fmtT(e.sql.time)}\n${e.sql.file || ''}${e.sql.size ? ' · ' + fmtBytes(e.sql.size) : ''}\n폴더 파일 ${e.sql.count}개` + (e.dbs ? `\nDB 전체 백업 ${Object.keys(e.dbs).length}개` : '');
-  else if (row.stage === 'usb' && usbOf(e, row.usb)) { const u = usbOf(e, row.usb); t += `복사 ${fmtT(u.time)}${u.ok === false ? ' · 실패 (코드 ' + u.code + ')' : u.ok === true ? ' · 정상 (코드 ' + u.code + ')' : ''}\n${u.path || u.drive || ''} 파일 ${u.count}개${u.total ? ' · 남은 ' + fmtBytes(u.free) : ''}`; }
+  else if (row.stage === 'usb' && usbOf(e, row.usb)) { const u = usbOf(e, row.usb); t += `복사 ${fmtT(u.time)}${u.ok === false ? ' · 실패 (코드 ' + u.code + ')' : u.ok === true ? ' · 정상 (코드 ' + u.code + ')' : ''}\n${u.path || u.drive || ''} ${u.count == null ? '' : '파일 ' + u.count + '개'}${u.total ? ' · 남은 ' + fmtBytes(u.free) : ''}`; }
   else if (row.stage === 'veeam' && e.veeam && e.veeam[row.job]) { const v = e.veeam[row.job]; t += `${v.result} · 종료 ${v.end ? fmtT(v.end) : '-'}${v.duration ? ' · ' + dur(v.duration) : ''}${v.size ? ' · ' + fmtBytes(v.size) : ''}`; }
   else t += { miss: '백업 없음', none: '주말 (백업 안 함)', wait: '오늘 판단 시각 전' }[c.st] || '';
   return t;
@@ -151,7 +151,7 @@ function showDetail() {
     if (e.dbs) for (const [db, v] of Object.entries(e.dbs)) row(`DB ${esc(db)} 전체 백업`, `${fmtT(v.time)}${v.size ? ' · ' + fmtBytes(v.size) : ''}`);
   } else if (stage === 'usb') {
     const u = usbOf(e, job);
-    if (u) { row('복사 시각', fmtT(u.time)); row('결과', u.ok === false ? `<span class="bad">실패 (코드 ${u.code})</span>` : u.ok === true ? `<span class="ok">정상 (코드 ${u.code})</span>` : '<span class="ok">복사됨 (bat 기록 없음)</span>'); row('드라이브 · 폴더', esc(u.path || u.drive || '-')); row('파일', `${u.count}개${u.file ? ' · 최신 ' + esc(u.file) : ''}`); row('USB 남은 용량', u.total ? `${fmtBytes(u.free)} / ${fmtBytes(u.total)}` : '-'); }
+    if (u) { row('복사 시각', fmtT(u.time)); row('결과', u.ok === false ? `<span class="bad">실패 (코드 ${u.code})</span>` : u.ok === true ? `<span class="ok">정상 (코드 ${u.code})</span>` : '<span class="ok">복사됨 (bat 기록 없음)</span>'); row('드라이브 · 폴더', esc(u.path || u.drive || '-')); row('파일', `${u.count == null ? '많음 (세지 않음)' : u.count + '개'}${u.file ? ' · 최신 ' + esc(u.file) : ''}`); row('USB 남은 용량', u.total ? `${fmtBytes(u.free)} / ${fmtBytes(u.total)}` : '-'); }
     else row('USB 백업', '<span class="bad">이 날짜의 USB 복사 기록 없음</span>');
   } else { const v = e.veeam && e.veeam[job];
     if (v) { row('결과', `<span class="${v.result === 'Success' ? 'ok' : v.result === 'Warning' ? 'warn' : 'bad'}">${esc(v.result)}</span>`); row('종료', v.end ? fmtT(v.end) : '-'); row('소요', v.duration ? dur(v.duration) : '-'); row('크기', v.size ? fmtBytes(v.size) : '-'); row('종류', esc(v.type || '')); }
