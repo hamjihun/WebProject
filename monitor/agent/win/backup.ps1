@@ -129,7 +129,8 @@ if ($conf['USB'] -ne '0') {
   if ($spec -and $spec -ne 'auto') {
     foreach ($ent in @($spec -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
       $name = ''; $loc = $ent
-      if ($ent -match '^([^=]+?)\s*=\s*(.+)$') { $name = $matches[1].Trim(); $loc = $matches[2].Trim() }
+      if ($ent -match '^([^=]+?)\s*=\s*(.*)$') { $name = $matches[1].Trim(); $loc = $matches[2].Trim() }
+      if (-not $loc) { Log "USB 항목 '$ent' 은 경로가 비어 있어 건너뜀"; continue }
       $mode = 'auto'; if ($loc -match '^(.*?)\s*\|\s*(full|light|전체|빠름)\s*$') { $loc = $matches[1]; $mode = $(if ($matches[2] -match 'full|전체') { 'full' } else { 'light' }) }
       $loc = $loc.TrimEnd('\'); $drive = $null; $sub = ''
       if ($loc -match '^([A-Za-z]):(\\.*)?$') { $drive = ($matches[1] + ':').ToUpper(); $sub = [string]$matches[2] }
@@ -161,6 +162,7 @@ if ($conf['USB'] -ne '0') {
   }
   # bat 파일이 복사 직후 usb-done.ps1 을 호출했으면 그 기록(완료 시각, 복사 결과)을 읽어 둔다 (경로별 여러 건)
   $dones = @(); try { if (Test-Path $UsbDone) { $dj = Get-Content $UsbDone -Raw -Encoding UTF8 | ConvertFrom-Json; if ($dj.items) { $dones = @($dj.items) } elseif ($dj.time) { $dones = @($dj) } } } catch {}
+  $script:usedDone = @()
   foreach ($tg in $targets) {
     $u = NewUsb $tg.name
     $prev = $prevList | Where-Object { $_.name -eq $tg.name } | Select-Object -First 1
@@ -196,6 +198,7 @@ if ($conf['USB'] -ne '0') {
     if ($tg.spec -eq 'auto') { $dn = $dones | Sort-Object time -Descending | Select-Object -First 1 }
     else { $dn = $dones | Where-Object { (SamePath $_.path $tg.path) -or ($tg.spec -and (SamePath $_.path $tg.spec)) -or ($tg.rel -and $_.path -and (([string]$_.path).TrimEnd('\').ToLower().EndsWith('\' + $tg.rel.ToLower()) -or ([string]$_.path).ToLower().Contains('\' + $tg.rel.ToLower() + '\'))) } | Sort-Object time -Descending | Select-Object -First 1 }
     if ($dn) {
+      $script:usedDone += ,$dn
       try {
         $u.done_time = $dn.time; $u.done_code = $dn.code; $u.done_ok = $dn.ok
         if ($dn.newest_time -and -not $u.newest_time) { $u.newest_time = $dn.newest_time }
@@ -203,6 +206,17 @@ if ($conf['USB'] -ne '0') {
         if ($dn.copied_time -and ($dn.copied_time -gt $u.copied_time)) { $u.copied_time = $dn.copied_time }
       } catch {}
     }
+    $usbs += $u
+  }
+  # 화면 설정과 짝지어지지 않은 bat 기록도 따로 보여 준다 (경로가 서로 달라도 복사 결과는 보이게)
+  foreach ($dn in $dones) {
+    if ($script:usedDone -contains $dn) { continue }
+    $seen = $false; foreach ($x in $usbs) { if ($x.done_time -eq $dn.time -and $x.path -eq $dn.path) { $seen = $true } }; if ($seen) { continue }
+    $leaf = ''; try { $leaf = Split-Path ([string]$dn.path).TrimEnd('\') -Leaf } catch {}
+    $u = NewUsb $(if ($leaf) { $leaf } else { 'bat 기록' }); $u.spec = [string]$dn.path; $u.path = [string]$dn.path; $u.drive = [string]$dn.drive
+    $u.done_time = $dn.time; $u.done_code = $dn.code; $u.done_ok = $dn.ok; $u.newest_time = $dn.newest_time; $u.newest_file = $dn.newest_file; $u.count = $dn.count; $u.free = $dn.free; $u.total = $dn.total; $u.last_seen = $dn.time
+    if ($dn.copied_time) { $u.copied_time = $dn.copied_time }
+    $u.note = "bat 기록 (화면의 USB 백업 폴더 설정과 폴더가 달라 따로 표시)"
     $usbs += $u
   }
   try { @{ items = @($usbs | ForEach-Object { $x = @{}; foreach ($k in @('name', 'drive', 'label', 'path', 'newest_file', 'newest_time', 'copied_time', 'copied_file', 'count', 'size', 'free', 'total', 'last_seen', 'last_scan', 'light')) { $x[$k] = $_[$k] }; $x }) } | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path $UsbState -Encoding UTF8 } catch {}
