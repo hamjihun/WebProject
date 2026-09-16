@@ -7,6 +7,29 @@ const crypto = require('crypto');
 
 const DEFAULT_DEPTS = ['지원팀', '생산팀', '영업팀', '관리팀', '품질팀'];
 const STATUS = ['예정', '진행', '완료', '보류'];
+const PRIOS = ['보통', '중요', '긴급'];
+// 한국 공휴일 기본값. 음력 명절·대체공휴일은 해마다 달라지고 임시공휴일도 생기므로
+// 화면(공휴일 관리)에서 고칠 수 있게 하고, 고치면 data/schedule.json 에 저장된다.
+const DEFAULT_HOLIDAYS = {
+  '2026-01-01': '신정',
+  '2026-02-16': '설날 연휴', '2026-02-17': '설날', '2026-02-18': '설날 연휴',
+  '2026-03-01': '삼일절', '2026-03-02': '대체공휴일',
+  '2026-05-05': '어린이날', '2026-05-24': '부처님오신날', '2026-05-25': '대체공휴일',
+  '2026-06-06': '현충일',
+  '2026-08-15': '광복절', '2026-08-17': '대체공휴일',
+  '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴', '2026-09-28': '대체공휴일',
+  '2026-10-03': '개천절', '2026-10-05': '대체공휴일', '2026-10-09': '한글날',
+  '2026-12-25': '성탄절',
+  '2027-01-01': '신정',
+  '2027-02-05': '설날 연휴', '2027-02-06': '설날', '2027-02-07': '설날 연휴', '2027-02-08': '대체공휴일',
+  '2027-03-01': '삼일절',
+  '2027-05-05': '어린이날', '2027-05-13': '부처님오신날',
+  '2027-06-06': '현충일',
+  '2027-08-15': '광복절', '2027-08-16': '대체공휴일',
+  '2027-09-14': '추석 연휴', '2027-09-15': '추석', '2027-09-16': '추석 연휴',
+  '2027-10-03': '개천절', '2027-10-04': '대체공휴일', '2027-10-09': '한글날', '2027-10-11': '대체공휴일',
+  '2027-12-25': '성탄절', '2027-12-27': '대체공휴일',
+};
 const REPEATS = ['none', 'week', 'month', 'year'];
 const MAX_EVENTS = 5000;
 
@@ -19,11 +42,12 @@ function create(opts) {
   const log = opts.log || (() => {});
   let events = {};
   let depts = DEFAULT_DEPTS.slice();
+  let holidays = Object.assign({}, DEFAULT_HOLIDAYS);
 
   function save() {
     try {
       fs.mkdirSync(path.dirname(FILE), { recursive: true });
-      fs.writeFileSync(FILE, JSON.stringify({ events, depts }, null, 1));
+      fs.writeFileSync(FILE, JSON.stringify({ events, depts, holidays }, null, 1));
     } catch (e) { log('일정 저장 실패: ' + e.message); }
   }
   function load() {
@@ -31,6 +55,7 @@ function create(opts) {
       const o = JSON.parse(fs.readFileSync(FILE, 'utf8'));
       events = o.events || {};
       if (Array.isArray(o.depts) && o.depts.length) depts = o.depts;
+      if (o.holidays && typeof o.holidays === 'object') holidays = o.holidays;   // 한 번 고치면 그 값을 쓴다
     } catch (e) { if (e.code !== 'ENOENT') log('일정 파일 읽기 실패: ' + e.message); }
   }
   load();
@@ -50,6 +75,8 @@ function create(opts) {
     if (raw.time_end != null) { if (!isTime(raw.time_end)) throw new Error('시간 형식이 올바르지 않습니다'); e.time_end = raw.time_end; }
     if (raw.status != null) e.status = STATUS.includes(raw.status) ? raw.status : '예정';
     if (!e.status) e.status = '예정';
+    if (raw.prio != null) e.prio = PRIOS.includes(raw.prio) ? raw.prio : '보통';
+    if (!e.prio) e.prio = '보통';
     if (raw.repeat != null) {
       const kind = REPEATS.includes(raw.repeat.kind) ? raw.repeat.kind : 'none';
       const until = isDay(raw.repeat.until) ? raw.repeat.until : '';
@@ -63,7 +90,19 @@ function create(opts) {
   }
 
   return {
-    STATUS, REPEATS,
+    STATUS, REPEATS, PRIOS,
+    holidays() { return Object.assign({}, holidays); },
+    setHolidays(map) {
+      if (!map || typeof map !== 'object') throw new Error('공휴일 목록이 올바르지 않습니다');
+      const out = {};
+      for (const [k, v] of Object.entries(map)) {
+        if (!isDay(k)) throw new Error(`날짜 형식이 올바르지 않습니다: ${String(k).slice(0, 20)} (2026-01-01 처럼 적어 주세요)`);
+        const nm = str(v, 20); if (nm) out[k] = nm;
+      }
+      if (Object.keys(out).length > 400) throw new Error('공휴일이 너무 많습니다');
+      holidays = out; save();
+      return this.holidays();
+    },
     all() { return Object.values(events).sort((a, b) => (a.start || '').localeCompare(b.start || '')); },
     depts() { return depts.slice(); },
     setDepts(list) {

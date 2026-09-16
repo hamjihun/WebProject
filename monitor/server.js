@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.16.0';
+const VERSION = '1.17.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -446,7 +446,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/users') {
     if (!me || !me.admin) return json(res, 403, { ok: false, error: '관리자만 쓸 수 있습니다' });
     try {
-      if (req.method === 'GET') return json(res, 200, { ok: true, users: auth.list(), pages: auth.APPS.map((a) => ({ key: a.key, name: a.name, pages: a.pages })), me: me.id });
+      if (req.method === 'GET') return json(res, 200, { ok: true, users: auth.list(), pages: auth.APPS.map((a) => ({ key: a.key, name: a.name, pages: a.pages })), depts: sched.depts(), me: me.id });
       if (req.method === 'POST' || req.method === 'PUT') {
         const raw = JSON.parse((await readBody(req)) || '{}');
         const u = auth.upsert(raw, req.method === 'POST');
@@ -463,35 +463,54 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- 일정 관리 ----
-  if (url.pathname === '/api/schedule' || url.pathname === '/api/schedule/depts') {
+  if (url.pathname === '/api/schedule' || url.pathname === '/api/schedule/depts' || url.pathname === '/api/schedule/holidays') {
     if (!me || !auth.can(me, 'schedule.html')) return json(res, 403, { ok: false, error: '일정 화면 권한이 없습니다' });
     const who = me.name || me.id;
+    const myDepts = auth.deptsOf(me);                                    // 빈 배열이면 전체 부서
+    const visible = () => sched.all().filter((e) => auth.canDept(me, e.dept));
+    const checkDept = (d) => { if (!auth.canDept(me, d)) throw new Error('그 부서의 일정은 다룰 수 없습니다'); };
     try {
-      if (req.method === 'GET') return json(res, 200, { ok: true, events: sched.all(), depts: sched.depts(), status: sched.STATUS, me: who });
+      if (req.method === 'GET') return json(res, 200, {
+        ok: true, events: visible(), depts: myDepts.length ? myDepts : sched.depts(), all_depts: sched.depts(),
+        status: sched.STATUS, prios: sched.PRIOS, holidays: sched.holidays(), me: who, admin: !!me.admin, limited: myDepts.length > 0,
+      });
       if (req.method === 'PUT' && url.pathname === '/api/schedule/depts') {
+        if (!me.admin) return json(res, 403, { ok: false, error: '부서 목록은 관리자만 고칠 수 있습니다' });
         const raw = JSON.parse((await readBody(req)) || '{}');
         return json(res, 200, { ok: true, depts: sched.setDepts(raw.depts) });
       }
+      if (req.method === 'PUT' && url.pathname === '/api/schedule/holidays') {
+        if (!me.admin) return json(res, 403, { ok: false, error: '공휴일은 관리자만 고칠 수 있습니다' });
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        return json(res, 200, { ok: true, holidays: sched.setHolidays(raw.holidays) });
+      }
       if (req.method === 'POST') {
         const raw = JSON.parse((await readBody(req)) || '{}');
+        if (myDepts.length && !raw.dept) raw.dept = myDepts[0];
+        checkDept(raw.dept);
         const e = sched.create(raw, who);
         console.log(`[${new Date().toLocaleTimeString()}] 일정 등록: ${e.title} (${e.start}, ${who})`);
-        return json(res, 200, { ok: true, event: e, events: sched.all() });
+        return json(res, 200, { ok: true, event: e, events: visible() });
       }
       if (req.method === 'PUT') {
         const raw = JSON.parse((await readBody(req)) || '{}');
+        const cur0 = sched.all().find((x) => x.id === raw.id);
+        if (cur0) checkDept(cur0.dept);
+        if (raw.dept != null) checkDept(raw.dept);
         let e;
         if (raw.add_note) e = sched.addNote(raw.id, raw.add_note.date, raw.add_note.text, who).event;
         else if (raw.del_note) e = sched.delNote(raw.id, raw.del_note);
         else if (raw.occ_status) e = sched.setOccurrence(raw.id, raw.occ_status.date, raw.occ_status.status, who);
         else e = sched.update(raw, who);
-        return json(res, 200, { ok: true, event: e, events: sched.all() });
+        return json(res, 200, { ok: true, event: e, events: visible() });
       }
       if (req.method === 'DELETE') {
         const id = url.searchParams.get('id') || '', date = url.searchParams.get('date') || '';
+        const cur1 = sched.all().find((x) => x.id === id);
+        if (cur1) checkDept(cur1.dept);
         if (date) sched.skip(id, date); else sched.remove(id);
         console.log(`[${new Date().toLocaleTimeString()}] 일정 ${date ? '한 날짜 제외' : '삭제'}: ${id} (${who})`);
-        return json(res, 200, { ok: true, events: sched.all() });
+        return json(res, 200, { ok: true, events: visible() });
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }

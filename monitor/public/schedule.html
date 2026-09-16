@@ -37,6 +37,11 @@
   .chip.done { opacity:.5; } .chip.done .t { text-decoration:line-through; }
   .chip .t { overflow:hidden; text-overflow:ellipsis; } .chip .hm { color:var(--muted); font-size:11px; }
   .chip .st { font-size:10px; }
+  .hol { color:#f87171; font-size:11px; font-weight:600; margin-left:4px; }
+  .cal td.holiday { background:rgba(239,68,68,.07); } .cal td.holiday .dn { color:#f87171; }
+  .pr { font-size:10px; border-radius:4px; padding:0 4px; font-weight:700; margin-right:3px; flex:none; }
+  .pr.hi { background:#f59e0b; color:#0f172a; } .pr.ur { background:#ef4444; color:#fff; }
+  .tlh.hol { color:#f87171; } .tlc.hol { background:rgba(239,68,68,.07); }
   .more { font-size:11px; color:var(--muted); cursor:pointer; padding:2px 5px; } .more:hover { color:var(--accent); }
 
   /* 주 보기 */
@@ -112,12 +117,14 @@
   <div class="bar">
     <div class="g"><button id="prev">◀</button><button id="today">오늘</button><button id="next">▶</button></div>
     <h1 id="title">-</h1>
-    <div class="g"><button class="vw on" data-v="month">월</button><button class="vw" data-v="week">주</button><button class="vw" data-v="tl">타임라인</button></div>
+    <div class="g"><button class="vw on" data-v="month">월</button><button class="vw" data-v="week">주</button><button class="vw" data-v="tl">타임라인</button><button class="vw" data-v="year">연간</button></div>
     <span class="sp"></span>
     <label for="fdept">부서</label><select id="fdept"></select>
     <label for="fowner">담당자</label><select id="fowner"></select>
     <label for="fstat">상태</label><select id="fstat"></select>
-    <button id="depts" title="부서 목록 고치기">부서 관리</button>
+    <label for="fprio">중요도</label><select id="fprio"></select>
+    <button id="depts" title="부서 목록 고치기" hidden>부서 관리</button>
+    <button id="hols" title="공휴일 고치기" hidden>공휴일 관리</button>
     <button class="add" id="add">+ 일정 등록</button>
   </div>
   <div class="kpis" id="kpis"></div>
@@ -137,6 +144,7 @@
       <div><label for="e_end">종료 날짜 <span style="font-size:11px">(하루면 비워 두기)</span></label><input type="date" id="e_end"></div>
       <div><label for="e_time">시간 (선택)</label><input type="time" id="e_time"></div>
       <div><label for="e_status">상태</label><select id="e_status"></select></div>
+      <div><label for="e_prio">중요도</label><select id="e_prio"></select></div>
       <div><label for="e_rep">반복</label><select id="e_rep"><option value="none">반복 안 함</option><option value="week">매주</option><option value="month">매월</option><option value="year">매년</option></select></div>
       <div id="repwrap" hidden><label for="e_until">반복 끝나는 날</label><input type="date" id="e_until"></div>
       <div class="full"><label for="e_desc">내용 (선택)</label><textarea id="e_desc" maxlength="2000" placeholder="자세한 내용을 적어 두면 나중에 찾기 쉽습니다"></textarea></div>
@@ -155,8 +163,11 @@ const COLORS = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#f472b6', '#fb923c'
 const ST_COLOR = { '예정': '#60a5fa', '진행': '#fbbf24', '완료': '#22c55e', '보류': '#94a3b8' };
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const REP_KO = { none: '', week: '매주 반복', month: '매월 반복', year: '매년 반복' };
+const MON_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+const prioTag = (p) => p === '긴급' ? '<span class="pr ur">긴급</span>' : p === '중요' ? '<span class="pr hi">중요</span>' : '';
+const HOL = (k) => (data.holidays || {})[k] || '';
 
-let data = { events: [], depts: [], status: [], me: '' };
+let data = { events: [], depts: [], status: [], prios: [], holidays: {}, me: '', admin: false };
 let view = 'month';
 let cur = new Date(); cur.setHours(0, 0, 0, 0);
 let sel = null;           // { id, date }
@@ -166,6 +177,8 @@ const D = (s) => { const [y, m, d] = String(s).split('-').map(Number); return ne
 const S = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const addD = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const addM = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; };
+// n개월 뒤 같은 날짜. 그 달에 그 날짜가 없으면 말일로 (31일 반복이 2월을 건너뛰지 않게)
+const addMK = (base, n, dom) => { const x = new Date(base.getFullYear(), base.getMonth() + n, 1); const last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate(); x.setDate(Math.min(dom, last)); return x; };
 const TODAY = S(new Date());
 const deptColor = (d) => COLORS[Math.max(0, data.depts.indexOf(d)) % COLORS.length];
 
@@ -180,20 +193,25 @@ function expand(ev, from, to) {
     return { ev, id: ev.id, date, end, span, status: (o && o.status) || ev.status || '예정', rep: kind };
   };
   if (kind === 'none') { if ((ev.end || ev.start) >= from && ev.start <= to) out.push(mk(ev.start)); return out; }
-  let d = D(ev.start), guard = 0;
+  const first = D(ev.start), dom = first.getDate();
   const until = (ev.repeat && ev.repeat.until) || to;
-  while (S(d) <= until && S(d) <= to && guard++ < 600) {
+  let i = 0, d = first;   // 회차는 항상 시작일에서 계산한다 (날짜가 밀리지 않게)
+  while (S(d) <= until && S(d) <= to && i < 600) {
     const ds = S(d);
     if (S(addD(d, span)) >= from && !(ev.occ && ev.occ[ds] && ev.occ[ds].skip)) out.push(mk(ds));
-    d = kind === 'week' ? addD(d, 7) : kind === 'month' ? addM(d, 1) : addM(d, 12);
+    i++;
+    d = kind === 'week' ? addD(first, 7 * i) : kind === 'month' ? addMK(first, i, dom) : addMK(first, 12 * i, dom);
   }
   return out;
 }
 function pass(o) {
   const f = { dept: $('#fdept').value, owner: $('#fowner').value, stat: $('#fstat').value };
+  if (!o) return false;
   if (f.dept && o.ev.dept !== f.dept) return false;
   if (f.owner && (o.ev.owner || '') !== f.owner) return false;
   if (f.stat && o.status !== f.stat) return false;
+  const fp = $('#fprio').value;
+  if (fp && (o.ev.prio || '보통') !== fp) return false;
   return true;
 }
 // 기간 안의 모든 회차 (필터 적용)
@@ -214,6 +232,7 @@ function byDay(from, to) {
   return map;
 }
 function range() {
+  if (view === 'year') return [`${cur.getFullYear()}-01-01`, `${cur.getFullYear()}-12-31`];
   if (view === 'week') { const s = addD(cur, -cur.getDay()); return [S(s), S(addD(s, 6))]; }
   const s = new Date(cur.getFullYear(), cur.getMonth(), 1), e = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
   if (view === 'month') return [S(addD(s, -s.getDay())), S(addD(e, 6 - e.getDay()))];
@@ -222,22 +241,25 @@ function range() {
 
 function render() {
   const [from, to] = range();
-  $('#title').textContent = view === 'week'
-    ? `${D(from).getMonth() + 1}월 ${D(from).getDate()}일 ~ ${D(to).getMonth() + 1}월 ${D(to).getDate()}일`
+  $('#title').textContent = view === 'year' ? `${cur.getFullYear()}년`
+    : view === 'week' ? `${D(from).getMonth() + 1}월 ${D(from).getDate()}일 ~ ${D(to).getMonth() + 1}월 ${D(to).getDate()}일`
     : `${cur.getFullYear()}년 ${cur.getMonth() + 1}월`;
   renderKpis();
   if (view === 'month') renderMonth(from, to);
   else if (view === 'week') renderWeek(from);
+  else if (view === 'year') renderYear();
   else renderTimeline();
   if (sel) openPanel(sel.id, sel.date);
 }
 function renderKpis() {
-  const m = new Date(cur.getFullYear(), cur.getMonth(), 1);
-  const list = occurrences(S(m), S(new Date(cur.getFullYear(), cur.getMonth() + 1, 0)));
+  const yr = view === 'year';
+  const a = yr ? `${cur.getFullYear()}-01-01` : S(new Date(cur.getFullYear(), cur.getMonth(), 1));
+  const b = yr ? `${cur.getFullYear()}-12-31` : S(new Date(cur.getFullYear(), cur.getMonth() + 1, 0));
+  const list = occurrences(a, b);
   const n = (s) => list.filter((o) => o.status === s).length;
   const late = list.filter((o) => o.status !== '완료' && o.end < TODAY).length;
   $('#kpis').innerHTML = `
-    <div class="kpi go"><div class="l">${cur.getMonth() + 1}월 전체</div><div class="v">${list.length}<small style="font-size:13px;color:var(--muted)"> 건</small></div></div>
+    <div class="kpi go"><div class="l">${yr ? cur.getFullYear() + '년' : (cur.getMonth() + 1) + '월'} 전체</div><div class="v">${list.length}<small style="font-size:13px;color:var(--muted)"> 건</small></div></div>
     <div class="kpi warn"><div class="l">진행 중</div><div class="v">${n('진행')}</div></div>
     <div class="kpi ok"><div class="l">완료</div><div class="v">${n('완료')}</div></div>
     <div class="kpi"><div class="l">예정</div><div class="v">${n('예정')}</div></div>
@@ -247,7 +269,7 @@ function chip(o, day) {
   const done = o.status === '완료';
   const cont = o.date < day ? '↳ ' : '';
   return `<div class="chip ${done ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}" title="${esc(o.ev.title)}${o.ev.owner ? ' · ' + esc(o.ev.owner) : ''} · ${o.status}">
-    <span class="st" style="color:${ST_COLOR[o.status]}">●</span>${o.ev.time ? `<span class="hm">${o.ev.time}</span>` : ''}<span class="t">${cont}${esc(o.ev.title)}</span></div>`;
+    <span class="st" style="color:${ST_COLOR[o.status]}">●</span>${prioTag(o.ev.prio)}${o.ev.time ? `<span class="hm">${o.ev.time}</span>` : ''}<span class="t">${cont}${esc(o.ev.title)}</span></div>`;
 }
 function renderMonth(from, to) {
   const map = byDay(from, to);
@@ -256,10 +278,10 @@ function renderMonth(from, to) {
   while (S(d) <= to) {
     h += '<tr>';
     for (let i = 0; i < 7; i++) {
-      const k = S(d), out = d.getMonth() !== cur.getMonth(), list = map[k] || [];
+      const k = S(d), out = d.getMonth() !== cur.getMonth(), list = map[k] || [], hol = HOL(k);
       const show = list.slice(0, 4);
-      h += `<td class="${out ? 'out' : ''} ${k === TODAY ? 'today' : ''} ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" data-day="${k}">
-        <div class="dn"><span>${d.getDate()}</span><span class="plus" data-new="${k}" title="이 날짜에 일정 등록">＋</span></div>
+      h += `<td class="${out ? 'out' : ''} ${k === TODAY ? 'today' : ''} ${hol ? 'holiday' : ''} ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" data-day="${k}">
+        <div class="dn"><span>${d.getDate()}${hol ? `<span class="hol">${esc(hol)}</span>` : ''}</span><span class="plus" data-new="${k}" title="이 날짜에 일정 등록">＋</span></div>
         ${show.map((o) => chip(o, k)).join('')}
         ${list.length > 4 ? `<div class="more" data-day2="${k}">+${list.length - 4}건 더 보기</div>` : ''}</td>`;
       d = addD(d, 1);
@@ -272,11 +294,11 @@ function renderWeek(from) {
   const map = byDay(from, S(addD(D(from), 6)));
   let h = '<div class="week">';
   for (let i = 0; i < 7; i++) {
-    const d = addD(D(from), i), k = S(d), list = map[k] || [];
-    h += `<div class="wd ${k === TODAY ? 'today' : ''}"><h3><span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" style="${i === 0 ? 'color:#f87171' : i === 6 ? 'color:#7dd3fc' : ''}">${d.getMonth() + 1}/${d.getDate()} (${WD[i]})</span><small>${list.length ? list.length + '건' : ''}</small></h3>
+    const d = addD(D(from), i), k = S(d), list = map[k] || [], hol = HOL(k);
+    h += `<div class="wd ${k === TODAY ? 'today' : ''}"><h3><span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" style="${hol || i === 0 ? 'color:#f87171' : i === 6 ? 'color:#7dd3fc' : ''}">${d.getMonth() + 1}/${d.getDate()} (${WD[i]})</span><small>${hol ? `<span class="hol">${esc(hol)}</span>` : list.length ? list.length + '건' : ''}</small></h3>
       <div class="plus" data-new="${k}" style="color:var(--muted);cursor:pointer;font-size:12px;margin-bottom:6px">＋ 일정 추가</div>` +
       (list.map((o) => `<div class="wc ${o.status === '완료' ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}">
-        <div class="t">${esc(o.ev.title)}</div>
+        <div class="t">${prioTag(o.ev.prio)}${esc(o.ev.title)}</div>
         <div class="m"><span style="color:${ST_COLOR[o.status]}">●</span> ${o.status}${o.ev.time ? ' · ' + o.ev.time : ''}</div>
         <div class="m">${esc(o.ev.owner || '담당자 없음')} · ${esc(o.ev.dept || '-')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">-</div>') + '</div>';
   }
@@ -295,7 +317,7 @@ function renderTimeline() {
   for (let i = 1; i <= days; i++) { const d = new Date(cur.getFullYear(), cur.getMonth(), i); dayInfo.push({ i, k: S(d), w: d.getDay() }); }
   let h = `<div class="tl"><div class="tlg" style="grid-template-columns:230px repeat(${days},minmax(26px,1fr));min-width:${230 + days * 26}px">`;
   h += '<div class="tlh" style="text-align:left;padding-left:2px;grid-row:1">일정</div>';
-  for (const d of dayInfo) h += `<div class="tlh ${d.w === 0 || d.w === 6 ? 'we' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:1;grid-column:${d.i + 1}">${d.i}<br>${WD[d.w]}</div>`;
+  for (const d of dayInfo) h += `<div class="tlh ${d.w === 0 || d.w === 6 ? 'we' : ''} ${HOL(d.k) ? 'hol' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:1;grid-column:${d.i + 1}" title="${esc(HOL(d.k))}">${d.i}<br>${WD[d.w]}</div>`;
   let last = null, r = 1;
   for (const row of rows) {
     const who = row.ev.owner || '담당자 없음';
@@ -305,13 +327,57 @@ function renderTimeline() {
     }
     r++;
     const done = row.occs.every((o) => o.status === '완료');
-    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> <b>${esc(row.ev.title)}</b><small>${esc(row.ev.dept || '')}</small></div>`;
-    for (const d of dayInfo) h += `<div class="tlc ${d.w === 0 || d.w === 6 ? 'we' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:${r};grid-column:${d.i + 1}"></div>`;
+    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> ${prioTag(row.ev.prio)}<b>${esc(row.ev.title)}</b><small>${esc(row.ev.dept || '')}</small></div>`;
+    for (const d of dayInfo) h += `<div class="tlc ${d.w === 0 || d.w === 6 ? 'we' : ''} ${HOL(d.k) ? 'hol' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:${r};grid-column:${d.i + 1}"></div>`;
     for (const o of row.occs) {
       const st = D(o.date) < s ? 1 : D(o.date).getDate();
       const en = D(o.end) > e ? days : D(o.end).getDate();
       const len = Math.max(1, en - st + 1);
       h += `<div class="bar2 ${o.status === '완료' ? 'done' : ''}" style="grid-row:${r};grid-column:${st + 1}/span ${len};--c:${deptColor(row.ev.dept)}" data-id="${o.id}" data-date="${o.date}" title="${esc(row.ev.title)} · ${o.date}${o.end !== o.date ? ' ~ ' + o.end : ''} · ${o.status}">${len >= 3 ? esc(row.ev.title) : ''}</div>`;
+    }
+  }
+  $('#view').innerHTML = h + '</div></div>';
+}
+
+// 연간 보기: 가로 12개월. 일정마다 한 줄이고, 그 달에 일정이 있으면 막대가 생긴다 (반복은 횟수도 표시).
+function renderYear() {
+  const y = cur.getFullYear(), from = `${y}-01-01`, to = `${y}-12-31`;
+  const byEv = new Map();
+  for (const o of occurrences(from, to)) { if (!byEv.has(o.id)) byEv.set(o.id, []); byEv.get(o.id).push(o); }
+  const rows = [...byEv.values()].map((occs) => ({ ev: occs[0].ev, occs }))
+    .sort((a, b) => (a.ev.owner || 'ㅎㅎ').localeCompare(b.ev.owner || 'ㅎㅎ') || a.occs[0].date.localeCompare(b.occs[0].date));
+  if (!rows.length) { $('#view').innerHTML = '<div class="empty">이 해에 표시할 일정이 없습니다.</div>'; return; }
+  const thisMon = (new Date().getFullYear() === y) ? new Date().getMonth() : -1;
+  let h = `<div class="tl"><div class="tlg" style="grid-template-columns:260px repeat(12,minmax(70px,1fr));min-width:1000px">`;
+  h += '<div class="tlh" style="text-align:left;padding-left:2px;grid-row:1">일정</div>';
+  for (let m = 0; m < 12; m++) h += `<div class="tlh ${m === thisMon ? 'today' : ''}" style="grid-row:1;grid-column:${m + 2}">${MON_KO[m]}</div>`;
+  let last = null, r = 1;
+  for (const row of rows) {
+    const who = row.ev.owner || '담당자 없음';
+    if (who !== last) { r++; last = who; h += `<div class="tlgrp" style="grid-row:${r};grid-column:1/-1">${esc(who)}</div>`; }
+    r++;
+    // 그 해에 일정이 걸쳐 있는 달 (월별 건수)
+    const cnt = {};
+    for (const o of row.occs) {
+      let d = D(o.date > from ? o.date : from);
+      const end = D(o.end < to ? o.end : to);
+      let g = 0;
+      while (d <= end && g++ < 400) { cnt[d.getMonth()] = (cnt[d.getMonth()] || 0) + (d.getDate() === D(o.date).getDate() && d.getMonth() === D(o.date).getMonth() ? 1 : 0); d = addD(d, 1); }
+      for (let m = D(o.date).getMonth(); m <= end.getMonth(); m++) if (!cnt[m]) cnt[m] = 0.1;   // 걸쳐만 있는 달도 칠한다
+    }
+    const months = Object.keys(cnt).map(Number).sort((a, b) => a - b);
+    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> ${prioTag(row.ev.prio)}<b>${esc(row.ev.title)}</b><small>${esc(row.ev.owner || '')}${row.ev.dept ? ' · ' + esc(row.ev.dept) : ''}</small></div>`;
+    for (let m = 0; m < 12; m++) h += `<div class="tlc ${m === thisMon ? 'today' : ''}" style="grid-row:${r};grid-column:${m + 2}"></div>`;
+    // 이어지는 달끼리 묶어서 막대 하나로
+    let i = 0;
+    while (i < months.length) {
+      let j = i; while (j + 1 < months.length && months[j + 1] === months[j] + 1) j++;
+      const st = months[i], len = months[j] - st + 1;
+      let n = 0; for (let m = st; m <= months[j]; m++) n += Math.round(cnt[m] || 0);
+      const first = row.occs.find((o) => D(o.date).getMonth() === st) || row.occs[0];
+      const allDone = row.occs.filter((o) => D(o.date).getMonth() >= st && D(o.date).getMonth() <= months[j]).every((o) => o.status === '완료');
+      h += `<div class="bar2 ${allDone ? 'done' : ''}" style="grid-row:${r};grid-column:${st + 2}/span ${len};--c:${deptColor(row.ev.dept)}" data-id="${row.ev.id}" data-date="${first.date}" title="${esc(row.ev.title)} · ${MON_KO[st]}${len > 1 ? '~' + MON_KO[months[j]] : ''}${n > 1 ? ' · ' + n + '회' : ''}">${esc(row.ev.title)}${n > 1 ? ` (${n})` : ''}</div>`;
+      i = j + 1;
     }
   }
   $('#view').innerHTML = h + '</div></div>';
@@ -332,7 +398,7 @@ function openPanel(id, date) {
     <h2>${esc(ev.title)}</h2>
     <div class="meta">
       <span class="badge" style="background:${deptColor(ev.dept)}">${esc(ev.dept || '부서 없음')}</span>
-      ${rep !== 'none' ? `<span class="badge" style="background:#475569;color:#e2e8f0">${REP_KO[rep]}</span>` : ''}<br>
+      ${rep !== 'none' ? `<span class="badge" style="background:#475569;color:#e2e8f0">${REP_KO[rep]}</span>` : ''}${prioTag(ev.prio)}<br>
       날짜 <b>${date}${span}</b>${ev.time ? ` <b>${ev.time}</b>` : ''}<br>
       담당자 <b>${esc(ev.owner || '-')}</b>
     </div>
@@ -367,11 +433,12 @@ function openForm(ev, day) {
   $('#mtitle').textContent = ev ? '일정 수정' : '일정 등록';
   $('#e_title').value = ev ? ev.title : '';
   $('#e_dept').value = ev ? ev.dept : (data.depts[0] || '');
-  $('#e_owner').value = ev ? (ev.owner || '') : '';
+  $('#e_owner').value = ev ? (ev.owner || '') : (data.me || '');   // 새로 만들 때는 로그인한 사람 이름이 기본
   $('#e_start').value = ev ? ev.start : (day || TODAY);
   $('#e_end').value = ev && ev.end !== ev.start ? ev.end : '';
   $('#e_time').value = ev ? (ev.time || '') : '';
   $('#e_status').value = ev ? (ev.status || '예정') : '예정';
+  $('#e_prio').value = ev ? (ev.prio || '보통') : '보통';
   $('#e_rep').value = ev && ev.repeat ? ev.repeat.kind : 'none';
   $('#e_until').value = ev && ev.repeat ? (ev.repeat.until || '') : '';
   $('#e_desc').value = ev ? (ev.desc || '') : '';
@@ -387,7 +454,7 @@ $('#form').onsubmit = (e) => {
   const body = {
     title: $('#e_title').value, dept: $('#e_dept').value, owner: $('#e_owner').value,
     start: $('#e_start').value, end: $('#e_end').value, time: $('#e_time').value,
-    status: $('#e_status').value, desc: $('#e_desc').value,
+    status: $('#e_status').value, prio: $('#e_prio').value, desc: $('#e_desc').value,
     repeat: { kind: $('#e_rep').value, until: $('#e_rep').value === 'none' ? '' : $('#e_until').value },
   };
   if (editing) body.id = editing;
@@ -413,13 +480,16 @@ async function apiDel(q) {
 }
 function fillFilters() {
   const owners = [...new Set(data.events.map((e) => e.owner).filter(Boolean))].sort();
-  const keep = { d: $('#fdept').value, o: $('#fowner').value, s: $('#fstat').value };
+  const keep = { d: $('#fdept').value, o: $('#fowner').value, s: $('#fstat').value, p: $('#fprio').value };
   $('#fdept').innerHTML = '<option value="">전체</option>' + data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
   $('#fowner').innerHTML = '<option value="">전체</option>' + owners.map((o) => `<option>${esc(o)}</option>`).join('');
   $('#fstat').innerHTML = '<option value="">전체</option>' + data.status.map((s) => `<option>${esc(s)}</option>`).join('');
-  $('#fdept').value = keep.d; $('#fowner').value = keep.o; $('#fstat').value = keep.s;
+  $('#fprio').innerHTML = '<option value="">전체</option>' + (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
+  $('#fdept').value = keep.d; $('#fowner').value = keep.o; $('#fstat').value = keep.s; $('#fprio').value = keep.p;
   $('#e_dept').innerHTML = data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
   $('#e_status').innerHTML = data.status.map((s) => `<option>${esc(s)}</option>`).join('');
+  $('#e_prio').innerHTML = (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
+  $('#depts').hidden = !data.admin; $('#hols').hidden = !data.admin;
   $('#owners').innerHTML = owners.map((o) => `<option value="${esc(o)}">`).join('');
 }
 async function load() {
@@ -431,15 +501,15 @@ async function load() {
 }
 
 // ---- 버튼 ----
-$('#prev').onclick = () => { cur = view === 'week' ? addD(cur, -7) : addM(cur, -1); render(); };
-$('#next').onclick = () => { cur = view === 'week' ? addD(cur, 7) : addM(cur, 1); render(); };
+$('#prev').onclick = () => { cur = view === 'week' ? addD(cur, -7) : addM(cur, view === 'year' ? -12 : -1); render(); };
+$('#next').onclick = () => { cur = view === 'week' ? addD(cur, 7) : addM(cur, view === 'year' ? 12 : 1); render(); };
 $('#today').onclick = () => { cur = new Date(); cur.setHours(0, 0, 0, 0); render(); };
 for (const b of document.querySelectorAll('.vw')) b.onclick = () => {
   view = b.dataset.v;
   for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x === b);
   render();
 };
-for (const id of ['fdept', 'fowner', 'fstat']) $('#' + id).onchange = render;
+for (const id of ['fdept', 'fowner', 'fstat', 'fprio']) $('#' + id).onchange = render;
 $('#add').onclick = () => openForm(null);
 $('#depts').onclick = async () => {
   const v = prompt('부서 목록을 한 줄에 하나씩 적어 주세요.', data.depts.join('\n'));
@@ -449,6 +519,25 @@ $('#depts').onclick = async () => {
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
     data.depts = j.depts; fillFilters(); render();
+  } catch (err) { alert(err.message); }
+};
+$('#hols').onclick = async () => {
+  const y = cur.getFullYear();
+  const lines = Object.entries(data.holidays || {}).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k} ${v}`);
+  const v = prompt(`공휴일을 한 줄에 하나씩 적어 주세요.  (예: ${y}-01-01 신정)\n음력 명절·대체공휴일·임시공휴일은 정부 공고에 따라 바뀔 수 있으니 여기서 고치시면 됩니다.`, lines.join('\n'));
+  if (v == null) return;
+  const map = {};
+  for (const line of v.split('\n')) {
+    const t = line.trim(); if (!t) continue;
+    const m = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/.exec(t);
+    if (!m) { alert(`이 줄을 알아볼 수 없습니다:\n${t}\n\n"2026-01-01 신정" 처럼 적어 주세요.`); return; }
+    map[m[1]] = m[2].trim();
+  }
+  try {
+    const r = await fetch('api/schedule/holidays', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ holidays: map }) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+    data.holidays = j.holidays; render();
   } catch (err) { alert(err.message); }
 };
 $('#view').onclick = (e) => {
