@@ -303,12 +303,13 @@ Veeam Backup & Replication 서버에 에이전트 1.4.0 이상을 설치하면(�
 
 ### 자동 백업 (설치하면 자동으로 등록됨)
 
-`deploy\setup-collector.cmd` 를 실행하면 작업 스케줄러에 **ServerMonitorBackup** 작업이 **매일 새벽 1시**로 등록된다. 저장 위치는 `deploy\backup-target.txt` 에 적힌 곳 **전부**이며, 기본값은 두 곳이다.
+`deploy\setup-collector.cmd` 를 실행하면 작업 스케줄러에 **ServerMonitorBackup** 작업이 **매일 새벽 1시**로 등록된다. 저장 위치는 `deploy\backup-target.txt` 에 적힌 곳 **전부**이며, 기본값은 로컬 한 곳이다.
 
 ```
 C:\ims\monitor-backup
-\\192.168.0.231\경영기획팀\★IMS_서버모니터링 백업
 ```
+
+공유 폴더로도 보내려면 그 파일의 마지막 줄 맨 앞 `#` 을 지운다. 다만 SYSTEM 계정은 공유 폴더에 접근하지 못하므로 아래 "공유 폴더로 보낼 때" 를 먼저 읽는다.
 
 각 위치마다 이렇게 쌓인다.
 
