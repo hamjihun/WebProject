@@ -13,6 +13,7 @@ param(
   [string]$BackupDir = "",          # 데이터 백업 위치를 새로 지정 (비우면 deploy\backup-target.txt 를 그대로 사용)
   [string]$BackupUser = "",         # 공유 폴더(\\...)에 백업할 때 쓸 계정 (예: ILSAN\admin 또는 .\administrator)
   [string]$BackupPass = "",         # 그 계정의 비밀번호 (작업 스케줄러가 암호화해서 보관합니다)
+                                    #  비밀번호를 빼고 -BackupUser 만 주면 "그 사람이 로그온해 있을 때만 실행"으로 등록합니다 (비밀번호 저장 안 함)
   [switch]$Public,
   [switch]$Uninstall
 )
@@ -76,13 +77,19 @@ if (Test-Path $bkScript) {
   if ($BackupUser -and $BackupPass) {
     Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -User $BackupUser -Password $BackupPass -RunLevel Highest -Description "서버 모니터 데이터 백업 (매일 01:00)" | Out-Null
     Write-Host "데이터 백업 작업 등록: 매일 01:00, 실행 계정 $BackupUser"
+  } elseif ($BackupUser) {
+    # 비밀번호 없이: 그 사람이 로그온해 있을 때만 실행 (로그온 세션의 권한을 그대로 쓰므로 공유 폴더 접근됨)
+    $bp = New-ScheduledTaskPrincipal -UserId $BackupUser -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -Principal $bp -Description "서버 모니터 데이터 백업 (매일 01:00, 로그온 중일 때)" | Out-Null
+    Write-Host "데이터 백업 작업 등록: 매일 01:00, 실행 계정 $BackupUser (그 계정이 로그온해 있을 때만 실행)"
   } else {
     Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -Principal $principal -Description "서버 모니터 데이터 백업 (매일 01:00)" | Out-Null
     Write-Host "데이터 백업 작업 등록: 매일 01:00 (SYSTEM 계정)"
     if ($needsUser) {
       Write-Warning "백업 위치에 공유 폴더가 있습니다. SYSTEM 계정은 공유 폴더에 접근하지 못합니다."
-      Write-Warning "  -> 설치 명령에 -BackupUser ""계정"" -BackupPass ""비밀번호"" 를 붙여 다시 실행하거나,"
-      Write-Warning "     작업 스케줄러에서 'ServerMonitorBackup' 작업의 실행 계정을 바꾸세요."
+      Write-Warning "  -> 방법 1: deploy\backup-cred.txt 에 '공유경로|계정|비밀번호' 한 줄을 적는다 (권장)"
+      Write-Warning "  -> 방법 2: setup-collector.cmd 의 BACKUPUSER 에 계정만 적으면 '로그온 중일 때만 실행'으로 등록된다"
+      Write-Warning "  -> 방법 3: 작업 스케줄러에서 'ServerMonitorBackup' 작업의 실행 계정을 바꾼다"
     }
   }
   foreach ($t in $targets) { Write-Host "  백업 위치: $t" }
