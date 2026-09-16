@@ -93,32 +93,24 @@
   .bar2 { background:var(--c,#38bdf8); color:#0f172a; border-radius:5px; font-size:11px; padding:2px 5px; margin:3px 1px; cursor:pointer; white-space:nowrap; overflow:hidden; font-weight:700; min-height:18px; z-index:2; }
   .bar2:hover { filter:brightness(1.15); } .bar2.done { opacity:.5; }
 
-  /* 상세 패널 */
-  .panel { position:fixed; top:0; right:0; width:390px; max-width:100%; height:100%; background:var(--card); border-left:1px solid var(--line); padding:18px 20px; overflow-y:auto; z-index:40; box-shadow:-10px 0 30px rgba(0,0,0,.35); }
-  .panel[hidden] { display:none; }
-  .panel .x { float:right; background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:4px 9px; cursor:pointer; font:inherit; }
-  .panel h2 { font-size:17px; margin:0 26px 6px 0; }
-  .meta { color:var(--muted); font-size:12px; line-height:1.9; margin-bottom:12px; }
-  .meta b { color:var(--text); font-weight:600; }
-  .badge { display:inline-block; border-radius:5px; padding:1px 8px; font-size:11px; color:#0f172a; font-weight:700; }
-  .stbtns { display:flex; gap:5px; margin:4px 0 14px; }
-  .stbtns button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--muted); border-radius:7px; padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
-  .stbtns button.on { font-weight:700; color:#0f172a; }
-  .sec { border-top:1px solid var(--line); padding-top:12px; margin-top:12px; }
-  .sec h3 { font-size:13px; margin:0 0 8px; color:var(--muted); font-weight:400; }
-  .desc { white-space:pre-wrap; line-height:1.6; color:var(--text); font-size:13px; }
+  /* 등록·수정 창 안의 배지 · 상태 · 메모 */
+  .badges { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:-8px 0 12px; }
+  .badge { display:inline-block; border-radius:5px; padding:2px 9px; font-size:11.5px; color:#0f172a; font-weight:700; }
+  .badge.g { background:#475569; color:#e2e8f0; }
+  .stbtns { display:flex; gap:6px; margin:0 0 14px; align-items:center; }
+  .stbtns .l { color:var(--muted); font-size:12px; margin-right:2px; white-space:nowrap; }
+  .stbtns button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--muted); border-radius:7px; padding:7px 0; font:inherit; font-size:12.5px; cursor:pointer; }
+  .stbtns button:hover { border-color:var(--accent); } .stbtns button.on { font-weight:700; color:#0f172a; }
+  .nsec { font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px; margin-top:14px; margin-bottom:8px; }
+  .notes { max-height:210px; overflow-y:auto; }
   .note { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:7px; }
   .note .h { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-bottom:4px; }
   .note .h button { background:none; border:0; color:var(--muted); cursor:pointer; font:inherit; padding:0 2px; }
   .note .h button:hover { color:var(--bad); }
-  .note .b { white-space:pre-wrap; line-height:1.55; }
-  .nadd { display:flex; gap:6px; margin-top:8px; }
-  .nadd textarea { flex:1; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; resize:vertical; min-height:60px; }
+  .note .b { white-space:pre-wrap; line-height:1.55; font-size:12.5px; }
+  .nadd { display:flex; gap:6px; margin-top:8px; align-items:stretch; }
+  .nadd textarea { flex:1; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; resize:vertical; min-height:56px; }
   .nadd button { background:var(--accent); color:#0f172a; border:0; border-radius:8px; padding:0 14px; font:inherit; font-weight:700; cursor:pointer; }
-  .pacts { display:flex; gap:6px; margin-top:16px; }
-  .pacts button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px; font:inherit; cursor:pointer; }
-  .pacts button:hover { border-color:var(--accent); } .pacts button.del:hover { border-color:var(--bad); color:var(--bad); }
-
   /* 등록·수정 창 */
   .mask { position:fixed; inset:0; background:rgba(2,6,23,.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:20px; }
   .mask[hidden] { display:none; }
@@ -127,7 +119,7 @@
   .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
   @media (max-width:900px) { .modal.wide { width:560px; } .cols { grid-template-columns:1fr; } }
   .fr label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
-  .fr textarea { width:100%; min-height:372px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font:inherit; line-height:1.65; resize:vertical; }
+  #e_desc { width:100%; min-height:372px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font:inherit; line-height:1.65; resize:vertical; }
   .fr textarea:focus { outline:none; border-color:var(--accent); }
   .fr .hint { color:var(--muted); font-size:11.5px; margin-top:6px; line-height:1.5; }
   .fg .share { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:11px 13px; }
@@ -162,6 +154,8 @@
   .macts { display:flex; gap:8px; margin-top:18px; }
   .macts button { flex:1; border-radius:8px; padding:10px; font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--bg); color:var(--text); }
   .macts button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  .macts button.del:hover { border-color:var(--bad); color:var(--bad); }
+  .macts button.sub { flex:0 0 auto; padding-left:16px; padding-right:16px; }
   .msg { color:var(--bad); font-size:12px; min-height:16px; margin-top:8px; }
   .empty { color:var(--muted); padding:40px; text-align:center; }
 </style>
@@ -185,20 +179,20 @@
   <div id="view"></div>
 </div>
 
-<div class="panel" id="panel" hidden></div>
-
 <div class="mask" id="mask" hidden>
   <form class="modal wide" id="form">
     <h2 id="mtitle">일정 등록</h2>
+    <div class="badges" id="mbadges" hidden></div>
+    <div class="stbtns" id="mstat" hidden></div>
     <div class="cols">
       <div class="fg">
         <div class="full"><label for="e_title">제목</label><input type="text" id="e_title" maxlength="100" placeholder="예: 그룹웨어 서버 점검"></div>
         <div><label for="e_dept">부서</label><select id="e_dept"></select></div>
         <div><label for="e_owner">담당자</label><input type="text" id="e_owner" maxlength="20" list="owners" placeholder="이름 (비워도 됨)"><datalist id="owners"></datalist></div>
         <div><label for="e_start">시작 날짜</label><input type="date" id="e_start"></div>
-        <div><label for="e_end">종료 날짜 <span style="font-size:11px">(하루면 비워 두기)</span></label><input type="date" id="e_end"></div>
+        <div><label for="e_end">종료 날짜 <span style="font-size:11px">(하루짜리면 시작과 같게)</span></label><input type="date" id="e_end"></div>
         <div><label for="e_time">시간 (선택)</label><input type="time" id="e_time"></div>
-        <div><label for="e_status">상태</label><select id="e_status"></select></div>
+        <div id="statwrap"><label for="e_status">상태</label><select id="e_status"></select></div>
         <div><label for="e_prio">중요도</label><select id="e_prio"></select></div>
         <div><label for="e_rep">반복</label><select id="e_rep"><option value="none">반복 안 함</option><option value="week">매주</option><option value="month">매월</option><option value="year">매년</option></select></div>
         <div id="repwrap" class="full" hidden><label for="e_until">반복 끝나는 날</label><input type="date" id="e_until"></div>
@@ -209,11 +203,21 @@
       <div class="fr">
         <label for="e_desc">내용</label>
         <textarea id="e_desc" maxlength="2000" placeholder="처리할 내용, 준비물, 연락처, 확인할 항목 등을 자유롭게 적어 두세요.&#10;&#10;예)&#10;- ERP 부산 서버 SQL 백업 경로 확인&#10;- 업체 담당자 010-0000-0000&#10;- 작업 후 백업 탭에서 결과 확인"></textarea>
-        <div class="hint">저장한 뒤에도 일정을 눌러 언제든 고칠 수 있습니다. 진행하면서 생기는 기록은 일정을 클릭해 <b>메모</b>로 쌓으면 날짜별로 남습니다.</div>
+        <div class="hint" id="dhint">저장한 뒤에도 일정을 눌러 언제든 고칠 수 있습니다. 진행하면서 생기는 기록은 아래 <b>메모</b>로 쌓으면 날짜별로 남습니다.</div>
+        <div id="notewrap" hidden>
+          <div class="nsec" id="ncount">메모</div>
+          <div class="notes" id="mnotes"></div>
+          <div class="nadd"><textarea id="ntext" placeholder="처리 내용, 특이사항을 적어 두세요"></textarea><button type="button" id="nadd">등록</button></div>
+        </div>
       </div>
     </div>
     <div class="msg" id="mmsg"></div>
-    <div class="macts"><button type="button" id="mcancel">취소</button><button type="submit" class="go" id="msave">저장</button></div>
+    <div class="macts">
+      <button type="button" id="mcancel">취소</button>
+      <button type="button" class="sub" id="mskip" hidden>이 날짜만 빼기</button>
+      <button type="button" class="sub del" id="mdel" hidden>삭제</button>
+      <button type="submit" class="go" id="msave">저장</button>
+    </div>
   </form>
 </div>
 
@@ -254,8 +258,8 @@ const HOL = (k) => (data.holidays || {})[k] || '';
 let data = { events: [], depts: [], status: [], prios: [], holidays: {}, me: '', admin: false };
 let view = 'todo';
 let cur = new Date(); cur.setHours(0, 0, 0, 0);
-let sel = null;           // { id, date }
 let editing = null;       // 수정 중인 일정 id
+let editDate = '';        // 수정 중인 회차 날짜 (반복 일정의 상태·메모 대상)
 
 const D = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
 const S = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -338,7 +342,6 @@ function render() {
   else if (view === 'week') renderWeek(from);
   else if (view === 'year') renderYear();
   else renderTimeline();
-  if (sel) openPanel(sel.id, sel.date);
 }
 function renderKpis() {
   if (view === 'todo') {
@@ -536,59 +539,54 @@ function renderYear() {
   $('#view').innerHTML = h + '</div></div>';
 }
 
-// ---- 상세 패널 ----
-function openPanel(id, date) {
+// ---- 일정 클릭 → 등록 창과 같은 모양의 팝업 (배지·상태·메모 포함) ----
+function openEvent(id, date) {
   const ev = data.events.find((x) => x.id === id);
-  if (!ev) { closePanel(); return; }
-  sel = { id, date };
-  const o = (ev.occ && ev.occ[date]) || null;
-  const status = (o && o.status) || ev.status || '예정';
-  const rep = (ev.repeat && ev.repeat.kind) || 'none';
-  const notes = (ev.notes || []).filter((n) => rep === 'none' || n.date === date).sort((a, b) => b.at - a.at);
-  const span = ev.end && ev.end !== ev.start ? ` ~ ${S(addD(D(date), Math.round((D(ev.end) - D(ev.start)) / 86400000)))}` : '';
-  $('#panel').innerHTML = `
-    <button class="x" id="pclose">닫기 ✕</button>
-    <h2>${esc(ev.title)}</h2>
-    <div class="meta">
-      <span class="badge" style="background:${deptColor(ev.dept)}">${esc(ev.dept || '부서 없음')}</span>
-      ${rep !== 'none' ? `<span class="badge" style="background:#475569;color:#e2e8f0">${REP_KO[rep]}</span>` : ''}${prioTag(ev.prio)}${(ev.share || 'team') === 'team' ? '<span class="pr team">팀 공유</span>' : '<span class="pr mine">나만 보기</span>'}<br>
-      날짜 <b>${date}${span}</b>${ev.time ? ` <b>${ev.time}</b>` : ''}<br>
-      담당자 <b>${esc(ev.owner || '-')}</b>
-    </div>
-    <div class="stbtns">${data.status.map((s) => `<button data-st="${s}" class="${s === status ? 'on' : ''}" style="${s === status ? `background:${ST_COLOR[s]};border-color:${ST_COLOR[s]}` : ''}">${s}</button>`).join('')}</div>
-    ${rep !== 'none' ? '<div style="color:var(--muted);font-size:11px;margin:-8px 0 12px">반복 일정입니다. 상태와 메모는 이 날짜에만 기록됩니다.</div>' : ''}
-    ${ev.desc ? `<div class="sec"><h3>내용</h3><div class="desc">${esc(ev.desc)}</div></div>` : ''}
-    <div class="sec"><h3>메모 ${notes.length ? `(${notes.length})` : ''}</h3>
-      ${notes.map((n) => `<div class="note"><div class="h"><span>${esc(n.by)} · ${fmtAt(n.at)}</span><button data-dn="${n.id}" title="메모 지우기">✕</button></div><div class="b">${esc(n.text)}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">메모가 없습니다.</div>'}
-      <div class="nadd"><textarea id="ntext" placeholder="처리 내용, 특이사항을 적어 두세요"></textarea><button id="nadd">등록</button></div>
-    </div>
-    <div class="pacts">
-      <button id="pedit">수정</button>
-      ${rep !== 'none' ? `<button id="pskip">이 날짜만 빼기</button>` : ''}
-      <button class="del" id="pdel">${rep !== 'none' ? '반복 전체 삭제' : '삭제'}</button>
-    </div>`;
-  $('#panel').hidden = false;
-  $('#pclose').onclick = closePanel;
-  for (const b of $('#panel').querySelectorAll('[data-st]')) b.onclick = () => api('PUT', { id, occ_status: { date, status: b.dataset.st } });
-  for (const b of $('#panel').querySelectorAll('[data-dn]')) b.onclick = () => api('PUT', { id, del_note: b.dataset.dn });
-  $('#nadd').onclick = () => { const t = $('#ntext').value.trim(); if (t) api('PUT', { id, add_note: { date, text: t } }); };
-  $('#ntext').onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('#nadd').click(); };
-  $('#pedit').onclick = () => openForm(ev);
-  if ($('#pskip')) $('#pskip').onclick = () => { if (confirm(`${date} 하루만 이 반복 일정에서 뺄까요?`)) apiDel(`id=${id}&date=${date}`); };
-  $('#pdel').onclick = () => { if (confirm(`"${ev.title}" 일정을 지울까요?${rep !== 'none' ? ' 반복 전체가 지워집니다.' : ''}`)) apiDel('id=' + id); };
+  if (!ev) return;
+  openForm(ev, null, date || ev.start);
 }
-function closePanel() { sel = null; $('#panel').hidden = true; }
 function fmtAt(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+// 수정 중인 일정의 배지 · 상태 버튼 · 메모를 다시 그린다
+function refreshModal() {
+  const ev = data.events.find((x) => x.id === editing);
+  if (!ev) { $('#mask').hidden = true; return; }
+  const rep = (ev.repeat && ev.repeat.kind) || 'none';
+  const o = (ev.occ && ev.occ[editDate]) || null;
+  const status = (o && o.status) || ev.status || '예정';
+  $('#mbadges').hidden = false;
+  $('#mbadges').innerHTML =
+    `<span class="badge" style="background:${deptColor(ev.dept)}">${esc(ev.dept || '부서 없음')}</span>` +
+    (ev.prio && ev.prio !== '보통' ? `<span class="badge" style="background:${ev.prio === '긴급' ? '#ef4444;color:#fff' : '#f59e0b'}">${esc(ev.prio)}</span>` : '') +
+    `<span class="badge g">${(ev.share || 'team') === 'team' ? '팀 공유' : '나만 보기'}</span>` +
+    (rep !== 'none' ? `<span class="badge g">${REP_KO[rep]}</span>` : '') +
+    `<span class="badge g">${editDate}</span>`;
+  $('#mstat').hidden = false;
+  $('#mstat').innerHTML = `<span class="l">${rep !== 'none' ? '이 날짜 상태' : '상태'}</span>` +
+    data.status.map((st) => `<button type="button" data-st="${st}" class="${st === status ? 'on' : ''}" style="${st === status ? `background:${ST_COLOR[st]};border-color:${ST_COLOR[st]}` : ''}">${st}</button>`).join('');
+  for (const b of $('#mstat').querySelectorAll('[data-st]')) b.onclick = () => api('PUT', { id: editing, occ_status: { date: editDate, status: b.dataset.st } });
+  const notes = (ev.notes || []).filter((n) => rep === 'none' || n.date === editDate).sort((a, b) => b.at - a.at);
+  $('#notewrap').hidden = false;
+  $('#ncount').textContent = `메모${notes.length ? ' (' + notes.length + ')' : ''}${rep !== 'none' ? ' — 이 날짜에만 남습니다' : ''}`;
+  $('#mnotes').innerHTML = notes.map((n) => `<div class="note"><div class="h"><span>${esc(n.by)} · ${fmtAt(n.at)}</span><button type="button" data-dn="${n.id}" title="메모 지우기">✕</button></div><div class="b">${esc(n.text)}</div></div>`).join('')
+    || '<div style="color:var(--muted);font-size:12px">메모가 없습니다.</div>';
+  for (const b of $('#mnotes').querySelectorAll('[data-dn]')) b.onclick = () => api('PUT', { id: editing, del_note: b.dataset.dn });
+  $('#mskip').hidden = rep === 'none';
+  $('#mdel').hidden = false;
+  $('#mdel').textContent = rep !== 'none' ? '반복 전체 삭제' : '삭제';
+  $('#statwrap').hidden = true;          // 상태는 위 버튼으로 바꾼다
+  $('#e_desc').style.minHeight = '170px';
+}
 
 // ---- 등록·수정 창 ----
-function openForm(ev, day) {
+function openForm(ev, day, date) {
   editing = ev ? ev.id : null;
-  $('#mtitle').textContent = ev ? '일정 수정' : '일정 등록';
+  editDate = ev ? (date || ev.start) : '';
+  $('#mtitle').textContent = ev ? esc(ev.title) : '일정 등록';
   $('#e_title').value = ev ? ev.title : '';
   $('#e_dept').value = ev ? ev.dept : (data.depts[0] || '');
   $('#e_owner').value = ev ? (ev.owner || '') : (data.me || '');   // 새로 만들 때는 로그인한 사람 이름이 기본
   $('#e_start').value = ev ? ev.start : (day || TODAY);
-  $('#e_end').value = ev && ev.end !== ev.start ? ev.end : '';
+  $('#e_end').value = ev ? (ev.end || ev.start) : (day || TODAY);
   $('#e_time').value = ev ? (ev.time || '') : '';
   $('#e_status').value = ev ? (ev.status || '예정') : '예정';
   $('#e_prio').value = ev ? (ev.prio || '보통') : '보통';
@@ -596,12 +594,29 @@ function openForm(ev, day) {
   $('#e_rep').value = ev && ev.repeat ? ev.repeat.kind : 'none';
   $('#e_until').value = ev && ev.repeat ? (ev.repeat.until || '') : '';
   $('#e_desc').value = ev ? (ev.desc || '') : '';
-  repToggle(); $('#mmsg').textContent = '';
+  repToggle(); $('#mmsg').textContent = ''; $('#ntext').value = '';
+  if (ev) { refreshModal(); } else {
+    for (const id of ['mbadges', 'mstat', 'notewrap']) $('#' + id).hidden = true;
+    $('#mskip').hidden = true; $('#mdel').hidden = true; $('#statwrap').hidden = false;
+    $('#e_desc').style.minHeight = '372px';
+  }
   $('#mask').hidden = false; $('#e_title').focus();
 }
 function repToggle() { $('#repwrap').hidden = $('#e_rep').value === 'none'; }
 $('#e_rep').onchange = repToggle;
 $('#mcancel').onclick = () => { $('#mask').hidden = true; };
+$('#mdel').onclick = () => {
+  const ev = data.events.find((x) => x.id === editing); if (!ev) return;
+  const rep = (ev.repeat && ev.repeat.kind) || 'none';
+  if (confirm(`"${ev.title}" 일정을 지울까요?${rep !== 'none' ? ' 반복 전체가 지워집니다.' : ''}`)) apiDel('id=' + editing);
+};
+$('#mskip').onclick = () => { if (confirm(`${editDate} 하루만 이 반복 일정에서 뺄까요?`)) apiDel(`id=${editing}&date=${editDate}`); };
+$('#nadd').onclick = () => { const t = $('#ntext').value.trim(); if (t) api('PUT', { id: editing, add_note: { date: editDate, text: t } }, () => { $('#ntext').value = ''; }); };
+$('#ntext').onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#nadd').click(); } };
+// 날짜·시간 칸을 두 번 누르면 달력(시계)이 열린다
+for (const el of document.querySelectorAll('input[type=date], input[type=time]')) el.ondblclick = () => { try { el.showPicker(); } catch (e) {} };
+// 시작 날짜를 바꾸면 종료 날짜를 따라오게
+$('#e_start').onchange = () => { if (!$('#e_end').value || $('#e_end').value < $('#e_start').value) $('#e_end').value = $('#e_start').value; };
 $('#mask').onclick = (e) => { if (e.target === $('#mask')) $('#mask').hidden = true; };
 $('#form').onsubmit = (e) => {
   e.preventDefault();
@@ -621,7 +636,9 @@ async function api(method, body, then) {
     const r = await fetch('api/schedule', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
-    data.events = j.events; fillFilters(); render(); if (then) then();
+    data.events = j.events; fillFilters(); render();
+    if (!$('#mask').hidden && editing) refreshModal();
+    if (then) then();
   } catch (err) { const m = $('#mmsg'); if (m && !$('#mask').hidden) m.textContent = err.message; else alert(err.message); }
 }
 async function apiDel(q) {
@@ -629,7 +646,7 @@ async function apiDel(q) {
     const r = await fetch('api/schedule?' + q, { method: 'DELETE' });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '지우지 못했습니다');
-    data.events = j.events; closePanel(); fillFilters(); render();
+    data.events = j.events; $('#mask').hidden = true; fillFilters(); render();
   } catch (err) { alert(err.message); }
 }
 function fillFilters() {
@@ -640,9 +657,13 @@ function fillFilters() {
   $('#fstat').innerHTML = '<option value="">전체</option>' + data.status.map((s) => `<option>${esc(s)}</option>`).join('');
   $('#fprio').innerHTML = '<option value="">전체</option>' + (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
   $('#fdept').value = keep.d; $('#fowner').value = keep.o; $('#fstat').value = keep.s; $('#fprio').value = keep.p; $('#fshare').value = keep.sh;
+  const form = { d: $('#e_dept').value, s: $('#e_status').value, p: $('#e_prio').value };   // 열려 있는 등록 창의 값은 지키기
   $('#e_dept').innerHTML = data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
   $('#e_status').innerHTML = data.status.map((s) => `<option>${esc(s)}</option>`).join('');
   $('#e_prio').innerHTML = (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
+  if (form.d) $('#e_dept').value = form.d;
+  if (form.s) $('#e_status').value = form.s;
+  if (form.p) $('#e_prio').value = form.p;
   $('#hols').hidden = !data.admin;
   $('#owners').innerHTML = owners.map((o) => `<option value="${esc(o)}">`).join('');
 }
@@ -653,8 +674,10 @@ async function load() {
   data = await r.json();
   fillFilters();
   const q = new URLSearchParams(location.search);   // 홈 화면에서 일정을 눌러 들어온 경우
-  if (q.get('id')) { const d = q.get('date'); if (d) cur = D(d); sel = { id: q.get('id'), date: d || TODAY }; history.replaceState(null, '', 'schedule.html'); }
+  const deep = q.get('id');
+  if (deep) { const d = q.get('date'); if (d) cur = D(d); history.replaceState(null, '', 'schedule.html'); }
   render();
+  if (deep) openEvent(deep, q.get('date') || TODAY);
 }
 
 // ---- 버튼 ----
@@ -712,9 +735,9 @@ $('#view').onclick = (e) => {
   if (q) { e.stopPropagation(); api('PUT', { id: q.dataset.qid, occ_status: { date: q.dataset.qd, status: q.dataset.qs } }); return; }
   const n = e.target.closest('[data-new]'); if (n) { openForm(null, n.dataset.new); return; }
   const m = e.target.closest('[data-day2]'); if (m) { cur = D(m.dataset.day2); view = 'week'; for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x.dataset.v === 'week'); render(); return; }
-  const c = e.target.closest('[data-id]'); if (c) openPanel(c.dataset.id, c.dataset.date);
+  const c = e.target.closest('[data-id]'); if (c) openEvent(c.dataset.id, c.dataset.date);
 };
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#hmask').hidden) $('#hmask').hidden = true; else if (!$('#mask').hidden) $('#mask').hidden = true; else closePanel(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#hmask').hidden) $('#hmask').hidden = true; else if (!$('#mask').hidden) $('#mask').hidden = true; } });
 load();
 </script>
 </body>
