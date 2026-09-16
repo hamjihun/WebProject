@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.14.4';
+const VERSION = '1.15.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -21,7 +21,9 @@ const DAILY_KEEP = Number(process.env.DAILY_KEEP || 400);
 const HOURLY_FILE = process.env.HOURLY_FILE === '' ? '' : (process.env.HOURLY_FILE || path.join(__dirname, 'data', 'hourly.json'));  // 시간별 집계 (통계용, 1년)
 const HOURLY_KEEP = Number(process.env.HOURLY_KEEP || 366 * 24);
 const SETTINGS_FILE = process.env.SETTINGS_FILE || path.join(__dirname, 'data', 'settings.json');   // 알림 설정
-const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
+const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: console.log });
+const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, 'data', 'users.json');            // 로그인 계정·권한
+const auth = require('./auth').create({ file: USERS_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
 const store = new Map();
@@ -403,6 +405,61 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
+  // ---- 로그인 확인 ----
+  // 에이전트가 쓰는 주소(/api/metrics, /api/unregister)는 토큰으로만 확인하므로 로그인과 무관하다.
+  const AGENT_PATHS = url.pathname === '/api/metrics' || url.pathname === '/api/unregister';
+  const me = AGENT_PATHS ? null : auth.fromCookie(req.headers.cookie);
+
+  if (req.method === 'POST' && url.pathname === '/api/login') {
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      const r = auth.login(raw.id, raw.pw, !!raw.keep);
+      if (!r) { console.log(`[${new Date().toLocaleTimeString()}] 로그인 실패: ${String(raw.id || '').slice(0, 20)} (${remoteIp})`); return json(res, 401, { ok: false, error: '아이디 또는 비밀번호가 맞지 않습니다' }); }
+      console.log(`[${new Date().toLocaleTimeString()}] 로그인: ${r.user.id} (${remoteIp})`);
+      const cookie = `ims_sess=${r.sid}; Path=/; HttpOnly; SameSite=Lax` + (r.keep ? `; Max-Age=${30 * 86400}` : '');
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': cookie, 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ ok: true, user: r.user, apps: auth.appsFor(auth.fromCookie(`ims_sess=${r.sid}`)) }));
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/logout') {
+    auth.logout(req.headers.cookie);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': 'ims_sess=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
+    return res.end(JSON.stringify({ ok: true }));
+  }
+  if (req.method === 'GET' && url.pathname === '/api/me') {
+    if (!me) return json(res, 401, { ok: false, error: 'login' });
+    return json(res, 200, { ok: true, user: auth.pub(me), apps: auth.appsFor(me), version: VERSION });
+  }
+
+  if (!AGENT_PATHS && !me && url.pathname !== '/api/health') {
+    const file = url.pathname === '/' ? 'home.html' : url.pathname.slice(1);
+    if (url.pathname.startsWith('/api/')) return json(res, 401, { ok: false, error: 'login' });
+    if (!auth.isOpenFile(file)) { res.writeHead(302, { Location: '/login.html?next=' + encodeURIComponent(req.url) }); return res.end(); }
+  }
+  if (me && /\.html$/.test(url.pathname) && !auth.can(me, url.pathname.slice(1))) {
+    res.writeHead(302, { Location: '/home.html?denied=' + encodeURIComponent(url.pathname.slice(1)) }); return res.end();
+  }
+
+  // ---- 계정 관리 (관리자만) ----
+  if (url.pathname === '/api/users') {
+    if (!me || !me.admin) return json(res, 403, { ok: false, error: '관리자만 쓸 수 있습니다' });
+    try {
+      if (req.method === 'GET') return json(res, 200, { ok: true, users: auth.list(), pages: auth.APPS.map((a) => ({ key: a.key, name: a.name, pages: a.pages })), me: me.id });
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const u = auth.upsert(raw, req.method === 'POST');
+        console.log(`[${new Date().toLocaleTimeString()}] 계정 ${req.method === 'POST' ? '생성' : '수정'}: ${u.id}`);
+        return json(res, 200, { ok: true, user: u, users: auth.list() });
+      }
+      if (req.method === 'DELETE') {
+        const id = url.searchParams.get('id') || '';
+        auth.remove(id, me.id);
+        console.log(`[${new Date().toLocaleTimeString()}] 계정 삭제: ${id}`);
+        return json(res, 200, { ok: true, users: auth.list() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/metrics') {
     try {
       const text = await readBody(req);
@@ -553,7 +610,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { host, history: e.history, daily, growth: diskGrowth(e) });
   }
 
-  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return serveStatic(res, 'index.html');
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/home.html')) return serveStatic(res, 'home.html');
   if (req.method === 'GET' && !url.pathname.includes('..')) return serveStatic(res, url.pathname.slice(1));
 
   res.writeHead(404); res.end('not found');

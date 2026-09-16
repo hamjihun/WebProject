@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 · ILSAN 사내 시스템</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:14px; }
+  .box { width:340px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:28px 26px 24px; }
+  h1 { font-size:19px; margin:0 0 4px; } .sub { color:var(--muted); font-size:12px; margin-bottom:20px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:12px 0 5px; }
+  input[type=text], input[type=password] { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font:inherit; }
+  input:focus { outline:none; border-color:var(--accent); }
+  .keep { display:flex; align-items:center; gap:6px; margin:14px 0 0; font-size:12px; color:var(--muted); cursor:pointer; }
+  button { width:100%; margin-top:18px; background:var(--accent); color:#0f172a; border:0; border-radius:8px; padding:11px; font:inherit; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  .err { margin-top:14px; color:var(--bad); font-size:12px; min-height:16px; }
+  .foot { margin-top:16px; color:var(--muted); font-size:11px; text-align:center; }
+</style>
+</head>
+<body>
+<form class="box" id="f">
+  <h1>ILSAN 사내 시스템</h1>
+  <div class="sub">아이디와 비밀번호를 입력하세요</div>
+  <label for="id">아이디</label>
+  <input type="text" id="id" autocomplete="username" autofocus>
+  <label for="pw">비밀번호</label>
+  <input type="password" id="pw" autocomplete="current-password">
+  <label class="keep"><input type="checkbox" id="keep"> 이 컴퓨터에서 로그인 유지 (30일) — 상황판·TV 화면용</label>
+  <button type="submit" id="b">로그인</button>
+  <div class="err" id="err"></div>
+  <div class="foot" id="ver"></div>
+</form>
+<script>
+const $ = (s) => document.querySelector(s);
+const next = new URLSearchParams(location.search).get('next') || '/home.html';
+$('#f').onsubmit = async (e) => {
+  e.preventDefault();
+  const b = $('#b'); b.disabled = true; b.textContent = '확인 중...'; $('#err').textContent = '';
+  try {
+    const r = await fetch('api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: $('#id').value, pw: $('#pw').value, keep: $('#keep').checked }) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '로그인할 수 없습니다');
+    location.href = next;
+  } catch (err) {
+    $('#err').textContent = err.message; $('#pw').value = ''; $('#pw').focus();
+    b.disabled = false; b.textContent = '로그인';
+  }
+};
+</script>
+</body>
+</html>

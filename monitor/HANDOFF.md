@@ -6,7 +6,10 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.14.4) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.15.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `auth.js` | 로그인·계정·권한. `data/users.json` (users + sessions), scrypt 해시, 쿠키 `ims_sess`(12시간, "로그인 유지" 30일). `APPS` 배열(monitor/schedule)이 홈 타일·권한 목록·탭 필터의 근거. 계정 없으면 admin/rhksflwk1@ 자동 생성 | (수집기 내부) |
+| `public/login.html` · `home.html` · `users.html` | 로그인 / 홈(타일) / 계정 관리(관리자). `/` 는 home.html | 브라우저 |
+| `public/schedule.html` | 일정 관리 — 아직 "준비 중" 안내만 (다음 작업) | 브라우저 |
 | `alerts.js` | 알림 엔진. 임계치/지속시간/완충/재알림/복귀/조용시간, 전체·규칙별·서버별(전체 또는 종류별 hostRules) 끄기, 디스크 규칙은 `disk_check_time`(기본 11:30)에 하루 1회 판단, 텔레그램 전송, 월별 로그 `data/alerts-YYYY-MM.log` | (수집기 내부) |
 | `public/index.html` | 서버 현황(카드). `UI_VERSION` 상수를 server.js `VERSION` 과 항상 같게 유지 (다르면 화면에 구버전 경고) | 브라우저 |
 | `public/common.js` | 상단 탭(renderNav)·포맷 함수·상태 등급(grade)·**알림 소리**(MON.sound: localStorage `mon_sound` {on,dur,vol,quietOn,quietFrom,quietTo,remind}, Web Audio 비프, 🔊 버튼 패널, TV 모드는 오른쪽 아래 버튼, `sound.check(recent)` 를 index/dashboard/pollNav 가 호출). `UI_VERSION` 도 여기 있음 (같이 올릴 것) | 브라우저 |
@@ -41,6 +44,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-16 (24): **로그인·홈 화면·계정 관리** (수집기 1.15.0). `auth.js` 신설. server.js: `/api/login`·`/api/logout`·`/api/me`·`/api/users`(GET/POST/PUT/DELETE, 관리자), 로그인 게이트(에이전트 경로 `/api/metrics`·`/api/unregister` 와 `/api/health`, `OPEN_FILES`(login.html·common.js·아이콘) 는 통과; 미로그인 API 401, 화면은 302 → login.html?next=; 권한 없는 .html 은 302 → home.html?denied=). `/` → home.html. common.js: 상단에 "← 홈", 오른쪽에 사용자 이름·로그아웃, `applyMe()` 가 권한 없는 탭 제거. 권한 단위는 화면(파일) 단위이며 `auth.js APPS` 에 앱을 추가하면 홈 타일·권한 체크박스·탭이 자동으로 늘어난다. curl 로 게이트 전 항목 검증, Playwright 로 로그인·홈·계정관리·탭 필터 확인. **다음 작업: 일정 관리 화면(schedule.html) 본체 — 일정·메모 저장.**
 - 2026-09-15 (23): 실기 로그: DATA 폴더 첫 훑기 573초(IsBigFolder 가 newDrive·lastScan 없음일 때만 돌아 기존 상태가 있으면 건너뜀). 에이전트 1.6.4: light 미정(null)이면 항상 가늠, ScanFolder 는 Select -First 20001 로 2만 개에서 멈추고 ScanLight 로 대체(big=true), ScanLight 정의를 ScanFolder 앞으로. DATA bat 의 usb-done 기록은 정상 동작 확인(코드 3, G:).
 - 2026-09-15 (22): 에이전트 1.6.3 — USB 항목 경로 비면(`DB=`) 건너뜀(로그), 화면 설정과 짝 안 맞는 usb-done 기록은 별도 usb 행(note "bat 기록…")으로 표시해 bat 줄이 동작했는지 화면에서 보이게. 사용자 실기: 그룹웨어 DB bat(robocopy E:) 실행 후 화면에 기록 없음 → 확인 대기.
 - 2026-09-15 (21): 큰 폴더(그룹웨어 data 증분 백업) 부하 대책 — 에이전트 1.6.2 backup.ps1 `ScanLight`(폴더 2단계+맨 위 파일의 LastWriteTime 최대값 = copied_time, count/size null, light=true), `IsBigFolder`(Depth 1 항목 3000개 초과, Select -First 로 멈춤), 전체 훑기 20초 초과 시 다음부터 light(usb-state 에 light 보관), 항목 옵션 `|full|light|전체|빠름`(target.mode). usb-done.ps1 은 5000개에서 멈춰 count null·light. 수집기 1.14.4: count null 허용·light 전달, 팝업 파일 수 "많음", backup.html 표시.

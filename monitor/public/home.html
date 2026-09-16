@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ILSAN 사내 시스템</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:14px; }
+  .top { display:flex; align-items:center; gap:10px; padding:0 20px; height:48px; border-bottom:1px solid var(--line); background:var(--card); }
+  .top .brand { font-weight:700; font-size:15px; } .top .spacer { flex:1; }
+  .top .who { color:var(--muted); font-size:12px; }
+  .top button { background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:5px 10px; font:inherit; font-size:12px; cursor:pointer; }
+  .top button:hover { color:var(--text); }
+  .wrap { max-width:900px; margin:0 auto; padding:48px 20px; }
+  h1 { font-size:22px; margin:0 0 6px; } .lead { color:var(--muted); font-size:13px; margin-bottom:28px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+  a.tile { display:block; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 20px; text-decoration:none; color:inherit; transition:border-color .12s, transform .12s; }
+  a.tile:hover { border-color:var(--accent); transform:translateY(-2px); }
+  a.tile.off { opacity:.55; pointer-events:none; }
+  .tile .ico { font-size:30px; } .tile .nm { font-size:17px; font-weight:700; margin:10px 0 4px; }
+  .tile .ds { color:var(--muted); font-size:12px; }
+  .tile .sub { margin-top:12px; color:var(--muted); font-size:11px; border-top:1px solid var(--line); padding-top:10px; }
+  .msg { background:rgba(239,68,68,.12); border:1px solid var(--bad); color:#fecaca; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:20px; }
+  .empty { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand">ILSAN 사내 시스템</span><span class="spacer"></span><span class="who" id="who"></span><button id="out">로그아웃</button></div>
+<div class="wrap">
+  <div id="msg"></div>
+  <h1 id="hi">어느 화면으로 가시겠습니까?</h1>
+  <div class="lead" id="lead"></div>
+  <div class="tiles" id="tiles"></div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const denied = new URLSearchParams(location.search).get('denied');
+if (denied) $('#msg').innerHTML = `<div class="msg">"${esc(denied)}" 화면을 볼 권한이 없습니다. 관리자에게 요청하세요.</div>`;
+(async () => {
+  const r = await fetch('api/me');
+  if (r.status === 401) { location.href = 'login.html'; return; }
+  const j = await r.json();
+  $('#who').textContent = `${j.user.name} (${j.user.id})` + (j.user.admin ? ' · 관리자' : '');
+  $('#hi').textContent = `${j.user.name}님, 어느 화면으로 가시겠습니까?`;
+  $('#lead').textContent = '수집기 v' + j.version;
+  $('#tiles').innerHTML = j.apps.length ? j.apps.map(a => `
+    <a class="tile ${a.ready ? '' : 'off'}" href="${esc(a.home)}">
+      <div class="ico">${a.icon}</div>
+      <div class="nm">${esc(a.name)}${a.ready ? '' : ' <span style="font-size:12px;font-weight:400">(준비 중)</span>'}</div>
+      <div class="ds">${esc(a.desc)}</div>
+      ${a.pages.length > 1 ? `<div class="sub">${a.pages.map(p => esc(p[1])).join(' · ')}</div>` : ''}
+    </a>`).join('') : '<div class="empty">볼 수 있는 화면이 없습니다. 관리자에게 권한을 요청하세요.</div>';
+})();
+$('#out').onclick = async () => { await fetch('api/logout', { method: 'POST' }); location.href = 'login.html'; };
+</script>
+</body>
+</html>

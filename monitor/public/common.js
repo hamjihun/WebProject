@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.14.4';
+  const UI_VERSION = '1.15.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -26,9 +26,9 @@
     if (embed) return;
     const nav = document.createElement('nav');
     nav.id = 'topnav';
-    nav.innerHTML = `<div class="brand">서버 모니터</div>` +
-      PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}">${t}</a>`).join('') +
-      `<span class="spacer"></span><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
+    nav.innerHTML = `<a href="home.html" class="home" title="다른 화면으로 이동">← 홈</a><div class="brand">서버 모니터</div>` +
+      PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}" data-page="${f}">${t}</a>`).join('') +
+      `<span class="spacer"></span><span class="who" id="navwho"></span><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
     st.textContent = `#topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:44px;background:var(--card,#1e293b);border-bottom:1px solid var(--line,#334155);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
@@ -38,15 +38,31 @@
 #topnav a.on{color:#fff;background:var(--accent,#38bdf8);font-weight:700}
 :root[data-theme="light"] #topnav a.on{color:#0f172a}
 #topnav .spacer{flex:1}#topnav .ver{font-size:11px;color:var(--muted,#94a3b8);margin-right:8px}
+#topnav .home{margin-right:10px;border:1px solid var(--line,#334155)}
+#topnav .who{font-size:12px;color:var(--muted,#94a3b8);margin-right:8px}
 #topnav .bell b{background:#ef4444;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:4px}
 #topnav .snd{background:none;border:1px solid var(--line,#334155);color:var(--muted,#94a3b8);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;margin-right:6px;font-family:inherit}
 #topnav .snd.on{color:var(--text,#e2e8f0)}#topnav .snd.ring{background:#ef4444;color:#fff;border-color:#ef4444;animation:sndblink 1s infinite}
 @keyframes sndblink{50%{opacity:.5}}`;
     document.head.appendChild(st);
     sndInit();
+    applyMe();
     const fs = document.getElementById('navfs');
     if (fs) { fs.onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
       document.addEventListener('fullscreenchange', () => { fs.textContent = document.fullscreenElement ? '⛶ 전체화면 해제' : '⛶ 전체화면'; }); }
+  }
+  // 로그인한 사용자 정보: 이름 표시, 볼 수 없는 탭 숨기기
+  async function applyMe() {
+    try {
+      const r = await fetch('api/me');
+      if (r.status === 401) { location.href = 'login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
+      const j = await r.json();
+      const w = document.getElementById('navwho'); if (w) w.textContent = `${j.user.name}${j.user.admin ? ' · 관리자' : ''}`;
+      const o = document.getElementById('navout');
+      if (o) { o.hidden = false; o.onclick = async () => { await fetch('api/logout', { method: 'POST' }); location.href = 'login.html'; }; }
+      const allowed = j.user.pages || [];
+      for (const a of document.querySelectorAll('#topnav a[data-page]')) if (!allowed.includes(a.dataset.page)) a.remove();
+    } catch (e) {}
   }
   async function pollNav() {
     try {
@@ -168,6 +184,6 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ringing) sndStop(); });
   }
 
-  window.MON = { UI_VERSION, sound: { check: sndCheck, start: sndStart, stop: sndStop, init: sndInit, settings: () => snd }, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
+  window.MON = { UI_VERSION, applyMe, sound: { check: sndCheck, start: sndStart, stop: sndStop, init: sndInit, settings: () => snd }, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
     setVersion(v) { const e = document.getElementById('navver'); if (e) e.textContent = v ? '수집기 v' + v : ''; } };
 })();

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계정 관리</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; }
+  .top { display:flex; align-items:center; gap:10px; padding:0 20px; height:48px; border-bottom:1px solid var(--line); background:var(--card); }
+  .top .brand { font-weight:700; font-size:15px; } .top .spacer { flex:1; }
+  .top a, .top button { background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:5px 10px; font:inherit; font-size:12px; cursor:pointer; text-decoration:none; }
+  .top a:hover, .top button:hover { color:var(--text); }
+  .wrap { max-width:1100px; margin:0 auto; padding:22px 20px 60px; }
+  h1 { font-size:19px; margin:0 0 4px; } .lead { color:var(--muted); font-size:12px; margin-bottom:18px; }
+  .p { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:16px; }
+  .p h2 { font-size:15px; margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:400; font-size:12px; }
+  td.id b { font-size:14px; } td .tag { display:inline-block; background:rgba(56,189,248,.15); color:var(--accent); border-radius:5px; padding:1px 7px; font-size:11px; margin-left:6px; }
+  td .pg { color:var(--muted); font-size:12px; }
+  .btn { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 11px; font:inherit; font-size:12px; cursor:pointer; margin-left:4px; }
+  .btn:hover { border-color:var(--accent); } .btn.del:hover { border-color:var(--bad); color:var(--bad); }
+  .btn.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  .form { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px 16px; }
+  .form label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+  .form input[type=text], .form input[type=password] { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:8px 10px; font:inherit; }
+  .form input:focus { outline:none; border-color:var(--accent); }
+  .perm { grid-column:1/-1; border-top:1px solid var(--line); padding-top:12px; }
+  .perm .grp { margin-bottom:10px; } .perm .gn { font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .perm .ck { display:inline-flex; align-items:center; gap:5px; margin:0 14px 6px 0; cursor:pointer; }
+  .row2 { grid-column:1/-1; display:flex; align-items:center; gap:10px; }
+  .msg { font-size:12px; min-height:16px; } .msg.err { color:var(--bad); } .msg.ok { color:var(--ok); }
+  .hint { color:var(--muted); font-size:11px; margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand">계정 관리</span><span class="spacer"></span><span style="color:var(--muted);font-size:12px" id="who"></span><a href="home.html">홈</a><button id="out">로그아웃</button></div>
+<div class="wrap">
+  <h1>계정 관리</h1>
+  <div class="lead">계정을 만들고, 어떤 화면을 볼 수 있는지 정합니다. 관리자는 모든 화면과 이 계정 관리 화면을 쓸 수 있습니다.</div>
+
+  <div class="p">
+    <h2>계정 목록</h2>
+    <table><thead><tr><th style="width:190px">아이디 · 이름</th><th>볼 수 있는 화면</th><th style="width:130px">마지막 로그인</th><th style="width:150px"></th></tr></thead><tbody id="rows"></tbody></table>
+  </div>
+
+  <div class="p">
+    <h2 id="ftitle">새 계정 만들기</h2>
+    <form class="form" id="f">
+      <div><label for="fid">아이디 (영문 소문자·숫자)</label><input type="text" id="fid" autocomplete="off"><div class="hint" id="fidh">로그인할 때 쓰는 아이디입니다</div></div>
+      <div><label for="fname">이름</label><input type="text" id="fname" autocomplete="off" placeholder="예: 홍길동"></div>
+      <div><label for="fpw">비밀번호</label><input type="password" id="fpw" autocomplete="new-password"><div class="hint" id="fpwh">4자 이상</div></div>
+      <div class="perm">
+        <label class="ck" style="margin-bottom:10px"><input type="checkbox" id="fadmin"> <b>관리자</b> — 모든 화면 + 계정 관리</label>
+        <div id="perms"></div>
+      </div>
+      <div class="row2">
+        <button type="submit" class="btn go" id="fsave">계정 만들기</button>
+        <button type="button" class="btn" id="fcancel" hidden>취소</button>
+        <span class="msg" id="fmsg"></span>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let data = { users: [], pages: [], me: '' }, editing = null;
+
+function fmtT(t) { if (!t) return '없음'; const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function pageName(f) { for (const g of data.pages) for (const p of g.pages) if (p[0] === f) return p[1]; return f; }
+
+async function load() {
+  const r = await fetch('api/users');
+  if (r.status === 401) { location.href = 'login.html'; return; }
+  if (r.status === 403) { location.href = 'home.html'; return; }
+  data = await r.json();
+  $('#who').textContent = data.me;
+  $('#rows').innerHTML = data.users.map(u => `<tr>
+    <td class="id"><b>${esc(u.id)}</b>${u.admin ? '<span class="tag">관리자</span>' : ''}<br><span class="pg">${esc(u.name)}</span></td>
+    <td class="pg">${u.admin ? '모든 화면 · 계정 관리' : (u.pages.length ? u.pages.map(p => esc(pageName(p))).join(' · ') : '<span style="color:var(--bad)">없음</span>')}</td>
+    <td class="pg">${fmtT(u.last_login)}</td>
+    <td style="text-align:right"><button class="btn" data-edit="${esc(u.id)}">수정</button><button class="btn del" data-del="${esc(u.id)}"${u.id === data.me ? ' disabled title="지금 로그인한 계정"' : ''}>삭제</button></td>
+  </tr>`).join('');
+  $('#perms').innerHTML = data.pages.map(g => `<div class="grp"><div class="gn">${esc(g.name)}</div>${g.pages.map(p => `<label class="ck"><input type="checkbox" class="pchk" value="${esc(p[0])}"> ${esc(p[1])}</label>`).join('')}</div>`).join('');
+  for (const b of document.querySelectorAll('[data-edit]')) b.onclick = () => startEdit(b.dataset.edit);
+  for (const b of document.querySelectorAll('[data-del]')) b.onclick = () => del(b.dataset.del);
+  applyAdmin();
+}
+function checks() { return [...document.querySelectorAll('.pchk')]; }
+function applyAdmin() { const a = $('#fadmin').checked; for (const c of checks()) { c.disabled = a; if (a) c.checked = true; } }
+$('#fadmin').onchange = applyAdmin;
+
+function startEdit(id) {
+  const u = data.users.find(x => x.id === id); if (!u) return;
+  editing = id;
+  $('#ftitle').textContent = `계정 수정 — ${u.id}`;
+  $('#fid').value = u.id; $('#fid').disabled = true; $('#fidh').textContent = '아이디는 바꿀 수 없습니다';
+  $('#fname').value = u.name; $('#fpw').value = ''; $('#fpwh').textContent = '비우면 기존 비밀번호를 그대로 둡니다';
+  $('#fadmin').checked = u.admin;
+  for (const c of checks()) c.checked = u.admin || u.pages.includes(c.value);
+  applyAdmin();
+  $('#fsave').textContent = '저장'; $('#fcancel').hidden = false; $('#fmsg').textContent = '';
+  $('#fname').focus();
+}
+function reset() {
+  editing = null;
+  $('#ftitle').textContent = '새 계정 만들기';
+  $('#fid').value = ''; $('#fid').disabled = false; $('#fidh').textContent = '로그인할 때 쓰는 아이디입니다';
+  $('#fname').value = ''; $('#fpw').value = ''; $('#fpwh').textContent = '4자 이상';
+  $('#fadmin').checked = false;
+  for (const c of checks()) c.checked = false;
+  applyAdmin();
+  $('#fsave').textContent = '계정 만들기'; $('#fcancel').hidden = true;
+}
+$('#fcancel').onclick = () => { reset(); $('#fmsg').textContent = ''; };
+
+$('#f').onsubmit = async (e) => {
+  e.preventDefault();
+  const body = { id: editing || $('#fid').value, name: $('#fname').value, admin: $('#fadmin').checked, pages: checks().filter(c => c.checked).map(c => c.value) };
+  if ($('#fpw').value) body.pw = $('#fpw').value;
+  const m = $('#fmsg'); m.className = 'msg'; m.textContent = '저장 중...';
+  try {
+    const r = await fetch('api/users', { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+    m.className = 'msg ok'; m.textContent = `${j.user.id} 계정을 저장했습니다`;
+    reset(); await load();
+  } catch (err) { m.className = 'msg err'; m.textContent = err.message; }
+};
+async function del(id) {
+  if (!confirm(`계정 "${id}" 을(를) 지울까요? 되돌릴 수 없습니다.`)) return;
+  const m = $('#fmsg'); m.className = 'msg';
+  try {
+    const r = await fetch('api/users?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '지우지 못했습니다');
+    if (editing === id) reset();
+    m.className = 'msg ok'; m.textContent = `${id} 계정을 지웠습니다`;
+    await load();
+  } catch (err) { m.className = 'msg err'; m.textContent = err.message; }
+}
+$('#out').onclick = async () => { await fetch('api/logout', { method: 'POST' }); location.href = 'login.html'; };
+load();
+</script>
+</body>
+</html>
