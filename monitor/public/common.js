@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.18.3';
+  const UI_VERSION = '1.19.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -29,7 +29,7 @@
     const isMon = PAGES.some(([f]) => f === here);
     nav.innerHTML = `<a href="home.html" class="home" title="다른 화면으로 이동">← 홈</a><div class="brand" id="navbrand">${isMon ? '서버 모니터' : ''}</div>` +
       `<span id="navtabs">` + (isMon ? PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}" data-page="${f}">${t}</a>`).join('') : '') + `</span>` +
-      `<span class="spacer"></span><span class="who" id="navwho"></span><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
+      `<span class="spacer"></span><span class="who" id="navwho"></span><a class="snd" id="navpw" href="password.html" title="내 비밀번호 바꾸기" style="text-decoration:none" hidden>비밀번호</a><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
     st.textContent = `#topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:44px;background:var(--card,#1e293b);border-bottom:1px solid var(--line,#334155);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
@@ -59,6 +59,7 @@
       if (r.status === 401) { location.href = 'login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
       const j = await r.json();
       const w = document.getElementById('navwho'); if (w) w.textContent = `${j.user.name}${j.user.admin ? ' · 관리자' : ''}`;
+      const pw = document.getElementById('navpw'); if (pw) pw.hidden = false;
       const o = document.getElementById('navout');
       if (o) { o.hidden = false; o.onclick = async () => { await fetch('api/logout', { method: 'POST' }); location.href = 'login.html'; }; }
       // 지금 보고 있는 화면이 속한 묶음(서버 모니터링 / 일정 관리 …)의 탭만 보여 준다

@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.18.3';
+const VERSION = '1.19.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -460,6 +460,25 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/me') {
     if (!me) return json(res, 401, { ok: false, error: 'login' });
     return json(res, 200, { ok: true, user: auth.pub(me), apps: auth.appsFor(me), version: VERSION });
+  }
+
+  // 비밀번호를 바꿔야 하는 계정은 비밀번호 화면 말고는 열리지 않는다
+  if (me && me.must_change) {
+    const pwOk = url.pathname === '/password.html' || url.pathname === '/api/password' || url.pathname === '/api/me' || url.pathname === '/api/logout';
+    if (!pwOk) {
+      if (url.pathname.startsWith('/api/')) return json(res, 403, { ok: false, error: '비밀번호를 먼저 바꿔 주세요' });
+      if (url.pathname === '/' || /\.html$/.test(url.pathname)) { res.writeHead(302, { Location: '/password.html' }); return res.end(); }
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/password') {
+    if (!me) return json(res, 401, { ok: false, error: 'login' });
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      const u = auth.changePassword(me.id, raw.old, raw.new);
+      console.log(`[${new Date().toLocaleTimeString()}] 비밀번호 변경: ${u.id}`);
+      return json(res, 200, { ok: true, user: u });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
   if (!AGENT_PATHS && !me && url.pathname !== '/api/health') {

@@ -55,7 +55,7 @@ function create(opts) {
   }
   load();
 
-  function pub(u) { return u ? { id: u.id, name: u.name || u.id, admin: !!u.admin, pages: u.admin ? ALL_PAGES.slice() : (u.pages || []), depts: u.admin ? [] : (u.depts || []), created: u.created, last_login: u.last_login } : null; }
+  function pub(u) { return u ? { id: u.id, name: u.name || u.id, admin: !!u.admin, pages: u.admin ? ALL_PAGES.slice() : (u.pages || []), depts: u.admin ? [] : (u.depts || []), must_change: !!u.must_change, created: u.created, last_login: u.last_login, pw_changed: u.pw_changed || null } : null; }
   function can(u, file) {
     if (!u) return false;
     if (u.admin) return true;
@@ -110,11 +110,24 @@ function create(opts) {
         u.salt = newSalt(); u.hash = hashPw(raw.pw, u.salt);
       } else if (isNew) throw new Error('비밀번호를 입력하세요');
       if (raw.admin != null) u.admin = !!raw.admin;
+      if (raw.must_change != null) u.must_change = !!raw.must_change;   // 다음 로그인 때 비밀번호를 바꾸게 함
       if (Array.isArray(raw.pages)) u.pages = raw.pages.filter((p) => ALL_PAGES.includes(p));
       if (Array.isArray(raw.depts)) u.depts = raw.depts.map((d) => String(d).trim().slice(0, 20)).filter(Boolean).slice(0, 30);   // 일정에서 볼 수 있는 부서 (빈 값 = 전체)
       if (u.admin) u.pages = ALL_PAGES.slice();
       users[id] = u;
       if (!Object.values(users).some((x) => x.admin)) { u.admin = true; u.pages = ALL_PAGES.slice(); }   // 관리자가 한 명도 없어지는 것은 막는다
+      save();
+      return pub(u);
+    },
+    // 본인이 자기 비밀번호 바꾸기
+    changePassword(id, oldPw, newPw) {
+      const u = users[String(id || '')];
+      if (!u) throw new Error('없는 계정입니다');
+      if (!safeEq(hashPw(oldPw, u.salt), u.hash)) throw new Error('지금 쓰는 비밀번호가 맞지 않습니다');
+      if (String(newPw || '').length < 4) throw new Error('새 비밀번호는 4자 이상이어야 합니다');
+      if (safeEq(hashPw(newPw, u.salt), u.hash)) throw new Error('지금 쓰는 비밀번호와 다르게 정해 주세요');
+      u.salt = newSalt(); u.hash = hashPw(newPw, u.salt);
+      u.must_change = false; u.pw_changed = Date.now();
       save();
       return pub(u);
     },

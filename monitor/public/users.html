@@ -73,7 +73,9 @@
     <form class="form" id="f">
       <div><label for="fid">아이디 (영문 소문자·숫자)</label><input type="text" id="fid" autocomplete="off"><div class="hint" id="fidh">로그인할 때 쓰는 아이디입니다</div></div>
       <div><label for="fname">이름</label><input type="text" id="fname" autocomplete="off" placeholder="예: 홍길동"></div>
-      <div><label for="fpw">비밀번호</label><input type="password" id="fpw" autocomplete="new-password"><div class="hint" id="fpwh">4자 이상</div></div>
+      <div><label for="fpw">비밀번호</label><input type="password" id="fpw" autocomplete="new-password"><div class="hint" id="fpwh">4자 이상</div>
+        <label class="ck" style="margin-top:8px;font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="fmust" checked style="width:15px;height:15px"> 최초 로그인 시 비밀번호 변경</label>
+        <div class="hint">체크하면 이 사람이 처음 로그인할 때 비밀번호를 바꾸는 화면이 먼저 뜹니다.</div></div>
       <div class="perm">
         <label class="ck" style="margin-bottom:10px"><input type="checkbox" id="fadmin"> <b>관리자</b> — 모든 화면 + 계정 관리 + 모든 부서 일정</label>
         <div id="perms"></div>
@@ -134,7 +136,7 @@ async function load() {
   $('#rows').innerHTML = data.users.map(u => `<tr>
     <td class="id"><b>${esc(u.id)}</b>${u.admin ? '<span class="tag">관리자</span>' : ''}<br><span class="pg">${esc(u.name)}</span></td>
     <td class="pg">${u.admin ? '모든 화면 · 계정 관리' : (u.pages.length ? u.pages.map(p => esc(pageName(p))).join(' · ') : '<span style="color:var(--bad)">없음</span>')}</td>
-    <td class="pg">${u.admin ? '모든 부서' : (u.depts && u.depts.length ? u.depts.map(esc).join(' · ') : '모든 부서')}</td>
+    <td class="pg">${u.must_change ? '<span style="color:var(--warn,#fab219)">비밀번호 변경 대기</span><br>' : ''}${u.admin ? '모든 부서' : (u.depts && u.depts.length ? u.depts.map(esc).join(' · ') : '모든 부서')}</td>
     <td class="pg">${fmtT(u.last_login)}</td>
     <td style="text-align:right"><button class="btn" data-edit="${esc(u.id)}">수정</button><button class="btn del" data-del="${esc(u.id)}"${u.id === data.me ? ' disabled title="지금 로그인한 계정"' : ''}>삭제</button></td>
   </tr>`).join('');
@@ -162,6 +164,7 @@ function startEdit(id) {
   $('#fadmin').checked = u.admin;
   for (const c of checks()) c.checked = u.admin || u.pages.includes(c.value);
   for (const c of dchecks()) c.checked = !u.admin && (u.depts || []).includes(c.value);
+  $('#fmust').checked = !!u.must_change;
   applyAdmin();
   $('#fsave').textContent = '저장'; $('#fcancel').hidden = false; $('#fmsg').textContent = '';
   $('#fname').focus();
@@ -171,7 +174,7 @@ function reset() {
   $('#ftitle').textContent = '새 계정 만들기';
   $('#fid').value = ''; $('#fid').disabled = false; $('#fidh').textContent = '로그인할 때 쓰는 아이디입니다';
   $('#fname').value = ''; $('#fpw').value = ''; $('#fpwh').textContent = '4자 이상';
-  $('#fadmin').checked = false;
+  $('#fadmin').checked = false; $('#fmust').checked = true;   // 새 계정은 최초 로그인 때 바꾸게 하는 것이 기본
   for (const c of checks()) c.checked = false;
   for (const c of dchecks()) c.checked = false;
   applyAdmin();
@@ -181,7 +184,7 @@ $('#fcancel').onclick = () => { reset(); $('#fmsg').textContent = ''; };
 
 $('#f').onsubmit = async (e) => {
   e.preventDefault();
-  const body = { id: editing || $('#fid').value, name: $('#fname').value, admin: $('#fadmin').checked, pages: checks().filter(c => c.checked).map(c => c.value), depts: dchecks().filter(c => c.checked).map(c => c.value) };
+  const body = { id: editing || $('#fid').value, name: $('#fname').value, admin: $('#fadmin').checked, pages: checks().filter(c => c.checked).map(c => c.value), depts: dchecks().filter(c => c.checked).map(c => c.value), must_change: $('#fmust').checked };
   if ($('#fpw').value) body.pw = $('#fpw').value;
   const m = $('#fmsg'); m.className = 'msg'; m.textContent = '저장 중...';
   try {
