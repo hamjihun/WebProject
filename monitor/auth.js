@@ -26,6 +26,13 @@ const SESS_HOURS = 12, KEEP_DAYS = 30;
 function hashPw(pw, salt) { return crypto.scryptSync(String(pw), salt, 32).toString('hex'); }
 function newSalt() { return crypto.randomBytes(16).toString('hex'); }
 function newSid() { return crypto.randomBytes(24).toString('hex'); }
+// 비밀번호 규칙: 4자 이상, 아이디와 같을 수 없음 (대소문자·앞뒤 공백 무시)
+function checkPw(id, pw) {
+  const v = String(pw == null ? '' : pw);
+  if (v.length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다');
+  if (v.trim().toLowerCase() === String(id || '').trim().toLowerCase()) throw new Error('비밀번호를 아이디와 똑같이 정할 수 없습니다');
+  return v;
+}
 function safeEq(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 
 function create(opts) {
@@ -106,7 +113,7 @@ function create(opts) {
       const u = users[id] || { id, created: Date.now(), last_login: null, pages: [], depts: [] };
       if (raw.name != null) u.name = String(raw.name).trim().slice(0, 30) || id;
       if (raw.pw) {
-        if (String(raw.pw).length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다');
+        checkPw(id, raw.pw);
         u.salt = newSalt(); u.hash = hashPw(raw.pw, u.salt);
       } else if (isNew) throw new Error('비밀번호를 입력하세요');
       if (raw.admin != null) u.admin = !!raw.admin;
@@ -124,7 +131,7 @@ function create(opts) {
       const u = users[String(id || '')];
       if (!u) throw new Error('없는 계정입니다');
       if (!safeEq(hashPw(oldPw, u.salt), u.hash)) throw new Error('지금 쓰는 비밀번호가 맞지 않습니다');
-      if (String(newPw || '').length < 4) throw new Error('새 비밀번호는 4자 이상이어야 합니다');
+      checkPw(u.id, newPw);
       if (safeEq(hashPw(newPw, u.salt), u.hash)) throw new Error('지금 쓰는 비밀번호와 다르게 정해 주세요');
       u.salt = newSalt(); u.hash = hashPw(newPw, u.salt);
       u.must_change = false; u.pw_changed = Date.now();

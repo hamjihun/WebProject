@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.19.0) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.19.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `auth.js` | 로그인·계정·권한. 계정마다 `depts[]`(일정에서 볼 부서, 빈 배열=전체; `deptsOf`/`canDept`). `data/users.json` (users + sessions), scrypt 해시, 쿠키 `ims_sess`(12시간, "로그인 유지" 30일). `APPS` 배열(monitor/schedule)이 홈 타일·권한 목록·탭 필터의 근거. 계정 없으면 admin/rhksflwk1@ 자동 생성 | (수집기 내부) |
 | `public/login.html` · `home.html` · `users.html` · `password.html` | 로그인 / 홈(타일) / 계정 관리(관리자). `/` 는 home.html | 브라우저 |
 | `schedule.js` | 일정 데이터. `data/schedule.json` { events{id:{title,dept,owner,start,end,time,status,repeat{kind,until},desc,notes[],occ{날짜:{status,skip}}}}, depts[] }. 반복은 원본 하나만 저장하고 회차별 상태·메모는 `occ`/`notes[].date` 로 구분 | (수집기 내부) |
@@ -45,6 +45,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-16 (33): 최초 로그인 비밀번호 변경을 **로그인 화면 팝업**으로 (수집기 1.19.1). login.html 이 로그인 응답의 `user.must_change` 를 보고 `#pwmask` 모달을 띄우고(방금 입력한 비밀번호를 old 로 재사용해 새 비밀번호만 두 번 입력), 성공하면 next 로 이동. "취소하고 다시 로그인" 은 로그아웃 후 새로고침. password.html 과 서버 게이트(302)는 우회 대비로 그대로 둠. 비밀번호 규칙을 `auth.checkPw(id,pw)` 로 모아 **아이디와 같은 값 거부**(대소문자·앞뒤 공백 무시) + 4자 이상 — 계정 생성·수정(관리자)과 본인 변경 모두에 적용.
 - 2026-09-16 (32): **최초 로그인 비밀번호 변경** (수집기 1.19.0). 계정에 `must_change`(계정 관리 폼 체크박스, 새 계정 기본 켜짐) 와 `pw_changed`. `auth.changePassword(id, old, new)`(옛 비밀번호 확인·4자 이상·같은 값 거부·must_change 해제), `POST /api/password`. server.js 게이트: `me.must_change` 면 `password.html`·`/api/password`·`/api/me`·`/api/logout` 외의 화면은 302, API 는 403. `public/password.html` 신설(최초 강제면 안내 문구, 자발적이면 "홈으로" 링크). 상단 탭과 홈 화면에 "비밀번호 변경" 링크. 계정 목록에 "비밀번호 변경 대기" 표시.
 - 2026-09-16 (31): 사용자 요청으로 **홈 화면의 오늘·이번 주 요약 제거** — home.html 은 타일(바로 가기)만. 관련 CSS·스크립트 삭제. 오늘·이번 주는 일정 화면의 "할 일" 보기에 그대로 있음. `GET /api/schedule/todo`(server.js `todoView`)는 화면에서 쓰지 않지만 남겨 둠(아침 요약 등에 재사용 가능). 수집기 1.18.3.
 - 2026-09-16 (30): 부서 관리를 일정 화면에서 **계정 관리(users.html)** 로 옮김 — 맨 위 "부서 관리" 칸(부서별 인원 수 표시, ✕ 로 빼기, 이름 입력 후 추가, 저장 시 `PUT /api/schedule/depts` → load() 로 계정 권한 체크 목록까지 갱신). schedule.html 의 `#depts` 버튼·핸들러 제거(공휴일 관리는 그대로 일정 화면). 수집기 1.18.2.

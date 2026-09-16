@@ -18,6 +18,11 @@
   button:disabled { opacity:.6; cursor:default; }
   .err { margin-top:14px; color:var(--bad); font-size:12px; min-height:16px; }
   .foot { margin-top:16px; color:var(--muted); font-size:11px; text-align:center; }
+  .mask { position:fixed; inset:0; background:rgba(2,6,23,.72); display:flex; align-items:center; justify-content:center; padding:20px; z-index:20; }
+  .mask[hidden] { display:none; }
+  .notice { background:rgba(56,189,248,.12); border:1px solid var(--accent); border-radius:9px; padding:10px 13px; font-size:12.5px; line-height:1.6; margin-bottom:6px; color:var(--text); }
+  .rule { color:var(--muted); font-size:11.5px; line-height:1.6; margin-top:10px; }
+  .link { background:none; border:0; color:var(--muted); font:inherit; font-size:11.5px; text-decoration:underline; cursor:pointer; padding:0; }
 </style>
 </head>
 <body>
@@ -33,9 +38,53 @@
   <div class="err" id="err"></div>
   <div class="foot" id="ver"></div>
 </form>
+<div class="mask" id="pwmask" hidden>
+  <form class="box" id="pf">
+    <h1>비밀번호 변경</h1>
+    <div class="sub" id="pwho"></div>
+    <div class="notice">처음 로그인하셨습니다. <b>비밀번호를 바꿔야 이용할 수 있습니다.</b></div>
+    <label for="n1">새 비밀번호</label>
+    <input type="password" id="n1" autocomplete="new-password">
+    <label for="n2">새 비밀번호 확인</label>
+    <input type="password" id="n2" autocomplete="new-password">
+    <div class="rule">· 4자 이상<br>· 아이디와 똑같이 정할 수 없습니다<br>· 지금 쓰는 비밀번호와 달라야 합니다</div>
+    <button type="submit" id="pb">바꾸고 시작하기</button>
+    <div class="err" id="perr"></div>
+    <div class="foot"><button type="button" class="link" id="pcancel">취소하고 다시 로그인</button></div>
+  </form>
+</div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const next = new URLSearchParams(location.search).get('next') || '/home.html';
+// ---- 최초 로그인 비밀번호 변경 ----
+let curPw = '';
+function openChange(user) {
+  curPw = $('#pw').value;
+  $('#pwho').textContent = `${user.name} (${user.id}) 계정`;
+  $('#pwmask').hidden = false;
+  $('#n1').focus();
+}
+$('#pf').onsubmit = async (e) => {
+  e.preventDefault();
+  const m = $('#perr'); m.textContent = '';
+  if ($('#n1').value !== $('#n2').value) { m.textContent = '새 비밀번호 두 개가 서로 다릅니다'; $('#n2').focus(); return; }
+  const b = $('#pb'); b.disabled = true; b.textContent = '바꾸는 중...';
+  try {
+    const r = await fetch('api/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ old: curPw, new: $('#n1').value }) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '바꾸지 못했습니다');
+    location.href = next;
+  } catch (err) {
+    m.textContent = err.message; b.disabled = false; b.textContent = '바꾸고 시작하기';
+    $('#n1').value = ''; $('#n2').value = ''; $('#n1').focus();
+  }
+};
+$('#pcancel').onclick = async () => {
+  await fetch('api/logout', { method: 'POST' });
+  location.reload();
+};
+
 $('#f').onsubmit = async (e) => {
   e.preventDefault();
   const b = $('#b'); b.disabled = true; b.textContent = '확인 중...'; $('#err').textContent = '';
@@ -43,6 +92,7 @@ $('#f').onsubmit = async (e) => {
     const r = await fetch('api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: $('#id').value, pw: $('#pw').value, keep: $('#keep').checked }) });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '로그인할 수 없습니다');
+    if (j.user && j.user.must_change) { openChange(j.user); return; }   // 최초 로그인: 비밀번호를 바꿔야 들어갈 수 있다
     location.href = next;
   } catch (err) {
     $('#err').textContent = err.message; $('#pw').value = ''; $('#pw').focus();
