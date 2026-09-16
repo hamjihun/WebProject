@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -385,6 +385,35 @@ function removeHost(host) {
   return existed;
 }
 
+// 오늘과 이번 주(오늘부터 7일) 할 일 + 기한이 지난 미완료 일정
+function todoView(me, list) {
+  const dayKeyOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const today = dayKeyOf(now);
+  const end = new Date(now); end.setDate(end.getDate() + 6);
+  const hol = sched.holidays();
+  const item = (o) => ({
+    id: o.ev.id, title: o.ev.title, time: o.ev.time || '', dept: o.ev.dept || '', owner: o.ev.owner || '',
+    status: o.status, prio: o.ev.prio || '보통', share: o.ev.share || 'team', date: o.date, end: o.end,
+    desc: o.ev.desc || '', repeat: (o.ev.repeat && o.ev.repeat.kind) || 'none',
+    notes: (o.ev.notes || []).filter((n) => ((o.ev.repeat && o.ev.repeat.kind) || 'none') === 'none' || n.date === o.date)
+      .sort((a, b) => b.at - a.at).slice(0, 5).map((n) => ({ text: n.text, by: n.by, at: n.at })),
+  });
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i);
+    const k = dayKeyOf(d);
+    days.push({ date: k, holiday: hol[k] || '', items: [] });
+  }
+  for (const o of sched.occurrences(list, today, dayKeyOf(end))) {
+    for (const day of days) if (day.date >= o.date && day.date <= o.end) day.items.push(item(o));
+  }
+  // 기한이 지났는데 아직 안 끝난 일 (지난 60일)
+  const past = new Date(now); past.setDate(past.getDate() - 60);
+  const late = sched.occurrences(list, dayKeyOf(past), today).filter((o) => o.end < today && o.status !== '완료').map(item).reverse().slice(0, 20);
+  return { ok: true, today, days, late, me: me.name || me.id };
+}
+
 function serveStatic(res, file) {
   const p = path.join(__dirname, 'public', file);
   fs.readFile(p, (err, data) => {
@@ -463,16 +492,23 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- 일정 관리 ----
-  if (url.pathname === '/api/schedule' || url.pathname === '/api/schedule/depts' || url.pathname === '/api/schedule/holidays') {
+  if (url.pathname === '/api/schedule' || url.pathname === '/api/schedule/depts' || url.pathname === '/api/schedule/holidays' || url.pathname === '/api/schedule/todo') {
     if (!me || !auth.can(me, 'schedule.html')) return json(res, 403, { ok: false, error: '일정 화면 권한이 없습니다' });
     const who = me.name || me.id;
     const myDepts = auth.deptsOf(me);                                    // 빈 배열이면 전체 부서
-    const visible = () => sched.all().filter((e) => auth.canDept(me, e.dept));
+    // 개인 일정(share:'me')은 만든 사람만 본다. 팀 공유(share:'team')는 그 부서를 볼 수 있는 사람이 본다.
+    // (예전 버전에서 만든 일정은 share 값이 없으므로 팀 공유로 본다)
+    const mine = (e) => e.owner_id ? e.owner_id === me.id : (e.created_by === (me.name || me.id));
+    const canSee = (e) => ((e.share || 'team') !== 'me' ? auth.canDept(me, e.dept) : mine(e));
+    const visible = () => sched.all().filter(canSee);
     const checkDept = (d) => { if (!auth.canDept(me, d)) throw new Error('그 부서의 일정은 다룰 수 없습니다'); };
+    const checkOwn = (e) => { if (e && (e.share || 'team') === 'me' && !mine(e)) throw new Error('다른 사람의 개인 일정입니다'); };
     try {
+      // 오늘 · 이번 주 할 일 (홈 화면 요약용). 메모도 같이 내려보낸다.
+      if (req.method === 'GET' && url.pathname === '/api/schedule/todo') return json(res, 200, todoView(me, visible()));
       if (req.method === 'GET') return json(res, 200, {
         ok: true, events: visible(), depts: myDepts.length ? myDepts : sched.depts(), all_depts: sched.depts(),
-        status: sched.STATUS, prios: sched.PRIOS, holidays: sched.holidays(), me: who, admin: !!me.admin, limited: myDepts.length > 0,
+        status: sched.STATUS, prios: sched.PRIOS, holidays: sched.holidays(), me: who, me_id: me.id, admin: !!me.admin, limited: myDepts.length > 0,
       });
       if (req.method === 'PUT' && url.pathname === '/api/schedule/depts') {
         if (!me.admin) return json(res, 403, { ok: false, error: '부서 목록은 관리자만 고칠 수 있습니다' });
@@ -488,14 +524,14 @@ const server = http.createServer(async (req, res) => {
         const raw = JSON.parse((await readBody(req)) || '{}');
         if (myDepts.length && !raw.dept) raw.dept = myDepts[0];
         checkDept(raw.dept);
-        const e = sched.create(raw, who);
+        const e = sched.create(raw, who, me.id);
         console.log(`[${new Date().toLocaleTimeString()}] 일정 등록: ${e.title} (${e.start}, ${who})`);
         return json(res, 200, { ok: true, event: e, events: visible() });
       }
       if (req.method === 'PUT') {
         const raw = JSON.parse((await readBody(req)) || '{}');
-        const cur0 = sched.all().find((x) => x.id === raw.id);
-        if (cur0) checkDept(cur0.dept);
+        const cur0 = sched.get(raw.id);
+        if (cur0) { checkOwn(cur0); checkDept(cur0.dept); }
         if (raw.dept != null) checkDept(raw.dept);
         let e;
         if (raw.add_note) e = sched.addNote(raw.id, raw.add_note.date, raw.add_note.text, who).event;
@@ -506,8 +542,8 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'DELETE') {
         const id = url.searchParams.get('id') || '', date = url.searchParams.get('date') || '';
-        const cur1 = sched.all().find((x) => x.id === id);
-        if (cur1) checkDept(cur1.dept);
+        const cur1 = sched.get(id);
+        if (cur1) { checkOwn(cur1); checkDept(cur1.dept); }
         if (date) sched.skip(id, date); else sched.remove(id);
         console.log(`[${new Date().toLocaleTimeString()}] 일정 ${date ? '한 날짜 제외' : '삭제'}: ${id} (${who})`);
         return json(res, 200, { ok: true, events: visible() });

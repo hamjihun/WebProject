@@ -34,6 +34,11 @@ const REPEATS = ['none', 'week', 'month', 'year'];
 const MAX_EVENTS = 5000;
 
 const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+const D = (v) => { const [y, m, d] = String(v).split('-').map(Number); return new Date(y, m - 1, d); };
+const S = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addD = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+// n개월 뒤 같은 날짜 (없는 날짜면 말일)
+const addMK = (base, n, dom) => { const x = new Date(base.getFullYear(), base.getMonth() + n, 1); const last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate(); x.setDate(Math.min(dom, last)); return x; };
 const isTime = (v) => v === '' || /^\d{2}:\d{2}$/.test(String(v || ''));
 const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 
@@ -61,8 +66,8 @@ function create(opts) {
   load();
 
   // 등록·수정 공통: 들어온 값을 확인해서 일정 하나로 만든다
-  function apply(raw, base, by) {
-    const e = base || { id: crypto.randomBytes(6).toString('hex'), created: Date.now(), created_by: by, notes: [], occ: {} };
+  function apply(raw, base, by, ownerId) {
+    const e = base || { id: crypto.randomBytes(6).toString('hex'), created: Date.now(), created_by: by, owner_id: ownerId || '', notes: [], occ: {} };
     if (raw.title != null) e.title = str(raw.title, 100);
     if (!e.title) throw new Error('제목을 입력하세요');
     if (raw.dept != null) e.dept = str(raw.dept, 20);
@@ -77,6 +82,8 @@ function create(opts) {
     if (!e.status) e.status = '예정';
     if (raw.prio != null) e.prio = PRIOS.includes(raw.prio) ? raw.prio : '보통';
     if (!e.prio) e.prio = '보통';
+    if (raw.share != null) e.share = raw.share === 'team' ? 'team' : 'me';   // 기본은 개인 일정 (나만 보기)
+    if (!e.share) e.share = 'me';
     if (raw.repeat != null) {
       const kind = REPEATS.includes(raw.repeat.kind) ? raw.repeat.kind : 'none';
       const until = isDay(raw.repeat.until) ? raw.repeat.until : '';
@@ -104,6 +111,31 @@ function create(opts) {
       return this.holidays();
     },
     all() { return Object.values(events).sort((a, b) => (a.start || '').localeCompare(b.start || '')); },
+    get(id) { return events[String(id || '')] || null; },
+    // 반복 일정을 기간 안의 날짜들로 펼친다 (화면과 같은 규칙)
+    occurrences(list, from, to) {
+      const out = [];
+      for (const ev of list) {
+        const span = Math.round((D(ev.end || ev.start) - D(ev.start)) / 86400000);
+        const kind = (ev.repeat && ev.repeat.kind) || 'none';
+        const push = (date) => {
+          const end = S(addD(D(date), span));
+          const o = (ev.occ && ev.occ[date]) || null;
+          out.push({ ev, date, end, status: (o && o.status) || ev.status || '예정' });
+        };
+        if (kind === 'none') { if ((ev.end || ev.start) >= from && ev.start <= to) push(ev.start); continue; }
+        const first = D(ev.start), dom = first.getDate();
+        const until = (ev.repeat && ev.repeat.until) || to;
+        let i = 0, d = first;
+        while (S(d) <= until && S(d) <= to && i < 600) {
+          const ds = S(d);
+          if (S(addD(d, span)) >= from && !(ev.occ && ev.occ[ds] && ev.occ[ds].skip)) push(ds);
+          i++;
+          d = kind === 'week' ? addD(first, 7 * i) : kind === 'month' ? addMK(first, i, dom) : addMK(first, 12 * i, dom);
+        }
+      }
+      return out.sort((a, b) => a.date.localeCompare(b.date) || (a.ev.time || '99').localeCompare(b.ev.time || '99'));
+    },
     depts() { return depts.slice(); },
     setDepts(list) {
       const out = [];
@@ -112,9 +144,9 @@ function create(opts) {
       depts = out.slice(0, 30); save();
       return depts.slice();
     },
-    create(raw, by) {
+    create(raw, by, ownerId) {
       if (Object.keys(events).length >= MAX_EVENTS) throw new Error('일정이 너무 많습니다');
-      const e = apply(raw, null, by);
+      const e = apply(raw, null, by, ownerId);
       events[e.id] = e; save();
       return e;
     },

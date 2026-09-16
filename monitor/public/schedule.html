@@ -41,6 +41,31 @@
   .cal td.holiday { background:rgba(239,68,68,.07); } .cal td.holiday .dn { color:#f87171; }
   .pr { font-size:10px; border-radius:4px; padding:0 4px; font-weight:700; margin-right:3px; flex:none; }
   .pr.hi { background:#f59e0b; color:#0f172a; } .pr.ur { background:#ef4444; color:#fff; }
+  .pr.team { background:#64748b; color:#fff; } .pr.mine { background:#334155; color:#94a3b8; }
+  /* 할 일 보기 */
+  .todo { display:grid; grid-template-columns:minmax(320px,1fr) minmax(320px,1.15fr); gap:14px; align-items:start; }
+  @media (max-width:900px) { .todo { grid-template-columns:1fr; } }
+  .tcol { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .tcol h2 { font-size:15px; margin:0 0 4px; } .tcol h2 small { color:var(--muted); font-weight:400; font-size:12px; margin-left:6px; }
+  .tcol .sub { color:var(--muted); font-size:12px; margin-bottom:10px; }
+  .tcol.late { border-color:var(--bad); background:rgba(239,68,68,.08); margin-bottom:14px; }
+  .dgrp { margin-top:12px; } .dgrp:first-of-type { margin-top:0; }
+  .dgrp > .dh { font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:7px; }
+  .dgrp > .dh b { color:var(--text); font-size:13px; } .dgrp > .dh .hol { margin-left:6px; }
+  .tc { background:var(--bg); border:1px solid var(--line); border-left:3px solid var(--c,#38bdf8); border-radius:9px; padding:9px 11px; margin-bottom:8px; cursor:pointer; }
+  .tc:hover { border-color:var(--accent); }
+  .tc.done { opacity:.5; } .tc.done .h1 b { text-decoration:line-through; }
+  .tc .h1 { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:3px; }
+  .tc .h1 b { font-size:13.5px; } .tc .h1 .tm { color:var(--accent); font-size:12px; font-weight:700; }
+  .tc .h2l { color:var(--muted); font-size:11.5px; margin-bottom:5px; }
+  .tc .dsc { color:var(--text); font-size:12px; line-height:1.55; white-space:pre-wrap; margin:5px 0; opacity:.85; }
+  .tc .nt { background:var(--card); border-radius:6px; padding:5px 8px; margin-top:4px; font-size:12px; line-height:1.5; }
+  .tc .nt i { color:var(--muted); font-style:normal; font-size:11px; display:block; }
+  .tc .acts { display:flex; gap:5px; margin-top:7px; }
+  .tc .acts button { background:var(--card); border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:3px 9px; font:inherit; font-size:11px; cursor:pointer; }
+  .tc .acts button:hover { border-color:var(--accent); color:var(--text); }
+  .tc .acts button.on { color:#0f172a; font-weight:700; }
+  .tnone { color:var(--muted); font-size:12px; padding:14px 0; }
   .tlh.hol { color:#f87171; } .tlc.hol { background:rgba(239,68,68,.07); }
   .more { font-size:11px; color:var(--muted); cursor:pointer; padding:2px 5px; } .more:hover { color:var(--accent); }
 
@@ -117,12 +142,13 @@
   <div class="bar">
     <div class="g"><button id="prev">◀</button><button id="today">오늘</button><button id="next">▶</button></div>
     <h1 id="title">-</h1>
-    <div class="g"><button class="vw on" data-v="month">월</button><button class="vw" data-v="week">주</button><button class="vw" data-v="tl">타임라인</button><button class="vw" data-v="year">연간</button></div>
+    <div class="g"><button class="vw on" data-v="todo">할 일</button><button class="vw" data-v="month">월</button><button class="vw" data-v="week">주</button><button class="vw" data-v="tl">타임라인</button><button class="vw" data-v="year">연간</button></div>
     <span class="sp"></span>
     <label for="fdept">부서</label><select id="fdept"></select>
     <label for="fowner">담당자</label><select id="fowner"></select>
     <label for="fstat">상태</label><select id="fstat"></select>
     <label for="fprio">중요도</label><select id="fprio"></select>
+    <label for="fshare">공개</label><select id="fshare"><option value="">전체</option><option value="me">내 일정만</option><option value="team">팀 공유만</option></select>
     <button id="depts" title="부서 목록 고치기" hidden>부서 관리</button>
     <button id="hols" title="공휴일 고치기" hidden>공휴일 관리</button>
     <button class="add" id="add">+ 일정 등록</button>
@@ -145,6 +171,11 @@
       <div><label for="e_time">시간 (선택)</label><input type="time" id="e_time"></div>
       <div><label for="e_status">상태</label><select id="e_status"></select></div>
       <div><label for="e_prio">중요도</label><select id="e_prio"></select></div>
+      <div class="full" style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+        <label class="ck" style="display:flex;align-items:center;gap:7px;cursor:pointer;margin:0;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="e_share"> <b>팀 공유</b> <span style="color:var(--muted);font-size:12px">— 체크하면 같은 부서 사람들이 볼 수 있습니다. 체크하지 않으면 나만 보는 개인 일정입니다.</span>
+        </label>
+      </div>
       <div><label for="e_rep">반복</label><select id="e_rep"><option value="none">반복 안 함</option><option value="week">매주</option><option value="month">매월</option><option value="year">매년</option></select></div>
       <div id="repwrap" hidden><label for="e_until">반복 끝나는 날</label><input type="date" id="e_until"></div>
       <div class="full"><label for="e_desc">내용 (선택)</label><textarea id="e_desc" maxlength="2000" placeholder="자세한 내용을 적어 두면 나중에 찾기 쉽습니다"></textarea></div>
@@ -165,10 +196,11 @@ const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const REP_KO = { none: '', week: '매주 반복', month: '매월 반복', year: '매년 반복' };
 const MON_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 const prioTag = (p) => p === '긴급' ? '<span class="pr ur">긴급</span>' : p === '중요' ? '<span class="pr hi">중요</span>' : '';
+const shareTag = (ev) => (ev.share || 'team') === 'team' ? '<span class="pr team">팀</span>' : '';
 const HOL = (k) => (data.holidays || {})[k] || '';
 
 let data = { events: [], depts: [], status: [], prios: [], holidays: {}, me: '', admin: false };
-let view = 'month';
+let view = 'todo';
 let cur = new Date(); cur.setHours(0, 0, 0, 0);
 let sel = null;           // { id, date }
 let editing = null;       // 수정 중인 일정 id
@@ -212,6 +244,8 @@ function pass(o) {
   if (f.stat && o.status !== f.stat) return false;
   const fp = $('#fprio').value;
   if (fp && (o.ev.prio || '보통') !== fp) return false;
+  const fs = $('#fshare').value;
+  if (fs && (o.ev.share || 'team') !== fs) return false;
   return true;
 }
 // 기간 안의 모든 회차 (필터 적용)
@@ -232,6 +266,7 @@ function byDay(from, to) {
   return map;
 }
 function range() {
+  if (view === 'todo') return [TODAY, S(addD(D(TODAY), 6))];
   if (view === 'year') return [`${cur.getFullYear()}-01-01`, `${cur.getFullYear()}-12-31`];
   if (view === 'week') { const s = addD(cur, -cur.getDay()); return [S(s), S(addD(s, 6))]; }
   const s = new Date(cur.getFullYear(), cur.getMonth(), 1), e = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
@@ -241,17 +276,32 @@ function range() {
 
 function render() {
   const [from, to] = range();
-  $('#title').textContent = view === 'year' ? `${cur.getFullYear()}년`
+  $('#prev').hidden = $('#next').hidden = (view === 'todo');
+  $('#title').textContent = view === 'todo' ? '오늘 · 이번 주' : view === 'year' ? `${cur.getFullYear()}년`
     : view === 'week' ? `${D(from).getMonth() + 1}월 ${D(from).getDate()}일 ~ ${D(to).getMonth() + 1}월 ${D(to).getDate()}일`
     : `${cur.getFullYear()}년 ${cur.getMonth() + 1}월`;
   renderKpis();
-  if (view === 'month') renderMonth(from, to);
+  if (view === 'todo') renderTodo();
+  else if (view === 'month') renderMonth(from, to);
   else if (view === 'week') renderWeek(from);
   else if (view === 'year') renderYear();
   else renderTimeline();
   if (sel) openPanel(sel.id, sel.date);
 }
 function renderKpis() {
+  if (view === 'todo') {
+    const week = occurrences(TODAY, S(addD(D(TODAY), 6)));
+    const today = week.filter((o) => o.date <= TODAY && o.end >= TODAY);
+    const doneT = today.filter((o) => o.status === '완료').length;
+    const late = lateList().length;
+    $('#kpis').innerHTML = `
+      <div class="kpi go"><div class="l">오늘 할 일</div><div class="v">${today.length - doneT}<small style="font-size:13px;color:var(--muted)"> / ${today.length}건</small></div></div>
+      <div class="kpi"><div class="l">앞으로 7일</div><div class="v">${week.length}</div></div>
+      <div class="kpi ok"><div class="l">오늘 완료</div><div class="v">${doneT}</div></div>
+      <div class="kpi ${late ? 'bad' : ''}"><div class="l">밀린 일</div><div class="v">${late}</div></div>
+      <div class="kpi warn"><div class="l">진행 중</div><div class="v">${week.filter((o) => o.status === '진행').length}</div></div>`;
+    return;
+  }
   const yr = view === 'year';
   const a = yr ? `${cur.getFullYear()}-01-01` : S(new Date(cur.getFullYear(), cur.getMonth(), 1));
   const b = yr ? `${cur.getFullYear()}-12-31` : S(new Date(cur.getFullYear(), cur.getMonth() + 1, 0));
@@ -339,6 +389,57 @@ function renderTimeline() {
   $('#view').innerHTML = h + '</div></div>';
 }
 
+// 기한이 지났는데 아직 안 끝난 일 (지난 60일)
+function lateList() {
+  return occurrences(S(addD(D(TODAY), -60)), TODAY).filter((o) => o.end < TODAY && o.status !== '완료').reverse();
+}
+// 그 회차에 달린 메모
+function notesOf(o) {
+  const rep = (o.ev.repeat && o.ev.repeat.kind) || 'none';
+  return (o.ev.notes || []).filter((n) => rep === 'none' || n.date === o.date).sort((a, b) => b.at - a.at);
+}
+function todoCard(o, showDate) {
+  const notes = notesOf(o);
+  const done = o.status === '완료';
+  const multi = o.end !== o.date;
+  return `<div class="tc ${done ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}">
+    <div class="h1">${o.ev.time ? `<span class="tm">${o.ev.time}</span>` : ''}${prioTag(o.ev.prio)}${shareTag(o.ev)}<b>${esc(o.ev.title)}</b></div>
+    <div class="h2l"><span style="color:${ST_COLOR[o.status]}">●</span> ${o.status}${showDate ? ' · ' + o.date.slice(5).replace('-', '/') : ''}${multi ? ` (${o.date.slice(5).replace('-', '/')}~${o.end.slice(5).replace('-', '/')})` : ''} · ${esc(o.ev.owner || '담당자 없음')}${o.ev.dept ? ' · ' + esc(o.ev.dept) : ''}</div>
+    ${o.ev.desc ? `<div class="dsc">${esc(o.ev.desc)}</div>` : ''}
+    ${notes.slice(0, 3).map((n) => `<div class="nt"><i>${esc(n.by)} · ${fmtAt(n.at)}</i>${esc(n.text)}</div>`).join('')}
+    ${notes.length > 3 ? `<div class="nt" style="color:var(--muted)">메모 ${notes.length - 3}개 더 — 눌러서 보기</div>` : ''}
+    <div class="acts">${data.status.map((st) => `<button data-qs="${st}" data-qid="${o.id}" data-qd="${o.date}" class="${st === o.status ? 'on' : ''}" style="${st === o.status ? `background:${ST_COLOR[st]};border-color:${ST_COLOR[st]}` : ''}">${st}</button>`).join('')}</div>
+  </div>`;
+}
+// 오늘 · 이번 주 할 일 (메모까지 한 화면에)
+function renderTodo() {
+  const week = occurrences(TODAY, S(addD(D(TODAY), 6)));
+  const today = week.filter((o) => o.date <= TODAY && o.end >= TODAY);
+  const late = lateList();
+  const td = D(TODAY);
+  let h = '';
+  if (late.length) {
+    h += `<div class="tcol late"><h2>밀린 일 <small>기한이 지났는데 아직 안 끝난 일</small></h2>
+      ${late.slice(0, 10).map((o) => todoCard(o, true)).join('')}
+      ${late.length > 10 ? `<div class="tnone">그 밖에 ${late.length - 10}건 더 있습니다.</div>` : ''}</div>`;
+  }
+  h += '<div class="todo"><div class="tcol"><h2>오늘 <small>' + `${td.getMonth() + 1}월 ${td.getDate()}일 (${WD[td.getDay()]})${HOL(TODAY) ? ' · ' + esc(HOL(TODAY)) : ''}</small></h2>` +
+    `<div class="sub">${today.length ? `${today.filter((o) => o.status !== '완료').length}건 남음 · ${today.filter((o) => o.status === '완료').length}건 완료` : ''}</div>` +
+    (today.map((o) => todoCard(o, false)).join('') || '<div class="tnone">오늘 등록된 일정이 없습니다. 위 "+ 일정 등록" 으로 추가하세요.</div>') + '</div>';
+  h += '<div class="tcol"><h2>앞으로 7일 <small>내일부터</small></h2>';
+  let any = false;
+  for (let i = 1; i <= 6; i++) {
+    const k = S(addD(td, i)), d = D(k);
+    const list = week.filter((o) => o.date <= k && o.end >= k && !(o.date <= TODAY && o.end >= TODAY && o.date === o.end));
+    if (!list.length) continue;
+    any = true;
+    h += `<div class="dgrp"><div class="dh"><b>${d.getMonth() + 1}/${d.getDate()} (${WD[d.getDay()]})</b>${HOL(k) ? `<span class="hol">${esc(HOL(k))}</span>` : ''} · ${list.length}건</div>
+      ${list.map((o) => todoCard(o, false)).join('')}</div>`;
+  }
+  if (!any) h += '<div class="tnone">앞으로 일주일 동안 등록된 일정이 없습니다.</div>';
+  $('#view').innerHTML = h + '</div></div>';
+}
+
 // 연간 보기: 가로 12개월. 일정마다 한 줄이고, 그 달에 일정이 있으면 막대가 생긴다 (반복은 횟수도 표시).
 function renderYear() {
   const y = cur.getFullYear(), from = `${y}-01-01`, to = `${y}-12-31`;
@@ -398,7 +499,7 @@ function openPanel(id, date) {
     <h2>${esc(ev.title)}</h2>
     <div class="meta">
       <span class="badge" style="background:${deptColor(ev.dept)}">${esc(ev.dept || '부서 없음')}</span>
-      ${rep !== 'none' ? `<span class="badge" style="background:#475569;color:#e2e8f0">${REP_KO[rep]}</span>` : ''}${prioTag(ev.prio)}<br>
+      ${rep !== 'none' ? `<span class="badge" style="background:#475569;color:#e2e8f0">${REP_KO[rep]}</span>` : ''}${prioTag(ev.prio)}${(ev.share || 'team') === 'team' ? '<span class="pr team">팀 공유</span>' : '<span class="pr mine">나만 보기</span>'}<br>
       날짜 <b>${date}${span}</b>${ev.time ? ` <b>${ev.time}</b>` : ''}<br>
       담당자 <b>${esc(ev.owner || '-')}</b>
     </div>
@@ -439,6 +540,7 @@ function openForm(ev, day) {
   $('#e_time').value = ev ? (ev.time || '') : '';
   $('#e_status').value = ev ? (ev.status || '예정') : '예정';
   $('#e_prio').value = ev ? (ev.prio || '보통') : '보통';
+  $('#e_share').checked = ev ? (ev.share || 'team') === 'team' : false;   // 새 일정은 개인이 기본
   $('#e_rep').value = ev && ev.repeat ? ev.repeat.kind : 'none';
   $('#e_until').value = ev && ev.repeat ? (ev.repeat.until || '') : '';
   $('#e_desc').value = ev ? (ev.desc || '') : '';
@@ -454,7 +556,7 @@ $('#form').onsubmit = (e) => {
   const body = {
     title: $('#e_title').value, dept: $('#e_dept').value, owner: $('#e_owner').value,
     start: $('#e_start').value, end: $('#e_end').value, time: $('#e_time').value,
-    status: $('#e_status').value, prio: $('#e_prio').value, desc: $('#e_desc').value,
+    status: $('#e_status').value, prio: $('#e_prio').value, share: $('#e_share').checked ? 'team' : 'me', desc: $('#e_desc').value,
     repeat: { kind: $('#e_rep').value, until: $('#e_rep').value === 'none' ? '' : $('#e_until').value },
   };
   if (editing) body.id = editing;
@@ -480,12 +582,12 @@ async function apiDel(q) {
 }
 function fillFilters() {
   const owners = [...new Set(data.events.map((e) => e.owner).filter(Boolean))].sort();
-  const keep = { d: $('#fdept').value, o: $('#fowner').value, s: $('#fstat').value, p: $('#fprio').value };
+  const keep = { d: $('#fdept').value, o: $('#fowner').value, s: $('#fstat').value, p: $('#fprio').value, sh: $('#fshare').value };
   $('#fdept').innerHTML = '<option value="">전체</option>' + data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
   $('#fowner').innerHTML = '<option value="">전체</option>' + owners.map((o) => `<option>${esc(o)}</option>`).join('');
   $('#fstat').innerHTML = '<option value="">전체</option>' + data.status.map((s) => `<option>${esc(s)}</option>`).join('');
   $('#fprio').innerHTML = '<option value="">전체</option>' + (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
-  $('#fdept').value = keep.d; $('#fowner').value = keep.o; $('#fstat').value = keep.s; $('#fprio').value = keep.p;
+  $('#fdept').value = keep.d; $('#fowner').value = keep.o; $('#fstat').value = keep.s; $('#fprio').value = keep.p; $('#fshare').value = keep.sh;
   $('#e_dept').innerHTML = data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
   $('#e_status').innerHTML = data.status.map((s) => `<option>${esc(s)}</option>`).join('');
   $('#e_prio').innerHTML = (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
@@ -497,7 +599,10 @@ async function load() {
   if (r.status === 401) { location.href = 'login.html'; return; }
   if (r.status === 403) { location.href = 'home.html?denied=schedule.html'; return; }
   data = await r.json();
-  fillFilters(); render();
+  fillFilters();
+  const q = new URLSearchParams(location.search);   // 홈 화면에서 일정을 눌러 들어온 경우
+  if (q.get('id')) { const d = q.get('date'); if (d) cur = D(d); sel = { id: q.get('id'), date: d || TODAY }; history.replaceState(null, '', 'schedule.html'); }
+  render();
 }
 
 // ---- 버튼 ----
@@ -509,7 +614,7 @@ for (const b of document.querySelectorAll('.vw')) b.onclick = () => {
   for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x === b);
   render();
 };
-for (const id of ['fdept', 'fowner', 'fstat', 'fprio']) $('#' + id).onchange = render;
+for (const id of ['fdept', 'fowner', 'fstat', 'fprio', 'fshare']) $('#' + id).onchange = render;
 $('#add').onclick = () => openForm(null);
 $('#depts').onclick = async () => {
   const v = prompt('부서 목록을 한 줄에 하나씩 적어 주세요.', data.depts.join('\n'));
@@ -541,6 +646,8 @@ $('#hols').onclick = async () => {
   } catch (err) { alert(err.message); }
 };
 $('#view').onclick = (e) => {
+  const q = e.target.closest('[data-qs]');
+  if (q) { e.stopPropagation(); api('PUT', { id: q.dataset.qid, occ_status: { date: q.dataset.qd, status: q.dataset.qs } }); return; }
   const n = e.target.closest('[data-new]'); if (n) { openForm(null, n.dataset.new); return; }
   const m = e.target.closest('[data-day2]'); if (m) { cur = D(m.dataset.day2); view = 'week'; for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x.dataset.v === 'week'); render(); return; }
   const c = e.target.closest('[data-id]'); if (c) openPanel(c.dataset.id, c.dataset.date);
