@@ -10,7 +10,9 @@
 param(
   [int]$Port = 8787,
   [string]$Token = "",
-  [string]$BackupDir = "",          # 데이터 백업 위치 (비우면 C:\ims\monitor-backup, NAS 예: \\192.168.0.238\backup\ims-monitor)
+  [string]$BackupDir = "",          # 데이터 백업 위치를 새로 지정 (비우면 deploy\backup-target.txt 를 그대로 사용)
+  [string]$BackupUser = "",         # 공유 폴더(\\...)에 백업할 때 쓸 계정 (예: ILSAN\admin 또는 .\administrator)
+  [string]$BackupPass = "",         # 그 계정의 비밀번호 (작업 스케줄러가 암호화해서 보관합니다)
   [switch]$Public,
   [switch]$Uninstall
 )
@@ -59,17 +61,32 @@ if ($Public -and -not (Get-NetFirewallRule -DisplayName "ServerMonitor" -ErrorAc
   Write-Host "방화벽 규칙 추가: TCP $Port 인바운드 허용"
 }
 
-# ---- 데이터 백업 작업 (매일 03:10): data 폴더를 날짜별로, 프로그램 전체를 한 벌 복사 ----
+# ---- 데이터 백업 작업 (매일 새벽 1시): data 폴더를 날짜별로, 프로그램 전체를 한 벌 복사 ----
 $bkScript = Join-Path $PSScriptRoot "backup-data.cmd"
+$bkList   = Join-Path $PSScriptRoot "backup-target.txt"
 if (Test-Path $bkScript) {
-  if ($BackupDir) { Set-Content -Path (Join-Path $PSScriptRoot "backup-target.txt") -Value $BackupDir -Encoding Default }
-  $target = if ($BackupDir) { $BackupDir } elseif (Test-Path (Join-Path $PSScriptRoot "backup-target.txt")) { (Get-Content (Join-Path $PSScriptRoot "backup-target.txt") | Select-Object -First 1) } else { "C:\ims\monitor-backup" }
+  if ($BackupDir) { Set-Content -Path $bkList -Value $BackupDir -Encoding Default }
+  $targets = if (Test-Path $bkList) { @(Get-Content $bkList -Encoding Default | Where-Object { $_ -and -not $_.StartsWith('#') }) } else { @("C:\ims\monitor-backup") }
   Unregister-ScheduledTask -TaskName $BackupTask -Confirm:$false -ErrorAction SilentlyContinue
   $ba = New-ScheduledTaskAction -Execute $bkScript
-  $bt = New-ScheduledTaskTrigger -Daily -At "03:10"
+  $bt = New-ScheduledTaskTrigger -Daily -At "01:00"
   $bs = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) -StartWhenAvailable
-  Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -Principal $principal -Description "서버 모니터 데이터 백업 (매일 03:10)" | Out-Null
-  Write-Host "데이터 백업 작업 등록: 매일 03:10 -> $target  (지금 한 번 실행합니다)"
+  # 공유 폴더(\\...)가 있으면 SYSTEM 계정으로는 접근이 안 되므로 지정한 계정으로 등록한다
+  $needsUser = @($targets | Where-Object { $_.StartsWith('\\') }).Count -gt 0
+  if ($BackupUser -and $BackupPass) {
+    Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -User $BackupUser -Password $BackupPass -RunLevel Highest -Description "서버 모니터 데이터 백업 (매일 01:00)" | Out-Null
+    Write-Host "데이터 백업 작업 등록: 매일 01:00, 실행 계정 $BackupUser"
+  } else {
+    Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -Principal $principal -Description "서버 모니터 데이터 백업 (매일 01:00)" | Out-Null
+    Write-Host "데이터 백업 작업 등록: 매일 01:00 (SYSTEM 계정)"
+    if ($needsUser) {
+      Write-Warning "백업 위치에 공유 폴더가 있습니다. SYSTEM 계정은 공유 폴더에 접근하지 못합니다."
+      Write-Warning "  -> 설치 명령에 -BackupUser ""계정"" -BackupPass ""비밀번호"" 를 붙여 다시 실행하거나,"
+      Write-Warning "     작업 스케줄러에서 'ServerMonitorBackup' 작업의 실행 계정을 바꾸세요."
+    }
+  }
+  foreach ($t in $targets) { Write-Host "  백업 위치: $t" }
+  Write-Host "지금 한 번 실행합니다. 결과는 각 백업 위치의 backup.log 에 남습니다."
   Start-ScheduledTask -TaskName $BackupTask
 } else {
   Write-Warning "backup-data.cmd 를 찾을 수 없어 백업 작업은 등록하지 않았습니다."
