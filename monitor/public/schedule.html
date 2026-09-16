@@ -5,22 +5,459 @@
 <title>일정 관리</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; }
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --warn:#fab219; --bad:#ef4444; --accent:#38bdf8; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; }
-  .wrap { max-width:700px; margin:0 auto; padding:60px 20px; text-align:center; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:40px 30px; }
-  .ico { font-size:44px; } h1 { font-size:20px; margin:14px 0 8px; } p { color:var(--muted); line-height:1.7; margin:0; }
-  a { color:var(--accent); }
+  .wrap { padding:16px 20px 60px; max-width:1700px; margin:0 auto; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:14px; }
+  .bar button, .bar select, .bar input { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; }
+  .bar button:hover { border-color:var(--accent); }
+  .bar button.on { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  .bar h1 { font-size:18px; margin:0 4px; min-width:130px; text-align:center; }
+  .bar .g { display:flex; gap:4px; } .bar .sp { flex:1; }
+  .bar label { color:var(--muted); font-size:12px; }
+  .bar button.add { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:11px 14px; }
+  .kpi .l { color:var(--muted); font-size:12px; } .kpi .v { font-size:23px; font-weight:700; margin-top:2px; }
+  .kpi.ok .v { color:var(--ok); } .kpi.warn .v { color:var(--warn); } .kpi.bad .v { color:var(--bad); } .kpi.go .v { color:var(--accent); }
+
+  /* 월 달력 */
+  table.cal { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .cal th { color:var(--muted); font-weight:400; font-size:12px; padding:6px 4px; border-bottom:1px solid var(--line); }
+  .cal th.sun, .cal td.sun .dn { color:#f87171; } .cal th.sat, .cal td.sat .dn { color:#7dd3fc; }
+  .cal td { border:1px solid var(--line); vertical-align:top; height:112px; padding:4px; background:var(--card); }
+  .cal td.out { background:transparent; } .cal td.out .dn { opacity:.35; }
+  .cal td.today { outline:2px solid var(--accent); outline-offset:-2px; }
+  .cal .dn { font-size:13px; font-weight:700; padding:1px 3px; display:flex; justify-content:space-between; align-items:center; }
+  .cal .dn .plus { opacity:0; color:var(--muted); font-weight:400; cursor:pointer; font-size:15px; }
+  .cal td:hover .dn .plus { opacity:1; } .cal .dn .plus:hover { color:var(--accent); }
+  .chip { display:flex; align-items:center; gap:5px; padding:3px 5px; border-radius:5px; margin-top:2px; cursor:pointer; font-size:12px; background:rgba(148,163,184,.1); border-left:3px solid var(--c,#38bdf8); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chip:hover { background:rgba(148,163,184,.25); }
+  .chip.done { opacity:.5; } .chip.done .t { text-decoration:line-through; }
+  .chip .t { overflow:hidden; text-overflow:ellipsis; } .chip .hm { color:var(--muted); font-size:11px; }
+  .chip .st { font-size:10px; }
+  .more { font-size:11px; color:var(--muted); cursor:pointer; padding:2px 5px; } .more:hover { color:var(--accent); }
+
+  /* 주 보기 */
+  .week { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+  .wd { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; min-height:160px; }
+  .wd.today { border-color:var(--accent); }
+  .wd h3 { font-size:13px; margin:0 0 8px; display:flex; justify-content:space-between; }
+  .wd h3 small { color:var(--muted); font-weight:400; }
+  .wc { background:var(--bg); border:1px solid var(--line); border-left:3px solid var(--c,#38bdf8); border-radius:7px; padding:7px 8px; margin-bottom:6px; cursor:pointer; }
+  .wc:hover { border-color:var(--accent); } .wc.done { opacity:.55; }
+  .wc .t { font-weight:600; margin-bottom:4px; line-height:1.35; }
+  .wc .m { color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* 타임라인 */
+  .tl { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; }
+  .tlg { display:grid; gap:3px; min-width:820px; }
+  .tlh { color:var(--muted); font-size:11px; text-align:center; padding-bottom:4px; border-bottom:1px solid var(--line); }
+  .tlh.we { color:#f87171; } .tlh.today { color:var(--accent); font-weight:700; }
+  .tln { font-size:12px; padding:4px 10px 4px 2px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-right:1px solid var(--line); }
+  .tln b { font-weight:600; } .tln small { color:var(--muted); font-size:11px; margin-left:5px; }
+  .tlgrp { font-size:12px; color:var(--muted); padding:8px 2px 3px; border-bottom:1px solid var(--line); }
+  .tlc { border-left:1px solid rgba(148,163,184,.12); min-height:26px; }
+  .tlc.we { background:rgba(148,163,184,.06); } .tlc.today { background:rgba(56,189,248,.1); }
+  .bar2 { background:var(--c,#38bdf8); color:#0f172a; border-radius:5px; font-size:11px; padding:2px 5px; margin:3px 1px; cursor:pointer; white-space:nowrap; overflow:hidden; font-weight:700; min-height:18px; z-index:2; }
+  .bar2:hover { filter:brightness(1.15); } .bar2.done { opacity:.5; }
+
+  /* 상세 패널 */
+  .panel { position:fixed; top:0; right:0; width:390px; max-width:100%; height:100%; background:var(--card); border-left:1px solid var(--line); padding:18px 20px; overflow-y:auto; z-index:40; box-shadow:-10px 0 30px rgba(0,0,0,.35); }
+  .panel[hidden] { display:none; }
+  .panel .x { float:right; background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:4px 9px; cursor:pointer; font:inherit; }
+  .panel h2 { font-size:17px; margin:0 26px 6px 0; }
+  .meta { color:var(--muted); font-size:12px; line-height:1.9; margin-bottom:12px; }
+  .meta b { color:var(--text); font-weight:600; }
+  .badge { display:inline-block; border-radius:5px; padding:1px 8px; font-size:11px; color:#0f172a; font-weight:700; }
+  .stbtns { display:flex; gap:5px; margin:4px 0 14px; }
+  .stbtns button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--muted); border-radius:7px; padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
+  .stbtns button.on { font-weight:700; color:#0f172a; }
+  .sec { border-top:1px solid var(--line); padding-top:12px; margin-top:12px; }
+  .sec h3 { font-size:13px; margin:0 0 8px; color:var(--muted); font-weight:400; }
+  .desc { white-space:pre-wrap; line-height:1.6; color:var(--text); font-size:13px; }
+  .note { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:7px; }
+  .note .h { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-bottom:4px; }
+  .note .h button { background:none; border:0; color:var(--muted); cursor:pointer; font:inherit; padding:0 2px; }
+  .note .h button:hover { color:var(--bad); }
+  .note .b { white-space:pre-wrap; line-height:1.55; }
+  .nadd { display:flex; gap:6px; margin-top:8px; }
+  .nadd textarea { flex:1; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; resize:vertical; min-height:60px; }
+  .nadd button { background:var(--accent); color:#0f172a; border:0; border-radius:8px; padding:0 14px; font:inherit; font-weight:700; cursor:pointer; }
+  .pacts { display:flex; gap:6px; margin-top:16px; }
+  .pacts button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px; font:inherit; cursor:pointer; }
+  .pacts button:hover { border-color:var(--accent); } .pacts button.del:hover { border-color:var(--bad); color:var(--bad); }
+
+  /* 등록·수정 창 */
+  .mask { position:fixed; inset:0; background:rgba(2,6,23,.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .mask[hidden] { display:none; }
+  .modal { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px; width:520px; max-width:100%; max-height:92vh; overflow-y:auto; }
+  .modal h2 { font-size:17px; margin:0 0 16px; }
+  .fg { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .fg .full { grid-column:1/-1; }
+  .fg label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+  .fg input, .fg select, .fg textarea { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
+  .fg textarea { resize:vertical; min-height:70px; }
+  .fg input:focus, .fg select:focus, .fg textarea:focus { outline:none; border-color:var(--accent); }
+  .macts { display:flex; gap:8px; margin-top:18px; }
+  .macts button { flex:1; border-radius:8px; padding:10px; font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--bg); color:var(--text); }
+  .macts button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  .msg { color:var(--bad); font-size:12px; min-height:16px; margin-top:8px; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
 </style>
 </head>
 <body>
-<div class="wrap"><div class="card">
-  <div class="ico">📅</div>
-  <h1>일정 관리 화면은 준비 중입니다</h1>
-  <p>일정과 메모를 저장하는 화면을 이 자리에 만들 예정입니다.<br><a href="home.html">홈으로 돌아가기</a></p>
-</div></div>
+<div class="wrap">
+  <div class="bar">
+    <div class="g"><button id="prev">◀</button><button id="today">오늘</button><button id="next">▶</button></div>
+    <h1 id="title">-</h1>
+    <div class="g"><button class="vw on" data-v="month">월</button><button class="vw" data-v="week">주</button><button class="vw" data-v="tl">타임라인</button></div>
+    <span class="sp"></span>
+    <label for="fdept">부서</label><select id="fdept"></select>
+    <label for="fowner">담당자</label><select id="fowner"></select>
+    <label for="fstat">상태</label><select id="fstat"></select>
+    <button id="depts" title="부서 목록 고치기">부서 관리</button>
+    <button class="add" id="add">+ 일정 등록</button>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div id="view"></div>
+</div>
+
+<div class="panel" id="panel" hidden></div>
+
+<div class="mask" id="mask" hidden>
+  <form class="modal" id="form">
+    <h2 id="mtitle">일정 등록</h2>
+    <div class="fg">
+      <div class="full"><label for="e_title">제목</label><input type="text" id="e_title" maxlength="100" placeholder="예: 그룹웨어 서버 점검"></div>
+      <div><label for="e_dept">부서</label><select id="e_dept"></select></div>
+      <div><label for="e_owner">담당자</label><input type="text" id="e_owner" maxlength="20" list="owners" placeholder="이름 (비워도 됨)"><datalist id="owners"></datalist></div>
+      <div><label for="e_start">시작 날짜</label><input type="date" id="e_start"></div>
+      <div><label for="e_end">종료 날짜 <span style="font-size:11px">(하루면 비워 두기)</span></label><input type="date" id="e_end"></div>
+      <div><label for="e_time">시간 (선택)</label><input type="time" id="e_time"></div>
+      <div><label for="e_status">상태</label><select id="e_status"></select></div>
+      <div><label for="e_rep">반복</label><select id="e_rep"><option value="none">반복 안 함</option><option value="week">매주</option><option value="month">매월</option><option value="year">매년</option></select></div>
+      <div id="repwrap" hidden><label for="e_until">반복 끝나는 날</label><input type="date" id="e_until"></div>
+      <div class="full"><label for="e_desc">내용 (선택)</label><textarea id="e_desc" maxlength="2000" placeholder="자세한 내용을 적어 두면 나중에 찾기 쉽습니다"></textarea></div>
+    </div>
+    <div class="msg" id="mmsg"></div>
+    <div class="macts"><button type="button" id="mcancel">취소</button><button type="submit" class="go" id="msave">저장</button></div>
+  </form>
+</div>
+
 <script src="common.js"></script>
-<script>MON.renderNav();</script>
+<script>
+MON.renderNav();
+const $ = (s) => document.querySelector(s);
+const esc = MON.esc;
+const COLORS = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#f472b6', '#fb923c', '#60a5fa', '#4ade80'];
+const ST_COLOR = { '예정': '#60a5fa', '진행': '#fbbf24', '완료': '#22c55e', '보류': '#94a3b8' };
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const REP_KO = { none: '', week: '매주 반복', month: '매월 반복', year: '매년 반복' };
+
+let data = { events: [], depts: [], status: [], me: '' };
+let view = 'month';
+let cur = new Date(); cur.setHours(0, 0, 0, 0);
+let sel = null;           // { id, date }
+let editing = null;       // 수정 중인 일정 id
+
+const D = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+const S = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addD = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const addM = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; };
+const TODAY = S(new Date());
+const deptColor = (d) => COLORS[Math.max(0, data.depts.indexOf(d)) % COLORS.length];
+
+// 반복 일정을 기간 안의 날짜들로 펼친다
+function expand(ev, from, to) {
+  const out = [];
+  const span = Math.round((D(ev.end || ev.start) - D(ev.start)) / 86400000);
+  const kind = (ev.repeat && ev.repeat.kind) || 'none';
+  const mk = (date) => {
+    const end = S(addD(D(date), span));
+    const o = (ev.occ && ev.occ[date]) || null;
+    return { ev, id: ev.id, date, end, span, status: (o && o.status) || ev.status || '예정', rep: kind };
+  };
+  if (kind === 'none') { if ((ev.end || ev.start) >= from && ev.start <= to) out.push(mk(ev.start)); return out; }
+  let d = D(ev.start), guard = 0;
+  const until = (ev.repeat && ev.repeat.until) || to;
+  while (S(d) <= until && S(d) <= to && guard++ < 600) {
+    const ds = S(d);
+    if (S(addD(d, span)) >= from && !(ev.occ && ev.occ[ds] && ev.occ[ds].skip)) out.push(mk(ds));
+    d = kind === 'week' ? addD(d, 7) : kind === 'month' ? addM(d, 1) : addM(d, 12);
+  }
+  return out;
+}
+function pass(o) {
+  const f = { dept: $('#fdept').value, owner: $('#fowner').value, stat: $('#fstat').value };
+  if (f.dept && o.ev.dept !== f.dept) return false;
+  if (f.owner && (o.ev.owner || '') !== f.owner) return false;
+  if (f.stat && o.status !== f.stat) return false;
+  return true;
+}
+// 기간 안의 모든 회차 (필터 적용)
+function occurrences(from, to) {
+  const out = [];
+  for (const ev of data.events) for (const o of expand(ev, from, to)) if (pass(o)) out.push(o);
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.ev.time || '99').localeCompare(b.ev.time || '99') || a.ev.title.localeCompare(b.ev.title));
+}
+// 하루에 걸쳐 있는 회차 (여러 날짜짜리는 매일 보이게)
+function byDay(from, to) {
+  const map = {};
+  for (const o of occurrences(from, to)) {
+    let d = D(o.date > from ? o.date : from);
+    const last = D(o.end < to ? o.end : to);
+    let g = 0;
+    while (S(d) <= S(last) && g++ < 400) { (map[S(d)] = map[S(d)] || []).push(o); d = addD(d, 1); }
+  }
+  return map;
+}
+function range() {
+  if (view === 'week') { const s = addD(cur, -cur.getDay()); return [S(s), S(addD(s, 6))]; }
+  const s = new Date(cur.getFullYear(), cur.getMonth(), 1), e = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+  if (view === 'month') return [S(addD(s, -s.getDay())), S(addD(e, 6 - e.getDay()))];
+  return [S(s), S(e)];
+}
+
+function render() {
+  const [from, to] = range();
+  $('#title').textContent = view === 'week'
+    ? `${D(from).getMonth() + 1}월 ${D(from).getDate()}일 ~ ${D(to).getMonth() + 1}월 ${D(to).getDate()}일`
+    : `${cur.getFullYear()}년 ${cur.getMonth() + 1}월`;
+  renderKpis();
+  if (view === 'month') renderMonth(from, to);
+  else if (view === 'week') renderWeek(from);
+  else renderTimeline();
+  if (sel) openPanel(sel.id, sel.date);
+}
+function renderKpis() {
+  const m = new Date(cur.getFullYear(), cur.getMonth(), 1);
+  const list = occurrences(S(m), S(new Date(cur.getFullYear(), cur.getMonth() + 1, 0)));
+  const n = (s) => list.filter((o) => o.status === s).length;
+  const late = list.filter((o) => o.status !== '완료' && o.end < TODAY).length;
+  $('#kpis').innerHTML = `
+    <div class="kpi go"><div class="l">${cur.getMonth() + 1}월 전체</div><div class="v">${list.length}<small style="font-size:13px;color:var(--muted)"> 건</small></div></div>
+    <div class="kpi warn"><div class="l">진행 중</div><div class="v">${n('진행')}</div></div>
+    <div class="kpi ok"><div class="l">완료</div><div class="v">${n('완료')}</div></div>
+    <div class="kpi"><div class="l">예정</div><div class="v">${n('예정')}</div></div>
+    <div class="kpi ${late ? 'bad' : ''}"><div class="l">기한 지남</div><div class="v">${late}</div></div>`;
+}
+function chip(o, day) {
+  const done = o.status === '완료';
+  const cont = o.date < day ? '↳ ' : '';
+  return `<div class="chip ${done ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}" title="${esc(o.ev.title)}${o.ev.owner ? ' · ' + esc(o.ev.owner) : ''} · ${o.status}">
+    <span class="st" style="color:${ST_COLOR[o.status]}">●</span>${o.ev.time ? `<span class="hm">${o.ev.time}</span>` : ''}<span class="t">${cont}${esc(o.ev.title)}</span></div>`;
+}
+function renderMonth(from, to) {
+  const map = byDay(from, to);
+  let h = '<table class="cal"><thead><tr>' + WD.map((w, i) => `<th class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</th>`).join('') + '</tr></thead><tbody>';
+  let d = D(from);
+  while (S(d) <= to) {
+    h += '<tr>';
+    for (let i = 0; i < 7; i++) {
+      const k = S(d), out = d.getMonth() !== cur.getMonth(), list = map[k] || [];
+      const show = list.slice(0, 4);
+      h += `<td class="${out ? 'out' : ''} ${k === TODAY ? 'today' : ''} ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" data-day="${k}">
+        <div class="dn"><span>${d.getDate()}</span><span class="plus" data-new="${k}" title="이 날짜에 일정 등록">＋</span></div>
+        ${show.map((o) => chip(o, k)).join('')}
+        ${list.length > 4 ? `<div class="more" data-day2="${k}">+${list.length - 4}건 더 보기</div>` : ''}</td>`;
+      d = addD(d, 1);
+    }
+    h += '</tr>';
+  }
+  $('#view').innerHTML = h + '</tbody></table>';
+}
+function renderWeek(from) {
+  const map = byDay(from, S(addD(D(from), 6)));
+  let h = '<div class="week">';
+  for (let i = 0; i < 7; i++) {
+    const d = addD(D(from), i), k = S(d), list = map[k] || [];
+    h += `<div class="wd ${k === TODAY ? 'today' : ''}"><h3><span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" style="${i === 0 ? 'color:#f87171' : i === 6 ? 'color:#7dd3fc' : ''}">${d.getMonth() + 1}/${d.getDate()} (${WD[i]})</span><small>${list.length ? list.length + '건' : ''}</small></h3>
+      <div class="plus" data-new="${k}" style="color:var(--muted);cursor:pointer;font-size:12px;margin-bottom:6px">＋ 일정 추가</div>` +
+      (list.map((o) => `<div class="wc ${o.status === '완료' ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}">
+        <div class="t">${esc(o.ev.title)}</div>
+        <div class="m"><span style="color:${ST_COLOR[o.status]}">●</span> ${o.status}${o.ev.time ? ' · ' + o.ev.time : ''}</div>
+        <div class="m">${esc(o.ev.owner || '담당자 없음')} · ${esc(o.ev.dept || '-')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">-</div>') + '</div>';
+  }
+  $('#view').innerHTML = h + '</div>';
+}
+function renderTimeline() {
+  const s = new Date(cur.getFullYear(), cur.getMonth(), 1), e = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+  const from = S(s), to = S(e), days = e.getDate();
+  // 일정 하나가 한 줄. 반복 일정은 그 달에 도는 횟수만큼 막대가 생긴다.
+  const byEv = new Map();
+  for (const o of occurrences(from, to)) { if (!byEv.has(o.id)) byEv.set(o.id, []); byEv.get(o.id).push(o); }
+  const rows = [...byEv.values()].map((occs) => ({ ev: occs[0].ev, occs }))
+    .sort((a, b) => (a.ev.owner || 'ㅎㅎ').localeCompare(b.ev.owner || 'ㅎㅎ') || a.occs[0].date.localeCompare(b.occs[0].date));
+  if (!rows.length) { $('#view').innerHTML = '<div class="empty">이 달에 표시할 일정이 없습니다.</div>'; return; }
+  const dayInfo = [];
+  for (let i = 1; i <= days; i++) { const d = new Date(cur.getFullYear(), cur.getMonth(), i); dayInfo.push({ i, k: S(d), w: d.getDay() }); }
+  let h = `<div class="tl"><div class="tlg" style="grid-template-columns:230px repeat(${days},minmax(26px,1fr));min-width:${230 + days * 26}px">`;
+  h += '<div class="tlh" style="text-align:left;padding-left:2px;grid-row:1">일정</div>';
+  for (const d of dayInfo) h += `<div class="tlh ${d.w === 0 || d.w === 6 ? 'we' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:1;grid-column:${d.i + 1}">${d.i}<br>${WD[d.w]}</div>`;
+  let last = null, r = 1;
+  for (const row of rows) {
+    const who = row.ev.owner || '담당자 없음';
+    if (who !== last) {   // 담당자가 바뀌면 구분 줄
+      r++; last = who;
+      h += `<div class="tlgrp" style="grid-row:${r};grid-column:1/-1">${esc(who)}</div>`;
+    }
+    r++;
+    const done = row.occs.every((o) => o.status === '완료');
+    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> <b>${esc(row.ev.title)}</b><small>${esc(row.ev.dept || '')}</small></div>`;
+    for (const d of dayInfo) h += `<div class="tlc ${d.w === 0 || d.w === 6 ? 'we' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:${r};grid-column:${d.i + 1}"></div>`;
+    for (const o of row.occs) {
+      const st = D(o.date) < s ? 1 : D(o.date).getDate();
+      const en = D(o.end) > e ? days : D(o.end).getDate();
+      const len = Math.max(1, en - st + 1);
+      h += `<div class="bar2 ${o.status === '완료' ? 'done' : ''}" style="grid-row:${r};grid-column:${st + 1}/span ${len};--c:${deptColor(row.ev.dept)}" data-id="${o.id}" data-date="${o.date}" title="${esc(row.ev.title)} · ${o.date}${o.end !== o.date ? ' ~ ' + o.end : ''} · ${o.status}">${len >= 3 ? esc(row.ev.title) : ''}</div>`;
+    }
+  }
+  $('#view').innerHTML = h + '</div></div>';
+}
+
+// ---- 상세 패널 ----
+function openPanel(id, date) {
+  const ev = data.events.find((x) => x.id === id);
+  if (!ev) { closePanel(); return; }
+  sel = { id, date };
+  const o = (ev.occ && ev.occ[date]) || null;
+  const status = (o && o.status) || ev.status || '예정';
+  const rep = (ev.repeat && ev.repeat.kind) || 'none';
+  const notes = (ev.notes || []).filter((n) => rep === 'none' || n.date === date).sort((a, b) => b.at - a.at);
+  const span = ev.end && ev.end !== ev.start ? ` ~ ${S(addD(D(date), Math.round((D(ev.end) - D(ev.start)) / 86400000)))}` : '';
+  $('#panel').innerHTML = `
+    <button class="x" id="pclose">닫기 ✕</button>
+    <h2>${esc(ev.title)}</h2>
+    <div class="meta">
+      <span class="badge" style="background:${deptColor(ev.dept)}">${esc(ev.dept || '부서 없음')}</span>
+      ${rep !== 'none' ? `<span class="badge" style="background:#475569;color:#e2e8f0">${REP_KO[rep]}</span>` : ''}<br>
+      날짜 <b>${date}${span}</b>${ev.time ? ` <b>${ev.time}</b>` : ''}<br>
+      담당자 <b>${esc(ev.owner || '-')}</b>
+    </div>
+    <div class="stbtns">${data.status.map((s) => `<button data-st="${s}" class="${s === status ? 'on' : ''}" style="${s === status ? `background:${ST_COLOR[s]};border-color:${ST_COLOR[s]}` : ''}">${s}</button>`).join('')}</div>
+    ${rep !== 'none' ? '<div style="color:var(--muted);font-size:11px;margin:-8px 0 12px">반복 일정입니다. 상태와 메모는 이 날짜에만 기록됩니다.</div>' : ''}
+    ${ev.desc ? `<div class="sec"><h3>내용</h3><div class="desc">${esc(ev.desc)}</div></div>` : ''}
+    <div class="sec"><h3>메모 ${notes.length ? `(${notes.length})` : ''}</h3>
+      ${notes.map((n) => `<div class="note"><div class="h"><span>${esc(n.by)} · ${fmtAt(n.at)}</span><button data-dn="${n.id}" title="메모 지우기">✕</button></div><div class="b">${esc(n.text)}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">메모가 없습니다.</div>'}
+      <div class="nadd"><textarea id="ntext" placeholder="처리 내용, 특이사항을 적어 두세요"></textarea><button id="nadd">등록</button></div>
+    </div>
+    <div class="pacts">
+      <button id="pedit">수정</button>
+      ${rep !== 'none' ? `<button id="pskip">이 날짜만 빼기</button>` : ''}
+      <button class="del" id="pdel">${rep !== 'none' ? '반복 전체 삭제' : '삭제'}</button>
+    </div>`;
+  $('#panel').hidden = false;
+  $('#pclose').onclick = closePanel;
+  for (const b of $('#panel').querySelectorAll('[data-st]')) b.onclick = () => api('PUT', { id, occ_status: { date, status: b.dataset.st } });
+  for (const b of $('#panel').querySelectorAll('[data-dn]')) b.onclick = () => api('PUT', { id, del_note: b.dataset.dn });
+  $('#nadd').onclick = () => { const t = $('#ntext').value.trim(); if (t) api('PUT', { id, add_note: { date, text: t } }); };
+  $('#ntext').onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('#nadd').click(); };
+  $('#pedit').onclick = () => openForm(ev);
+  if ($('#pskip')) $('#pskip').onclick = () => { if (confirm(`${date} 하루만 이 반복 일정에서 뺄까요?`)) apiDel(`id=${id}&date=${date}`); };
+  $('#pdel').onclick = () => { if (confirm(`"${ev.title}" 일정을 지울까요?${rep !== 'none' ? ' 반복 전체가 지워집니다.' : ''}`)) apiDel('id=' + id); };
+}
+function closePanel() { sel = null; $('#panel').hidden = true; }
+function fmtAt(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+
+// ---- 등록·수정 창 ----
+function openForm(ev, day) {
+  editing = ev ? ev.id : null;
+  $('#mtitle').textContent = ev ? '일정 수정' : '일정 등록';
+  $('#e_title').value = ev ? ev.title : '';
+  $('#e_dept').value = ev ? ev.dept : (data.depts[0] || '');
+  $('#e_owner').value = ev ? (ev.owner || '') : '';
+  $('#e_start').value = ev ? ev.start : (day || TODAY);
+  $('#e_end').value = ev && ev.end !== ev.start ? ev.end : '';
+  $('#e_time').value = ev ? (ev.time || '') : '';
+  $('#e_status').value = ev ? (ev.status || '예정') : '예정';
+  $('#e_rep').value = ev && ev.repeat ? ev.repeat.kind : 'none';
+  $('#e_until').value = ev && ev.repeat ? (ev.repeat.until || '') : '';
+  $('#e_desc').value = ev ? (ev.desc || '') : '';
+  repToggle(); $('#mmsg').textContent = '';
+  $('#mask').hidden = false; $('#e_title').focus();
+}
+function repToggle() { $('#repwrap').hidden = $('#e_rep').value === 'none'; }
+$('#e_rep').onchange = repToggle;
+$('#mcancel').onclick = () => { $('#mask').hidden = true; };
+$('#mask').onclick = (e) => { if (e.target === $('#mask')) $('#mask').hidden = true; };
+$('#form').onsubmit = (e) => {
+  e.preventDefault();
+  const body = {
+    title: $('#e_title').value, dept: $('#e_dept').value, owner: $('#e_owner').value,
+    start: $('#e_start').value, end: $('#e_end').value, time: $('#e_time').value,
+    status: $('#e_status').value, desc: $('#e_desc').value,
+    repeat: { kind: $('#e_rep').value, until: $('#e_rep').value === 'none' ? '' : $('#e_until').value },
+  };
+  if (editing) body.id = editing;
+  api(editing ? 'PUT' : 'POST', body, () => { $('#mask').hidden = true; });
+};
+
+// ---- 서버 통신 ----
+async function api(method, body, then) {
+  try {
+    const r = await fetch('api/schedule', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+    data.events = j.events; fillFilters(); render(); if (then) then();
+  } catch (err) { const m = $('#mmsg'); if (m && !$('#mask').hidden) m.textContent = err.message; else alert(err.message); }
+}
+async function apiDel(q) {
+  try {
+    const r = await fetch('api/schedule?' + q, { method: 'DELETE' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '지우지 못했습니다');
+    data.events = j.events; closePanel(); fillFilters(); render();
+  } catch (err) { alert(err.message); }
+}
+function fillFilters() {
+  const owners = [...new Set(data.events.map((e) => e.owner).filter(Boolean))].sort();
+  const keep = { d: $('#fdept').value, o: $('#fowner').value, s: $('#fstat').value };
+  $('#fdept').innerHTML = '<option value="">전체</option>' + data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
+  $('#fowner').innerHTML = '<option value="">전체</option>' + owners.map((o) => `<option>${esc(o)}</option>`).join('');
+  $('#fstat').innerHTML = '<option value="">전체</option>' + data.status.map((s) => `<option>${esc(s)}</option>`).join('');
+  $('#fdept').value = keep.d; $('#fowner').value = keep.o; $('#fstat').value = keep.s;
+  $('#e_dept').innerHTML = data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
+  $('#e_status').innerHTML = data.status.map((s) => `<option>${esc(s)}</option>`).join('');
+  $('#owners').innerHTML = owners.map((o) => `<option value="${esc(o)}">`).join('');
+}
+async function load() {
+  const r = await fetch('api/schedule');
+  if (r.status === 401) { location.href = 'login.html'; return; }
+  if (r.status === 403) { location.href = 'home.html?denied=schedule.html'; return; }
+  data = await r.json();
+  fillFilters(); render();
+}
+
+// ---- 버튼 ----
+$('#prev').onclick = () => { cur = view === 'week' ? addD(cur, -7) : addM(cur, -1); render(); };
+$('#next').onclick = () => { cur = view === 'week' ? addD(cur, 7) : addM(cur, 1); render(); };
+$('#today').onclick = () => { cur = new Date(); cur.setHours(0, 0, 0, 0); render(); };
+for (const b of document.querySelectorAll('.vw')) b.onclick = () => {
+  view = b.dataset.v;
+  for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x === b);
+  render();
+};
+for (const id of ['fdept', 'fowner', 'fstat']) $('#' + id).onchange = render;
+$('#add').onclick = () => openForm(null);
+$('#depts').onclick = async () => {
+  const v = prompt('부서 목록을 한 줄에 하나씩 적어 주세요.', data.depts.join('\n'));
+  if (v == null) return;
+  try {
+    const r = await fetch('api/schedule/depts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ depts: v.split('\n') }) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+    data.depts = j.depts; fillFilters(); render();
+  } catch (err) { alert(err.message); }
+};
+$('#view').onclick = (e) => {
+  const n = e.target.closest('[data-new]'); if (n) { openForm(null, n.dataset.new); return; }
+  const m = e.target.closest('[data-day2]'); if (m) { cur = D(m.dataset.day2); view = 'week'; for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x.dataset.v === 'week'); render(); return; }
+  const c = e.target.closest('[data-id]'); if (c) openPanel(c.dataset.id, c.dataset.date);
+};
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#mask').hidden) $('#mask').hidden = true; else closePanel(); } });
+load();
+</script>
 </body>
 </html>

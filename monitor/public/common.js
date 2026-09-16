@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.15.0';
+  const UI_VERSION = '1.16.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -26,8 +26,9 @@
     if (embed) return;
     const nav = document.createElement('nav');
     nav.id = 'topnav';
-    nav.innerHTML = `<a href="home.html" class="home" title="다른 화면으로 이동">← 홈</a><div class="brand">서버 모니터</div>` +
-      PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}" data-page="${f}">${t}</a>`).join('') +
+    const isMon = PAGES.some(([f]) => f === here);
+    nav.innerHTML = `<a href="home.html" class="home" title="다른 화면으로 이동">← 홈</a><div class="brand" id="navbrand">${isMon ? '서버 모니터' : ''}</div>` +
+      `<span id="navtabs">` + (isMon ? PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}" data-page="${f}">${t}</a>`).join('') : '') + `</span>` +
       `<span class="spacer"></span><span class="who" id="navwho"></span><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
@@ -60,8 +61,19 @@
       const w = document.getElementById('navwho'); if (w) w.textContent = `${j.user.name}${j.user.admin ? ' · 관리자' : ''}`;
       const o = document.getElementById('navout');
       if (o) { o.hidden = false; o.onclick = async () => { await fetch('api/logout', { method: 'POST' }); location.href = 'login.html'; }; }
-      const allowed = j.user.pages || [];
-      for (const a of document.querySelectorAll('#topnav a[data-page]')) if (!allowed.includes(a.dataset.page)) a.remove();
+      // 지금 보고 있는 화면이 속한 묶음(서버 모니터링 / 일정 관리 …)의 탭만 보여 준다
+      const app = (j.apps || []).find((a) => a.pages.some((p) => p[0] === here)) || null;
+      const tabs = document.getElementById('navtabs');
+      if (app && tabs) {
+        document.getElementById('navbrand').textContent = app.name;
+        tabs.innerHTML = app.pages.map(([f, t]) => `<a href="${f}" class="${f === here ? 'on' : ''}" data-page="${f}">${t}</a>`).join('');
+      } else if (tabs) {
+        const allowed = j.user.pages || [];
+        for (const a of tabs.querySelectorAll('a[data-page]')) if (!allowed.includes(a.dataset.page)) a.remove();
+      }
+      if (!app || app.key !== 'monitor') {   // 서버 알림·소리 버튼은 모니터링 화면에서만
+        for (const id of ['navbell', 'navsnd']) { const el = document.getElementById(id); if (el) el.hidden = true; }
+      }
     } catch (e) {}
   }
   async function pollNav() {

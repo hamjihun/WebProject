@@ -13,7 +13,7 @@ const APPS = [
     pages: [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']],
   },
   {
-    key: 'schedule', name: '일정 관리', desc: '일정 · 메모 (준비 중)', icon: '📅', ready: false, home: 'schedule.html',
+    key: 'schedule', name: '일정 관리', desc: '부서 업무 일정 · 메모', icon: '📅', ready: true, home: 'schedule.html',
     pages: [['schedule.html', '일정']],
   },
 ];

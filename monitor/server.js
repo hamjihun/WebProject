@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -23,7 +23,9 @@ const HOURLY_KEEP = Number(process.env.HOURLY_KEEP || 366 * 24);
 const SETTINGS_FILE = process.env.SETTINGS_FILE || path.join(__dirname, 'data', 'settings.json');   // 알림 설정
 const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: console.log });
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, 'data', 'users.json');            // 로그인 계정·권한
-const auth = require('./auth').create({ file: USERS_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
+const auth = require('./auth').create({ file: USERS_FILE, log: console.log });
+const SCHEDULE_FILE = process.env.SCHEDULE_FILE || path.join(__dirname, 'data', 'schedule.json');   // 일정 관리
+const sched = require('./schedule').create({ file: SCHEDULE_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
 const store = new Map();
@@ -456,6 +458,40 @@ const server = http.createServer(async (req, res) => {
         auth.remove(id, me.id);
         console.log(`[${new Date().toLocaleTimeString()}] 계정 삭제: ${id}`);
         return json(res, 200, { ok: true, users: auth.list() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
+  // ---- 일정 관리 ----
+  if (url.pathname === '/api/schedule' || url.pathname === '/api/schedule/depts') {
+    if (!me || !auth.can(me, 'schedule.html')) return json(res, 403, { ok: false, error: '일정 화면 권한이 없습니다' });
+    const who = me.name || me.id;
+    try {
+      if (req.method === 'GET') return json(res, 200, { ok: true, events: sched.all(), depts: sched.depts(), status: sched.STATUS, me: who });
+      if (req.method === 'PUT' && url.pathname === '/api/schedule/depts') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        return json(res, 200, { ok: true, depts: sched.setDepts(raw.depts) });
+      }
+      if (req.method === 'POST') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const e = sched.create(raw, who);
+        console.log(`[${new Date().toLocaleTimeString()}] 일정 등록: ${e.title} (${e.start}, ${who})`);
+        return json(res, 200, { ok: true, event: e, events: sched.all() });
+      }
+      if (req.method === 'PUT') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        let e;
+        if (raw.add_note) e = sched.addNote(raw.id, raw.add_note.date, raw.add_note.text, who).event;
+        else if (raw.del_note) e = sched.delNote(raw.id, raw.del_note);
+        else if (raw.occ_status) e = sched.setOccurrence(raw.id, raw.occ_status.date, raw.occ_status.status, who);
+        else e = sched.update(raw, who);
+        return json(res, 200, { ok: true, event: e, events: sched.all() });
+      }
+      if (req.method === 'DELETE') {
+        const id = url.searchParams.get('id') || '', date = url.searchParams.get('date') || '';
+        if (date) sched.skip(id, date); else sched.remove(id);
+        console.log(`[${new Date().toLocaleTimeString()}] 일정 ${date ? '한 날짜 제외' : '삭제'}: ${id} (${who})`);
+        return json(res, 200, { ok: true, events: sched.all() });
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
