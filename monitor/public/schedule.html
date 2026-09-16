@@ -123,6 +123,35 @@
   .mask { position:fixed; inset:0; background:rgba(2,6,23,.6); z-index:50; display:flex; align-items:center; justify-content:center; padding:20px; }
   .mask[hidden] { display:none; }
   .modal { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px; width:520px; max-width:100%; max-height:92vh; overflow-y:auto; }
+  .modal.wide { width:940px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+  @media (max-width:900px) { .modal.wide { width:560px; } .cols { grid-template-columns:1fr; } }
+  .fr label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+  .fr textarea { width:100%; min-height:372px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font:inherit; line-height:1.65; resize:vertical; }
+  .fr textarea:focus { outline:none; border-color:var(--accent); }
+  .fr .hint { color:var(--muted); font-size:11.5px; margin-top:6px; line-height:1.5; }
+  .fg .share { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:11px 13px; }
+  .fg .share label { display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin:0; }
+  .fg .share input[type=checkbox] { flex:none; width:16px; height:16px; min-width:16px; margin:1px 0 0; padding:0; border-radius:4px; cursor:pointer; accent-color:#38bdf8; }
+  .fg .share b { display:block; font-size:13px; color:var(--text); margin-bottom:3px; white-space:nowrap; }
+  .fg .share small { display:block; color:var(--muted); font-size:11.5px; line-height:1.5; }
+  /* 공휴일 관리 */
+  .hl { max-height:46vh; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+  .hrow { display:flex; align-items:center; gap:10px; padding:7px 11px; border-bottom:1px solid var(--line); font-size:13px; }
+  .hrow:last-child { border-bottom:0; }
+  .hrow .d { width:120px; color:var(--muted); font-size:12px; flex:none; }
+  .hrow .d.we { color:#f87171; }
+  .hrow .n { flex:1; font-weight:600; }
+  .hrow button { background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:2px 8px; font:inherit; font-size:12px; cursor:pointer; }
+  .hrow button:hover { border-color:var(--bad); color:var(--bad); }
+  .hadd { display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+  .hadd input { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
+  .hadd input#h_date { width:160px; } .hadd input#h_name { flex:1; min-width:140px; }
+  .hadd button { background:var(--accent); color:#0f172a; border:0; border-radius:8px; padding:9px 16px; font:inherit; font-weight:700; cursor:pointer; }
+  .hyear { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .hyear button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:7px; padding:5px 11px; font:inherit; cursor:pointer; }
+  .hyear b { font-size:15px; min-width:70px; text-align:center; }
+  .hyear span { color:var(--muted); font-size:12px; margin-left:auto; }
   .modal h2 { font-size:17px; margin:0 0 16px; }
   .fg { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
   .fg .full { grid-column:1/-1; }
@@ -160,29 +189,53 @@
 <div class="panel" id="panel" hidden></div>
 
 <div class="mask" id="mask" hidden>
-  <form class="modal" id="form">
+  <form class="modal wide" id="form">
     <h2 id="mtitle">일정 등록</h2>
-    <div class="fg">
-      <div class="full"><label for="e_title">제목</label><input type="text" id="e_title" maxlength="100" placeholder="예: 그룹웨어 서버 점검"></div>
-      <div><label for="e_dept">부서</label><select id="e_dept"></select></div>
-      <div><label for="e_owner">담당자</label><input type="text" id="e_owner" maxlength="20" list="owners" placeholder="이름 (비워도 됨)"><datalist id="owners"></datalist></div>
-      <div><label for="e_start">시작 날짜</label><input type="date" id="e_start"></div>
-      <div><label for="e_end">종료 날짜 <span style="font-size:11px">(하루면 비워 두기)</span></label><input type="date" id="e_end"></div>
-      <div><label for="e_time">시간 (선택)</label><input type="time" id="e_time"></div>
-      <div><label for="e_status">상태</label><select id="e_status"></select></div>
-      <div><label for="e_prio">중요도</label><select id="e_prio"></select></div>
-      <div class="full" style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
-        <label class="ck" style="display:flex;align-items:center;gap:7px;cursor:pointer;margin:0;font-size:13px;color:var(--text)">
-          <input type="checkbox" id="e_share"> <b>팀 공유</b> <span style="color:var(--muted);font-size:12px">— 체크하면 같은 부서 사람들이 볼 수 있습니다. 체크하지 않으면 나만 보는 개인 일정입니다.</span>
-        </label>
+    <div class="cols">
+      <div class="fg">
+        <div class="full"><label for="e_title">제목</label><input type="text" id="e_title" maxlength="100" placeholder="예: 그룹웨어 서버 점검"></div>
+        <div><label for="e_dept">부서</label><select id="e_dept"></select></div>
+        <div><label for="e_owner">담당자</label><input type="text" id="e_owner" maxlength="20" list="owners" placeholder="이름 (비워도 됨)"><datalist id="owners"></datalist></div>
+        <div><label for="e_start">시작 날짜</label><input type="date" id="e_start"></div>
+        <div><label for="e_end">종료 날짜 <span style="font-size:11px">(하루면 비워 두기)</span></label><input type="date" id="e_end"></div>
+        <div><label for="e_time">시간 (선택)</label><input type="time" id="e_time"></div>
+        <div><label for="e_status">상태</label><select id="e_status"></select></div>
+        <div><label for="e_prio">중요도</label><select id="e_prio"></select></div>
+        <div><label for="e_rep">반복</label><select id="e_rep"><option value="none">반복 안 함</option><option value="week">매주</option><option value="month">매월</option><option value="year">매년</option></select></div>
+        <div id="repwrap" class="full" hidden><label for="e_until">반복 끝나는 날</label><input type="date" id="e_until"></div>
+        <div class="full share">
+          <label><input type="checkbox" id="e_share"><span><b>팀 공유</b><small>체크하면 같은 부서 사람들이 이 일정을 볼 수 있습니다.<br>체크하지 않으면 나만 보는 개인 일정입니다.</small></span></label>
+        </div>
       </div>
-      <div><label for="e_rep">반복</label><select id="e_rep"><option value="none">반복 안 함</option><option value="week">매주</option><option value="month">매월</option><option value="year">매년</option></select></div>
-      <div id="repwrap" hidden><label for="e_until">반복 끝나는 날</label><input type="date" id="e_until"></div>
-      <div class="full"><label for="e_desc">내용 (선택)</label><textarea id="e_desc" maxlength="2000" placeholder="자세한 내용을 적어 두면 나중에 찾기 쉽습니다"></textarea></div>
+      <div class="fr">
+        <label for="e_desc">내용</label>
+        <textarea id="e_desc" maxlength="2000" placeholder="처리할 내용, 준비물, 연락처, 확인할 항목 등을 자유롭게 적어 두세요.&#10;&#10;예)&#10;- ERP 부산 서버 SQL 백업 경로 확인&#10;- 업체 담당자 010-0000-0000&#10;- 작업 후 백업 탭에서 결과 확인"></textarea>
+        <div class="hint">저장한 뒤에도 일정을 눌러 언제든 고칠 수 있습니다. 진행하면서 생기는 기록은 일정을 클릭해 <b>메모</b>로 쌓으면 날짜별로 남습니다.</div>
+      </div>
     </div>
     <div class="msg" id="mmsg"></div>
     <div class="macts"><button type="button" id="mcancel">취소</button><button type="submit" class="go" id="msave">저장</button></div>
   </form>
+</div>
+
+<div class="mask" id="hmask" hidden>
+  <div class="modal" id="hmodal">
+    <h2 style="font-size:17px;margin:0 0 4px">공휴일 관리</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:14px">달력에 빨간 글씨로 표시됩니다. 음력 명절·대체공휴일·임시공휴일은 정부 공고에 따라 바뀌므로 확인하고 고쳐 주세요. 회사 휴무일(창립기념일 등)도 적을 수 있습니다.</div>
+    <div class="hyear"><button id="hprev">◀</button><b id="hyeartxt">2026년</b><button id="hnext">▶</button><span id="hcount"></span></div>
+    <div class="hl" id="hlist"></div>
+    <div class="hadd">
+      <input type="date" id="h_date"><input type="text" id="h_name" maxlength="20" list="holnames" placeholder="이름 (예: 설날, 대체공휴일)">
+      <button type="button" id="hadd">추가</button>
+    </div>
+    <datalist id="holnames">
+      <option value="신정"><option value="설날"><option value="설날 연휴"><option value="삼일절"><option value="어린이날"><option value="부처님오신날">
+      <option value="현충일"><option value="광복절"><option value="추석"><option value="추석 연휴"><option value="개천절"><option value="한글날">
+      <option value="성탄절"><option value="대체공휴일"><option value="임시공휴일"><option value="회사 휴무일"><option value="창립기념일">
+    </datalist>
+    <div class="msg" id="hmsg"></div>
+    <div class="macts"><button type="button" id="hcancel">취소</button><button type="button" class="go" id="hsave">저장</button></div>
+  </div>
 </div>
 
 <script src="common.js"></script>
@@ -626,24 +679,44 @@ $('#depts').onclick = async () => {
     data.depts = j.depts; fillFilters(); render();
   } catch (err) { alert(err.message); }
 };
-$('#hols').onclick = async () => {
-  const y = cur.getFullYear();
-  const lines = Object.entries(data.holidays || {}).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k} ${v}`);
-  const v = prompt(`공휴일을 한 줄에 하나씩 적어 주세요.  (예: ${y}-01-01 신정)\n음력 명절·대체공휴일·임시공휴일은 정부 공고에 따라 바뀔 수 있으니 여기서 고치시면 됩니다.`, lines.join('\n'));
-  if (v == null) return;
-  const map = {};
-  for (const line of v.split('\n')) {
-    const t = line.trim(); if (!t) continue;
-    const m = /^(\d{4}-\d{2}-\d{2})\s+(.+)$/.exec(t);
-    if (!m) { alert(`이 줄을 알아볼 수 없습니다:\n${t}\n\n"2026-01-01 신정" 처럼 적어 주세요.`); return; }
-    map[m[1]] = m[2].trim();
-  }
+// ---- 공휴일 관리 창 ----
+let holTmp = null, holYear = new Date().getFullYear();
+function renderHols() {
+  const list = Object.entries(holTmp).filter(([k]) => k.startsWith(holYear + '-')).sort((a, b) => a[0].localeCompare(b[0]));
+  $('#hyeartxt').textContent = holYear + '년';
+  $('#hcount').textContent = `${list.length}일`;
+  $('#hlist').innerHTML = list.map(([k, v]) => {
+    const d = D(k), w = d.getDay();
+    return `<div class="hrow"><span class="d ${w === 0 || w === 6 ? 'we' : ''}">${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[w]})</span><span class="n">${esc(v)}</span><button data-hd="${k}">지우기</button></div>`;
+  }).join('') || '<div class="hrow" style="color:var(--muted)">이 해에 등록된 공휴일이 없습니다. 아래에서 추가하세요.</div>';
+  for (const b of $('#hlist').querySelectorAll('[data-hd]')) b.onclick = () => { delete holTmp[b.dataset.hd]; renderHols(); };
+}
+$('#hols').onclick = () => {
+  holTmp = Object.assign({}, data.holidays); holYear = cur.getFullYear();
+  $('#hmsg').textContent = ''; $('#h_date').value = ''; $('#h_name').value = '';
+  renderHols(); $('#hmask').hidden = false;
+};
+$('#hprev').onclick = () => { holYear--; renderHols(); };
+$('#hnext').onclick = () => { holYear++; renderHols(); };
+$('#hcancel').onclick = () => { $('#hmask').hidden = true; };
+$('#hmask').onclick = (e) => { if (e.target === $('#hmask')) $('#hmask').hidden = true; };
+$('#hadd').onclick = () => {
+  const d = $('#h_date').value, n = $('#h_name').value.trim();
+  if (!d) { $('#hmsg').textContent = '날짜를 고르세요'; return; }
+  if (!n) { $('#hmsg').textContent = '이름을 적으세요 (예: 설날)'; return; }
+  holTmp[d] = n; holYear = Number(d.slice(0, 4));
+  $('#h_date').value = ''; $('#h_name').value = ''; $('#hmsg').textContent = '';
+  renderHols(); $('#h_date').focus();
+};
+$('#h_name').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#hadd').click(); } };
+$('#hsave').onclick = async () => {
+  $('#hmsg').className = 'msg'; $('#hmsg').textContent = '저장 중...';
   try {
-    const r = await fetch('api/schedule/holidays', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ holidays: map }) });
+    const r = await fetch('api/schedule/holidays', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ holidays: holTmp }) });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
-    data.holidays = j.holidays; render();
-  } catch (err) { alert(err.message); }
+    data.holidays = j.holidays; $('#hmask').hidden = true; render();
+  } catch (err) { $('#hmsg').textContent = err.message; }
 };
 $('#view').onclick = (e) => {
   const q = e.target.closest('[data-qs]');
@@ -652,7 +725,7 @@ $('#view').onclick = (e) => {
   const m = e.target.closest('[data-day2]'); if (m) { cur = D(m.dataset.day2); view = 'week'; for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x.dataset.v === 'week'); render(); return; }
   const c = e.target.closest('[data-id]'); if (c) openPanel(c.dataset.id, c.dataset.date);
 };
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#mask').hidden) $('#mask').hidden = true; else closePanel(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#hmask').hidden) $('#hmask').hidden = true; else if (!$('#mask').hidden) $('#mask').hidden = true; else closePanel(); } });
 load();
 </script>
 </body>
