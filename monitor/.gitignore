@@ -1,3 +1,4 @@
 data/
 collector.log
 run-collector.cmd
+deploy/backup-cred.txt

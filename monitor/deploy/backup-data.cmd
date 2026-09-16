@@ -8,9 +8,12 @@ REM
 REM  저장 위치는 같은 폴더의 backup-target.txt 에 한 줄에 하나씩 적는다 (여러 곳에 동시에 보관됨).
 REM  # 로 시작하는 줄은 무시한다.
 REM
-REM  ※ 공유 폴더(\\...)에 저장하려면 작업 스케줄러에서 ServerMonitorBackup 작업의 실행 계정을
-REM     그 공유 폴더에 접근되는 계정으로 바꿔야 한다 (기본 SYSTEM 계정은 공유 폴더에 접근 못 함).
-REM     설치할 때 -BackupUser "계정" -BackupPass "비밀번호" 를 주면 자동으로 설정된다.
+REM  ※ 공유 폴더(\\...)에 저장하는 방법은 두 가지다.
+REM     (1) 같은 폴더의 backup-cred.txt 에 아래처럼 한 줄 적는다 (가장 쉬움, 계정 바꿀 필요 없음)
+REM           \\192.168.0.231\경영기획팀|계정|비밀번호
+REM         (| 앞뒤에 공백을 넣지 말 것. 이 파일은 관리자만 볼 수 있게 두세요.)
+REM     (2) 작업 스케줄러에서 ServerMonitorBackup 작업의 실행 계정을 그 공유 폴더에 접근되는
+REM         계정으로 바꾼다. (설치할 때 -BackupUser / -BackupPass 를 줘도 같다)
 REM
 REM  직접 실행해서 확인해도 된다 (두 번 눌러도 안전).
 REM ==========================================================
@@ -18,10 +21,14 @@ setlocal
 set ROOT=%~dp0..
 set SRC=%ROOT%\data
 set LIST=%~dp0backup-target.txt
+set CRED=%~dp0backup-cred.txt
 
 for /f "tokens=2 delims==" %%i in ('wmic os get localdatetime /value') do set DT=%%i
 set YMD=%DT:~0,4%-%DT:~4,2%-%DT:~6,2%
 set STAMP=%DT:~0,4%-%DT:~4,2%-%DT:~6,2% %DT:~8,2%:%DT:~10,2%:%DT:~12,2%
+
+REM 공유 폴더에 먼저 연결 (backup-cred.txt 가 있을 때만)
+if exist "%CRED%" for /f "usebackq eol=# tokens=1,2,3 delims=|" %%a in ("%CRED%") do call :netuse "%%a" "%%b" "%%c"
 
 if not exist "%LIST%" (
   call :backup "C:\ims\monitor-backup"
@@ -30,10 +37,23 @@ if not exist "%LIST%" (
 for /f "usebackq eol=# delims=" %%t in ("%LIST%") do call :backup "%%t"
 
 :done
+REM 결과 정리 (연결은 끊지 않고 둔다. 다음 실행 때 /delete 로 다시 연결한다)
 REM 백업 결과를 화면에서 볼 수 있도록 data\backup-status.json 으로 남긴다
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0backup-status.ps1" >nul 2>&1
 endlocal
 exit /b 0
+
+REM ---------- 공유 폴더 연결 ----------
+:netuse
+set "SH=%~1"
+set "SU=%~2"
+set "SP=%~3"
+if "%SH%"=="" goto :eof
+if "%SU%"=="" goto :eof
+net use "%SH%" /delete /y >nul 2>&1
+net use "%SH%" "%SP%" /user:"%SU%" >nul 2>&1
+if errorlevel 1 echo [%STAMP%] 공유 연결 실패 : %SH% ^(계정 %SU%^) >> "%ROOT%\data\backup-error.log"
+goto :eof
 
 REM ---------- 한 곳에 백업 ----------
 :backup
