@@ -10,18 +10,21 @@
 param(
   [int]$Port = 8787,
   [string]$Token = "",
+  [string]$BackupDir = "",          # 데이터 백업 위치 (비우면 C:\ims\monitor-backup, NAS 예: \\192.168.0.238\backup\ims-monitor)
   [switch]$Public,
   [switch]$Uninstall
 )
 $Bind = if ($Public) { "0.0.0.0" } else { "127.0.0.1" }
 
 $TaskName = "ServerMonitorCollector"
+$BackupTask = "ServerMonitorBackup"
 $Root = Split-Path -Parent $PSScriptRoot          # monitor 폴더
 $Node = (Get-Command node -ErrorAction SilentlyContinue).Source
 
 if ($Uninstall) {
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-  Write-Host "제거 완료: 작업 '$TaskName'"
+  Unregister-ScheduledTask -TaskName $BackupTask -Confirm:$false -ErrorAction SilentlyContinue
+  Write-Host "제거 완료: 작업 '$TaskName', '$BackupTask' (data 폴더와 백업본은 지우지 않았습니다)"
   exit 0
 }
 if (-not $Node) { Write-Error "node.exe 를 찾을 수 없습니다. Node.js 를 설치한 뒤 PowerShell 을 다시 여세요."; exit 1 }
@@ -54,6 +57,22 @@ Start-ScheduledTask -TaskName $TaskName
 if ($Public -and -not (Get-NetFirewallRule -DisplayName "ServerMonitor" -ErrorAction SilentlyContinue)) {
   New-NetFirewallRule -DisplayName "ServerMonitor" -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
   Write-Host "방화벽 규칙 추가: TCP $Port 인바운드 허용"
+}
+
+# ---- 데이터 백업 작업 (매일 03:10): data 폴더를 날짜별로, 프로그램 전체를 한 벌 복사 ----
+$bkScript = Join-Path $PSScriptRoot "backup-data.cmd"
+if (Test-Path $bkScript) {
+  if ($BackupDir) { Set-Content -Path (Join-Path $PSScriptRoot "backup-target.txt") -Value $BackupDir -Encoding Default }
+  $target = if ($BackupDir) { $BackupDir } elseif (Test-Path (Join-Path $PSScriptRoot "backup-target.txt")) { (Get-Content (Join-Path $PSScriptRoot "backup-target.txt") | Select-Object -First 1) } else { "C:\ims\monitor-backup" }
+  Unregister-ScheduledTask -TaskName $BackupTask -Confirm:$false -ErrorAction SilentlyContinue
+  $ba = New-ScheduledTaskAction -Execute $bkScript
+  $bt = New-ScheduledTaskTrigger -Daily -At "03:10"
+  $bs = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) -StartWhenAvailable
+  Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -Principal $principal -Description "서버 모니터 데이터 백업 (매일 03:10)" | Out-Null
+  Write-Host "데이터 백업 작업 등록: 매일 03:10 -> $target  (지금 한 번 실행합니다)"
+  Start-ScheduledTask -TaskName $BackupTask
+} else {
+  Write-Warning "backup-data.cmd 를 찾을 수 없어 백업 작업은 등록하지 않았습니다."
 }
 
 Start-Sleep -Seconds 3
