@@ -34,6 +34,15 @@
   .row2 { grid-column:1/-1; display:flex; align-items:center; gap:10px; }
   .msg { font-size:12px; min-height:16px; } .msg.err { color:var(--bad); } .msg.ok { color:var(--ok); }
   .hint { color:var(--muted); font-size:11px; margin-top:4px; }
+  .p h2 small { color:var(--muted); font-weight:400; font-size:12px; margin-left:8px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .chip { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; }
+  .chip b { font-weight:600; } .chip .c { color:var(--muted); font-size:11px; }
+  .chip button { background:none; border:0; color:var(--muted); cursor:pointer; font:inherit; font-size:13px; padding:0 2px; }
+  .chip button:hover { color:var(--bad); }
+  .dadd { display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+  .dadd input { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; width:200px; }
+  .dadd input:focus { outline:none; border-color:var(--accent); }
 </style>
 </head>
 <body>
@@ -41,6 +50,18 @@
 <div class="wrap">
   <h1>계정 관리</h1>
   <div class="lead">계정을 만들고, 어떤 화면을 볼 수 있는지 정합니다. 관리자는 모든 화면과 이 계정 관리 화면을 쓸 수 있습니다.</div>
+
+  <div class="p">
+    <h2>부서 관리 <small>일정 화면에서 고를 수 있는 부서 목록입니다</small></h2>
+    <div class="chips" id="deptlist"></div>
+    <div class="dadd">
+      <input type="text" id="d_new" maxlength="20" placeholder="부서 이름 (예: 지원팀)">
+      <button type="button" class="btn" id="dadd">추가</button>
+      <button type="button" class="btn go" id="dsave">저장</button>
+      <span class="msg" id="dmsg"></span>
+    </div>
+    <div class="hint">저장을 눌러야 반영됩니다. 부서를 지워도 이미 등록된 일정의 부서 이름은 그대로 남습니다 (목록에서만 사라집니다).</div>
+  </div>
 
   <div class="p">
     <h2>계정 목록</h2>
@@ -77,11 +98,38 @@ let data = { users: [], pages: [], me: '' }, editing = null;
 function fmtT(t) { if (!t) return '없음'; const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 function pageName(f) { for (const g of data.pages) for (const p of g.pages) if (p[0] === f) return p[1]; return f; }
 
+// ---- 부서 관리 ----
+let deptTmp = [];
+function renderDepts() {
+  $('#deptlist').innerHTML = deptTmp.map((d, i) => `<span class="chip"><b>${esc(d)}</b><span class="c">${data.users.filter(u => !u.admin && (u.depts || []).includes(d)).length}명</span><button data-dd="${i}" title="목록에서 빼기">✕</button></span>`).join('')
+    || '<span class="c" style="color:var(--muted);font-size:12px">부서가 없습니다. 아래에서 추가하세요.</span>';
+  for (const b of $('#deptlist').querySelectorAll('[data-dd]')) b.onclick = () => { deptTmp.splice(Number(b.dataset.dd), 1); renderDepts(); };
+}
+$('#dadd').onclick = () => {
+  const v = $('#d_new').value.trim();
+  if (!v) { $('#d_new').focus(); return; }
+  if (deptTmp.includes(v)) { $('#dmsg').className = 'msg err'; $('#dmsg').textContent = '이미 있는 부서입니다'; return; }
+  deptTmp.push(v); $('#d_new').value = ''; $('#dmsg').textContent = ''; renderDepts(); $('#d_new').focus();
+};
+$('#d_new').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#dadd').click(); } };
+$('#dsave').onclick = async () => {
+  const m = $('#dmsg'); m.className = 'msg'; m.textContent = '저장 중...';
+  try {
+    const r = await fetch('api/schedule/depts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ depts: deptTmp }) });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+    m.className = 'msg ok'; m.textContent = '부서 목록을 저장했습니다';
+    await load();
+  } catch (err) { m.className = 'msg err'; m.textContent = err.message; }
+};
+
 async function load() {
   const r = await fetch('api/users');
   if (r.status === 401) { location.href = 'login.html'; return; }
   if (r.status === 403) { location.href = 'home.html'; return; }
   data = await r.json();
+  deptTmp = (data.depts || []).slice();
+  renderDepts();
   $('#who').textContent = data.me;
   $('#rows').innerHTML = data.users.map(u => `<tr>
     <td class="id"><b>${esc(u.id)}</b>${u.admin ? '<span class="tag">관리자</span>' : ''}<br><span class="pg">${esc(u.name)}</span></td>

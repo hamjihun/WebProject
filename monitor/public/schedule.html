@@ -178,7 +178,6 @@
     <label for="fstat">상태</label><select id="fstat"></select>
     <label for="fprio">중요도</label><select id="fprio"></select>
     <label for="fshare">공개</label><select id="fshare"><option value="">전체</option><option value="me">내 일정만</option><option value="team">팀 공유만</option></select>
-    <button id="depts" title="부서 목록 고치기" hidden>부서 관리</button>
     <button id="hols" title="공휴일 고치기" hidden>공휴일 관리</button>
     <button class="add" id="add">+ 일정 등록</button>
   </div>
@@ -644,7 +643,7 @@ function fillFilters() {
   $('#e_dept').innerHTML = data.depts.map((d) => `<option>${esc(d)}</option>`).join('');
   $('#e_status').innerHTML = data.status.map((s) => `<option>${esc(s)}</option>`).join('');
   $('#e_prio').innerHTML = (data.prios || []).map((s) => `<option>${esc(s)}</option>`).join('');
-  $('#depts').hidden = !data.admin; $('#hols').hidden = !data.admin;
+  $('#hols').hidden = !data.admin;
   $('#owners').innerHTML = owners.map((o) => `<option value="${esc(o)}">`).join('');
 }
 async function load() {
@@ -669,16 +668,6 @@ for (const b of document.querySelectorAll('.vw')) b.onclick = () => {
 };
 for (const id of ['fdept', 'fowner', 'fstat', 'fprio', 'fshare']) $('#' + id).onchange = render;
 $('#add').onclick = () => openForm(null);
-$('#depts').onclick = async () => {
-  const v = prompt('부서 목록을 한 줄에 하나씩 적어 주세요.', data.depts.join('\n'));
-  if (v == null) return;
-  try {
-    const r = await fetch('api/schedule/depts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ depts: v.split('\n') }) });
-    const j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
-    data.depts = j.depts; fillFilters(); render();
-  } catch (err) { alert(err.message); }
-};
 // ---- 공휴일 관리 창 ----
 let holTmp = null, holYear = new Date().getFullYear();
 function renderHols() {

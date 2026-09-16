@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.18.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.18.2) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `auth.js` | 로그인·계정·권한. 계정마다 `depts[]`(일정에서 볼 부서, 빈 배열=전체; `deptsOf`/`canDept`). `data/users.json` (users + sessions), scrypt 해시, 쿠키 `ims_sess`(12시간, "로그인 유지" 30일). `APPS` 배열(monitor/schedule)이 홈 타일·권한 목록·탭 필터의 근거. 계정 없으면 admin/rhksflwk1@ 자동 생성 | (수집기 내부) |
 | `public/login.html` · `home.html` · `users.html` | 로그인 / 홈(타일) / 계정 관리(관리자). `/` 는 home.html | 브라우저 |
 | `schedule.js` | 일정 데이터. `data/schedule.json` { events{id:{title,dept,owner,start,end,time,status,repeat{kind,until},desc,notes[],occ{날짜:{status,skip}}}}, depts[] }. 반복은 원본 하나만 저장하고 회차별 상태·메모는 `occ`/`notes[].date` 로 구분 | (수집기 내부) |
@@ -45,6 +45,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-16 (30): 부서 관리를 일정 화면에서 **계정 관리(users.html)** 로 옮김 — 맨 위 "부서 관리" 칸(부서별 인원 수 표시, ✕ 로 빼기, 이름 입력 후 추가, 저장 시 `PUT /api/schedule/depts` → load() 로 계정 권한 체크 목록까지 갱신). schedule.html 의 `#depts` 버튼·핸들러 제거(공휴일 관리는 그대로 일정 화면). 수집기 1.18.2.
 - 2026-09-16 (29): 일정 등록 창을 2단(`.modal.wide` 940px, `.cols`)으로 넓혀 오른쪽을 "내용" 전용 큰 입력칸으로. 팀 공유 줄이 세로로 깨지던 문제 — `.fg input{width:100%}` 와 `.fg label{display:block}` 이 `.share` 규칙을 덮어써서 → 선택자를 `.fg .share ...` 로 올리고 체크박스 16px 고정. 공휴일 관리가 prompt 였던 것을 전용 창(`#hmask`: 연도 ◀▶, 목록에 요일·지우기, 날짜 선택 + 이름 datalist 로 추가, 저장/취소)으로 교체. 수집기 1.18.1.
 - 2026-09-16 (28): **데이터 백업·복구**. `deploy/backup-data.cmd`(robocopy 로 `daily/날짜`(data, 30일 보관) + `full`(프로그램 전체, collector.log 제외)), 설치 스크립트가 작업 `ServerMonitorBackup`(매일 03:10, SYSTEM)을 등록하고 `-BackupDir`/`backup-target.txt` 로 대상 지정. SYSTEM 계정은 UNC 공유 접근 불가 → NAS 로 보내려면 작업 실행 계정 변경 필요(문서에 명시). SETUP-IMS 에 복구 절차(동일 IP 면 에이전트 무수정, 다르면 agent.conf `URL=`).
 - 2026-09-16 (27): 일정 — **개인 일정 기본 + 팀 공유** (수집기 1.18.0). 일정에 `share`('me' 기본 | 'team')와 `owner_id`(계정 id). server.js `canSee()`: 개인 일정은 `owner_id === me.id` 인 사람만(관리자도 예외 없음), 팀 공유는 기존 부서 규칙. 수정·삭제도 `checkOwn()` 으로 차단. share 값이 없는 예전 일정은 팀 공유로 취급. **할 일 보기**(schedule.html 기본 보기 `todo`: 오늘 / 앞으로 7일 / 밀린 일 + 메모 전문 + 상태 바로 바꾸는 버튼), **홈 화면 요약**(home.html → `GET /api/schedule/todo`, server.js `todoView()`, schedule.js `occurrences(list,from,to)` 서버 전개). 홈에서 항목 클릭 시 `schedule.html?id=&date=` 로 그 일정을 연다. 공개 필터(전체/내 일정만/팀 공유만) 추가.
