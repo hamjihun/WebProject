@@ -30,6 +30,8 @@ if not exist "%LIST%" (
 for /f "usebackq eol=# delims=" %%t in ("%LIST%") do call :backup "%%t"
 
 :done
+REM 백업 결과를 화면에서 볼 수 있도록 data\backup-status.json 으로 남긴다
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0backup-status.ps1" >nul 2>&1
 endlocal
 exit /b 0
 

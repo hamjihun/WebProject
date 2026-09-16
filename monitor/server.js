@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.19.2';
+const VERSION = '1.20.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -414,6 +414,29 @@ function todoView(me, list) {
   return { ok: true, today, days, late, me: me.name || me.id };
 }
 
+// 이 시스템 자체(data 폴더) 백업 결과 — deploy/backup-status.ps1 이 남긴 파일을 읽는다
+const SELF_BACKUP_FILE = path.join(__dirname, 'data', 'backup-status.json');
+let selfBkCache = { at: 0, val: null };
+function selfBackup() {
+  if (Date.now() - selfBkCache.at < 30000) return selfBkCache.val;
+  let val = null;
+  try {
+    const o = JSON.parse(fs.readFileSync(SELF_BACKUP_FILE, 'utf8'));
+    const t = (v) => { const x = Date.parse(v); return isNaN(x) ? null : x; };
+    val = {
+      time: t(o.time),
+      targets: (Array.isArray(o.targets) ? o.targets : []).slice(0, 10).map((x) => ({
+        path: String(x.path || '').slice(0, 300), reachable: !!x.reachable,
+        last_date: x.last_date ? String(x.last_date).slice(0, 10) : null, last_time: t(x.last_time),
+        files: num(x.files), size: num(x.size), keep: num(x.keep), full_time: t(x.full_time),
+        message: String(x.message || '').slice(0, 300),
+      })),
+    };
+  } catch (e) { val = null; }
+  selfBkCache = { at: Date.now(), val };
+  return val;
+}
+
 function serveStatic(res, file) {
   const p = path.join(__dirname, 'public', file);
   fs.readFile(p, (err, data) => {
@@ -663,7 +686,7 @@ const server = http.createServer(async (req, res) => {
       data[s.host] = {}; for (const k of days) if (H[k]) data[s.host][k] = H[k];
     }
     const r = alerter.getSettings().rules;
-    return json(res, 200, { from: days[0], to: days[days.length - 1], days, hosts, data, today: dayKey(Date.now()), settings: { skip_weekend: r.backup_skip_weekend !== false, max_hours: r.backup_max_hours, usb_max_hours: r.usb_max_hours, check_time: r.backup_check_time } });
+    return json(res, 200, { from: days[0], to: days[days.length - 1], days, hosts, data, self: selfBackup(), today: dayKey(Date.now()), settings: { skip_weekend: r.backup_skip_weekend !== false, max_hours: r.backup_max_hours, usb_max_hours: r.usb_max_hours, check_time: r.backup_check_time } });
   }
   // 구성도 저장/조회
   if (req.method === 'GET' && url.pathname === '/api/topology') return json(res, 200, topology);
@@ -709,7 +732,7 @@ const server = http.createServer(async (req, res) => {
     try { return json(res, 200, { ok: true, chats: await alerter.discoverChats() }); } catch (e) { return json(res, 502, { ok: false, error: String(e.message || e) }); }
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView(), active_alerts: alerter.getActive() });
+  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView(), active_alerts: alerter.getActive(), self_backup: selfBackup() });
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, servers: store.size, uptime: Math.round(process.uptime()) });
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
