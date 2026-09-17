@@ -13,8 +13,8 @@ const APPS = [
     pages: [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']],
   },
   {
-    key: 'schedule', name: '일정 관리', desc: '부서 업무 일정 · 메모 보드', icon: '📅', ready: true, home: 'schedule.html',
-    pages: [['schedule.html', '일정'], ['memo.html', '메모']],
+    key: 'schedule', name: '일정 관리', desc: '메모 보드 · 부서 업무 일정', icon: '📅', ready: true, home: 'memo.html',
+    pages: [['memo.html', '메모'], ['schedule.html', '일정']],
   },
 ];
 const ALL_PAGES = APPS.reduce((a, app) => a.concat(app.pages.map((p) => p[0])), []);
@@ -26,11 +26,11 @@ const SESS_HOURS = 12, KEEP_DAYS = 30;
 function hashPw(pw, salt) { return crypto.scryptSync(String(pw), salt, 32).toString('hex'); }
 function newSalt() { return crypto.randomBytes(16).toString('hex'); }
 function newSid() { return crypto.randomBytes(24).toString('hex'); }
-// 비밀번호 규칙: 4자 이상, 아이디와 같을 수 없음 (대소문자·앞뒤 공백 무시)
-function checkPw(id, pw) {
+// 비밀번호 규칙: 4자 이상. 본인이 바꿀 때는 아이디와 같을 수 없다 (관리자가 주는 첫 비밀번호는 허용)
+function checkPw(id, pw, allowSameAsId) {
   const v = String(pw == null ? '' : pw);
   if (v.length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다');
-  if (v.trim().toLowerCase() === String(id || '').trim().toLowerCase()) throw new Error('비밀번호를 아이디와 똑같이 정할 수 없습니다');
+  if (!allowSameAsId && v.trim().toLowerCase() === String(id || '').trim().toLowerCase()) throw new Error('비밀번호를 아이디와 똑같이 정할 수 없습니다');
   return v;
 }
 function safeEq(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
@@ -113,7 +113,7 @@ function create(opts) {
       const u = users[id] || { id, created: Date.now(), last_login: null, pages: [], depts: [] };
       if (raw.name != null) u.name = String(raw.name).trim().slice(0, 30) || id;
       if (raw.pw) {
-        checkPw(id, raw.pw);
+        checkPw(id, raw.pw, true);   // 관리자가 만들어 주는 비밀번호는 아이디와 같아도 됨 (첫 로그인 때 바꾸게 하면 되므로)
         u.salt = newSalt(); u.hash = hashPw(raw.pw, u.salt);
       } else if (isNew) throw new Error('비밀번호를 입력하세요');
       if (raw.admin != null) u.admin = !!raw.admin;
@@ -131,7 +131,7 @@ function create(opts) {
       const u = users[String(id || '')];
       if (!u) throw new Error('없는 계정입니다');
       if (!safeEq(hashPw(oldPw, u.salt), u.hash)) throw new Error('지금 쓰는 비밀번호가 맞지 않습니다');
-      checkPw(u.id, newPw);
+      checkPw(u.id, newPw, false);   // 본인이 바꿀 때는 아이디와 같으면 안 됨
       if (safeEq(hashPw(newPw, u.salt), u.hash)) throw new Error('지금 쓰는 비밀번호와 다르게 정해 주세요');
       u.salt = newSalt(); u.hash = hashPw(newPw, u.salt);
       u.must_change = false; u.pw_changed = Date.now();

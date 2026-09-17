@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.21.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.21.2) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `auth.js` | 로그인·계정·권한. 계정마다 `depts[]`(일정에서 볼 부서, 빈 배열=전체; `deptsOf`/`canDept`). `data/users.json` (users + sessions), scrypt 해시, 쿠키 `ims_sess`(12시간, "로그인 유지" 30일). `APPS` 배열(monitor/schedule)이 홈 타일·권한 목록·탭 필터의 근거. 계정 없으면 admin/rhksflwk1@ 자동 생성 | (수집기 내부) |
 | `public/login.html` · `home.html` · `users.html` · `password.html` | 로그인 / 홈(타일) / 계정 관리(관리자). `/` 는 home.html | 브라우저 |
 | `schedule.js` | 일정 데이터. `data/schedule.json` { events{id:{title,dept,owner,start,end,time,status,repeat{kind,until},desc,notes[],occ{날짜:{status,skip}}}}, depts[] }. 반복은 원본 하나만 저장하고 회차별 상태·메모는 `occ`/`notes[].date` 로 구분 | (수집기 내부) |
@@ -46,6 +46,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-17 (5): 비밀번호 규칙 완화 — `checkPw(id, pw, allowSameAsId)`: 관리자가 만드는 첫 비밀번호는 아이디와 같아도 허용(`upsert` 에서 true), 본인 변경(`changePassword`)은 그대로 금지. 일정 관리 앱의 **첫 화면을 메모로** (APPS pages 순서 `memo.html` → `schedule.html`, home 도 memo.html). 수집기 1.21.2.
 - 2026-09-17 (4): 메모 보드 다듬기 (수집기 1.21.1). 메모지를 **각진 정사각형**(border-radius 0, 기본 200×200, 최소 80×60, 얇은 테두리)으로 바꾸고 이동·크기를 **10px 격자에 스냅**해 다닥다닥 붙게. 색 동그라미 팝업에 **글자 크기**(11·13·15·18·22px, note.fs) 추가 — 고르면 팝업이 다시 열려 연달아 바꿀 수 있음. 구역도 각진 모양.
 - 2026-09-17 (3): **메모 보드 신설** (수집기 1.21.0). `memo.js`(사람별 보관, 메모 500·구역 60·글자 5000 제한, 좌표·색 정규화) + `public/memo.html` + `GET/PUT /api/memo`. auth.js APPS 의 일정 관리 앱에 `memo.html` 탭 추가(상단 탭이 일정·메모 둘). 사용자가 원한 것: 메모잇처럼 자유 배치, 전체 화면, 구역(이름·크기·색) 지정, 메모지 색. Playwright 로 드래그·크기·색·자동저장·새로고침 유지 확인.
 - 2026-09-17 (2): 숨긴 항목의 **기존 활성 알림이 안 내려가던 문제** (수집기 1.20.2). ① `updateSettings()` 가 `backup_hide` 에 들어간 이름과 일치하는 `|backup|` 상태를 저장 즉시 삭제(`db:`/`repo:`/`sql:` 접두사와 `|stale` 접미사 포함). ② `evaluate()` 에 `seenKeys` 를 두어 백업 판단 때 살펴보지 않은 `H|backup|*` 상태(작업·DB 삭제, 숨김 처리 등)를 자동 정리 — 감시 대상에서 사라진 항목의 알림이 영원히 남던 구조적 문제 해결.

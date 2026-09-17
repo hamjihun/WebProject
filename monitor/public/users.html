@@ -73,7 +73,7 @@
     <form class="form" id="f">
       <div><label for="fid">아이디 (영문 소문자·숫자)</label><input type="text" id="fid" autocomplete="off"><div class="hint" id="fidh">로그인할 때 쓰는 아이디입니다</div></div>
       <div><label for="fname">이름</label><input type="text" id="fname" autocomplete="off" placeholder="예: 홍길동"></div>
-      <div><label for="fpw">비밀번호</label><input type="password" id="fpw" autocomplete="new-password"><div class="hint" id="fpwh">4자 이상 · 아이디와 같을 수 없음</div>
+      <div><label for="fpw">비밀번호</label><input type="password" id="fpw" autocomplete="new-password"><div class="hint" id="fpwh">4자 이상 (첫 비밀번호는 아이디와 같아도 됩니다)</div>
         <label class="ck" style="margin-top:8px;font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="fmust" checked style="width:15px;height:15px"> 최초 로그인 시 비밀번호 변경</label>
         <div class="hint">체크하면 이 사람이 처음 로그인할 때 비밀번호를 바꾸는 화면이 먼저 뜹니다.</div></div>
       <div class="perm">
@@ -173,7 +173,7 @@ function reset() {
   editing = null;
   $('#ftitle').textContent = '새 계정 만들기';
   $('#fid').value = ''; $('#fid').disabled = false; $('#fidh').textContent = '로그인할 때 쓰는 아이디입니다';
-  $('#fname').value = ''; $('#fpw').value = ''; $('#fpwh').textContent = '4자 이상 · 아이디와 같을 수 없음';
+  $('#fname').value = ''; $('#fpw').value = ''; $('#fpwh').textContent = '4자 이상 (첫 비밀번호는 아이디와 같아도 됩니다)';
   $('#fadmin').checked = false; $('#fmust').checked = true;   // 새 계정은 최초 로그인 때 바꾸게 하는 것이 기본
   for (const c of checks()) c.checked = false;
   for (const c of dchecks()) c.checked = false;
