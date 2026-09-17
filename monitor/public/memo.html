@@ -126,7 +126,7 @@
   .note .nt.no { color:rgba(31,41,55,.38); font-weight:400; }
   .note .hb { background:none; border:0; color:rgba(31,41,55,.5); font:inherit; font-size:13px; line-height:1; cursor:pointer; padding:0 3px; flex:none; }
   .note .hb:hover { color:#0f766e; }
-  .note .hb.plus { font-size:15px; }
+  .note .hb.plus { font-size:15px; margin-right:1px; }
   /* 제목 줄 두 번 누르면 접힘 (제목만 보임) */
   .note.min { height:auto !important; }
   .note.min textarea, .note.min img, .note.min .rz { display:none; }
@@ -271,10 +271,10 @@ function render() {
     </div>`).join('') +
     b.notes.map((n) => `
     <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
-      <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><span class="dot" data-pal="1"></span>
+      <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><button class="hb plus" title="옆에 새 메모">＋</button>
         <span class="nt ${n.title ? '' : 'no'}">${esc(n.title || '제목 없음')}</span>
-        <button class="hb ed" title="제목 정하기">✎</button>
-        <button class="hb plus" title="옆에 새 메모">＋</button><button class="x" title="메모 지우기">✕</button></div>
+        <button class="hb ed" title="제목 정하기 (오른쪽 단추 = 색·글자 크기)">✎</button>
+        <button class="x" title="메모 지우기">✕</button></div>
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
       <div class="rz"></div><div class="rz bl"></div>
     </div>`).join('') +
@@ -744,12 +744,12 @@ $('#binMask').onclick = (e) => {
 const HELP = `
   <h4>메모 만들기</h4>
   <ul><li>위쪽 <b>＋ 새 메모</b> 를 누르면 화면 가운데에 붙습니다.</li>
-    <li>제목 줄의 <b>＋</b> 를 누르면 그 메모 바로 옆에 새 메모가 붙습니다.</li>
+    <li>제목 줄 <b>맨 왼쪽의 ＋</b> 를 누르면 그 메모 바로 옆에 새 메모가 붙습니다.</li>
     <li><b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다 (한 장 3MB까지).</li></ul>
   <h4>메모 다루기</h4>
   <ul><li><b>제목 줄을 끌어서</b> 옮깁니다. 내용 글자 위에서 끌면 글자가 선택됩니다.</li>
     <li><b>아래 양쪽 모서리</b>를 끌어 크기를 바꿉니다.</li>
-    <li>제목 줄의 <b>✎</b> 나 메모 위에서 <b>오른쪽 단추</b>를 누르면 제목·색·글자 크기를 정합니다.</li>
+    <li>제목 줄의 <b>✎</b> 로 제목을 정하고, 메모 위에서 <b>오른쪽 단추</b>를 누르면 <b>색·글자 크기</b>도 함께 정합니다.</li>
     <li>제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다. 다시 두 번 누르면 펴집니다.</li>
     <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
   <h4>범위</h4>
