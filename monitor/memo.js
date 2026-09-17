@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAX_BOARDS = 20, MAX_NOTES = 500, MAX_AREAS = 60, MAX_TEXT = 5000, MAX_TRASH = 50;
+const MAX_BOARDS = 20, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
 const MAX_IMG = 3 * 1024 * 1024;          // 사진 한 장 (data URL 글자 수)
 const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 용량
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
@@ -12,6 +12,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
 const color = (v, d) => /^[a-z0-9-]{1,20}$/i.test(String(v || '')) ? String(v) : d;
 const rid = () => Math.random().toString(36).slice(2, 10);
+// 바로가기 주소: 웹(http/https)과 원격데스크톱(mstsc:)만 허용한다 (javascript: 같은 건 버린다)
+const href = (v) => { const t = String(v == null ? '' : v).trim().slice(0, 500); return /^(https?:\/\/|mstsc:)/i.test(t) ? t : ''; };
 
 function create(opts) {
   const FILE = opts.file;
@@ -51,7 +53,9 @@ function create(opts) {
   // 휴지통: 사람마다 하나. 지운 메모·범위를 최근 50개까지 들고 있다 (b/bn = 원래 있던 메모판)
   const trashItem = (t) => {
     const c = { del: num(t && t.del, Date.now()), b: str(t && t.b, 32), bn: str(t && t.bn, 20) };
-    return t && t.k === 'a' ? { k: 'a', ...c, o: area(t.o || {}) } : { k: 'n', ...c, o: note((t && t.o) || {}) };
+    if (t && t.k === 'a') return { k: 'a', ...c, o: area(t.o || {}) };
+    if (t && t.k === 'l') return { k: 'l', ...c, o: link(t.o || {}) };
+    return { k: 'n', ...c, o: note((t && t.o) || {}) };
   };
   const trashOf = (u, boards) => {
     let list = Array.isArray(u && u.trash) ? u.trash : null;
@@ -71,12 +75,20 @@ function create(opts) {
     acolor: color(p && p.acolor, 'green'),
     magnet: !(p && p.magnet === false),
   });
+  // 바로가기 타일 (바탕화면 아이콘처럼 눌러서 여는 것)
+  const link = (l) => ({
+    id: str(l.id, 32) || rid(),
+    x: clamp(num(l.x), 0, 20000), y: clamp(num(l.y), 0, 20000),
+    w: clamp(num(l.w, 96), 60, 400), h: clamp(num(l.h, 88), 50, 400),
+    name: str(l.name, 30), url: href(l.url), icon: str(l.icon, 8), color: color(l.color, 'gray'),
+  });
   const board = (b, i) => ({
     id: str(b.id, 32) || rid(),
     name: str(b.name, 20) || `메모 ${i + 1}`,
     color: color(b.color, 'yellow'),
     notes: (Array.isArray(b.notes) ? b.notes : []).slice(0, MAX_NOTES).map(note),
     areas: (Array.isArray(b.areas) ? b.areas : []).slice(0, MAX_AREAS).map(area),
+    links: (Array.isArray(b.links) ? b.links : []).slice(0, MAX_LINKS).map(link),
   });
 
   // 예전 형식({ notes, areas })을 보드 하나로 옮긴다
@@ -92,13 +104,13 @@ function create(opts) {
     get(uid) {
       const { boards, active } = boardsOf(uid);
       const list = boards.slice(0, MAX_BOARDS).map(board);
-      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [] });
+      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [], links: [] });
       const act = list.some((b) => b.id === active) ? active : list[0].id;
       return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs) };
     },
     set(uid, data) {
       const list = (Array.isArray(data && data.boards) ? data.boards : []).slice(0, MAX_BOARDS).map(board);
-      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [] });
+      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [], links: [] });
       const active = list.some((b) => b.id === data.active) ? data.active : list[0].id;
       const trash = (Array.isArray(data && data.trash) ? data.trash : []).slice(0, MAX_TRASH).map(trashItem);
       const next = { active, boards: list, trash, prefs: prefs(data && data.prefs) };

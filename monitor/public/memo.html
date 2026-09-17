@@ -33,6 +33,17 @@
   #tools .sp { flex:1; }
   #tools #binBtn b { color:var(--accent); font-size:11.5px; margin-left:5px; }
   #tools #cfgBtn { font-size:14px; padding:4px 9px; }
+  #lnkEd { width:270px; }
+  #lnkEd input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:6px 8px; font:inherit; font-size:12.5px; }
+  #lnkEd input:focus { outline:none; border-color:var(--accent); }
+  #lnkEd .kind { display:flex; gap:6px; }
+  #lnkEd .kind button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px;
+    font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
+  #lnkEd .kind button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:#0f172a; border:0; border-radius:7px;
+    font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
+  #lnkEd .tip { color:var(--muted); font-size:11px; line-height:1.6; margin-top:9px; }
   #cfg { width:250px; max-height:72vh; overflow:auto; }
   #cfg b.sw.on { outline:2px solid var(--accent); outline-offset:2px; }
   #cfg .sec { margin-top:11px; } #cfg .sec:first-child { margin-top:0; }
@@ -61,6 +72,20 @@
   .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:5px; min-width:40px; }
   .area .t:focus { outline:none; background:rgba(15,23,42,.45); }
   .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
+
+  /* 바로가기 타일 (바탕화면 아이콘처럼) */
+  .lnk { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+    background:rgba(148,163,184,.13); border:1px solid var(--line); border-radius:10px; cursor:pointer; overflow:hidden;
+    padding:6px 4px; text-align:center; z-index:6; }
+  .lnk:hover { background:rgba(56,189,248,.16); border-color:var(--bd,#475569); }
+  .lnk.sel { border-color:var(--accent); }
+  .lnk .ic { font-size:26px; line-height:1; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    color:var(--text); font-weight:700; flex:none; }
+  .lnk .ic img { width:28px; height:28px; object-fit:contain; }
+  .lnk .lb { font-size:11.5px; color:var(--text); line-height:1.25; max-height:29px; overflow:hidden; word-break:break-all; }
+  .lnk .x { position:absolute; top:0; right:0; color:rgba(148,163,184,.6); display:none; }
+  .lnk:hover .x { display:block; }
+  .lnk.mv { opacity:.85; }
 
   /* 메모지 (각진 사각형) */
   .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 7px rgba(0,0,0,.32); outline:1px solid rgba(0,0,0,.22); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
@@ -117,6 +142,7 @@
   <div id="tools">
     <button class="go" id="addNote">＋ 새 메모</button>
     <button id="addArea">＋ 새 범위</button>
+    <button id="addLink">＋ 바로가기</button>
     <span class="st" id="st"></span>
     <span class="sp"></span>
     <button id="binBtn" title="지운 메모 보기">🗑 휴지통<b id="binN"></b></button>
@@ -128,6 +154,7 @@
 <div class="pop" id="bmenu" hidden></div>
 <div class="pop" id="bin" hidden></div>
 <div class="pop" id="cfg" hidden></div>
+<div class="pop" id="lnkEd" hidden></div>
 
 <script src="common.js"></script>
 <script>
@@ -149,7 +176,8 @@ const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 �
   + '<span style="font-size:12px">메모는 아무 데나 끌어서 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
   + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
   + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
-  + '지운 메모는 오른쪽 <b>🗑 휴지통</b> 에서 되살리고, <b>⚙</b> 에서 기본 색·글자 크기를 정합니다.<br>'
+  + '<b>＋ 바로가기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둘 수 있습니다.<br>'
+  + '지운 것은 오른쪽 <b>🗑 휴지통</b> 에서 되살리고, <b>⚙</b> 에서 기본 색·글자 크기를 정합니다.<br>'
   + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span></div>';
 
 let boards = [], active = '', sel = null;
@@ -157,13 +185,17 @@ let trash = [];                                                   // 휴지통 (
 let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true };   // 기본 설정
 let dirty = false, saving = false;
 const uid = () => Math.random().toString(36).slice(2, 10);
-const cur = () => boards.find((b) => b.id === active) || boards[0] || { notes: [], areas: [] };
+const cur = () => {
+  const b = boards.find((x) => x.id === active) || boards[0] || { notes: [], areas: [], links: [] };
+  if (!Array.isArray(b.links)) b.links = [];                      // 예전 자료에는 바로가기가 없다
+  return b;
+};
 
 // ---- 그리기 ----
 function render() {
   const b = cur(), cv = $('#canvas');
   let maxX = 0, maxY = 0;
-  for (const o of b.areas.concat(b.notes)) { maxX = Math.max(maxX, o.x + o.w); maxY = Math.max(maxY, o.y + o.h); }
+  for (const o of b.areas.concat(b.links, b.notes)) { maxX = Math.max(maxX, o.x + o.w); maxY = Math.max(maxY, o.y + o.h); }
   cv.style.minWidth = Math.max($('#board').clientWidth - 4, maxX + 320) + 'px';
   cv.style.minHeight = Math.max($('#board').clientHeight - 60, maxY + 320) + 'px';
   cv.innerHTML = b.areas.map((a) => `
@@ -172,6 +204,12 @@ function render() {
         <input class="t" value="${esc(a.title)}" placeholder="범위 이름 (예: 아이디어)" maxlength="40">
         <button class="x" title="범위 지우기">✕</button></div>
       <div class="rz"></div>
+    </div>`).join('') +
+    b.links.map((l) => `
+    <div class="lnk ${sel === l.id ? 'sel' : ''}" data-k="l" data-id="${l.id}" title="${esc(l.url || '')}"
+      style="left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;--bd:${COLORS[l.color] ? COLORS[l.color].bd : '#475569'}">
+      ${icoHtml(l)}<span class="lb">${esc(l.name || '이름 없음')}</span>
+      <button class="x" title="바로가기 지우기">✕</button>
     </div>`).join('') +
     b.notes.map((n) => `
     <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
@@ -182,9 +220,20 @@ function render() {
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
       <div class="rz"></div>
     </div>`).join('') +
-    (b.notes.length + b.areas.length ? '' : EMPTY);
+    (b.notes.length + b.areas.length + b.links.length ? '' : EMPTY);
   renderBoards();
   $('#binN').textContent = trash.length ? ' ' + trash.length : '';
+}
+// 바로가기 아이콘: 이모지를 넣었으면 그것, 아니면 그 사이트의 파비콘, 안 나오면 첫 글자
+function icoHtml(l) {
+  if (l.icon) return `<span class="ic">${esc(l.icon)}</span>`;
+  if (/^mstsc:/i.test(l.url)) return '<span class="ic">🖥️</span>';
+  let org = '';
+  try { org = new URL(l.url).origin; } catch (e) {}
+  const ch = esc(((l.name || '').trim()[0] || '·').toUpperCase());
+  if (!org) return `<span class="ic">${ch}</span>`;
+  return `<span class="ic"><img src="${esc(org)}/favicon.ico" alt="" draggable="false"
+    onerror="this.parentNode.textContent='${ch}'"></span>`;
 }
 function renderBoards() {
   $('#bds').innerHTML = boards.map((b) => `<button class="bd ${b.id === active ? 'on' : ''}" data-b="${b.id}">
@@ -196,7 +245,11 @@ const MAG = 14;                                  // 이 거리 안이면 자석�
 const NEAR = 60;                                 // 다른 축으로 이만큼 가까운 것만 상대로 본다
 const bh = (o, k) => (k === 'n' && o.min ? 26 : o.h);
 const geo = (o, k) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: bh(o, k) });
-function others(id) { return cur().notes.filter((n) => n.id !== id).map((n) => geo(n, 'n')).concat(cur().areas.filter((a) => a.id !== id).map((a) => geo(a, 'a'))); }
+function others(id) {
+  return cur().notes.filter((n) => n.id !== id).map((n) => geo(n, 'n'))
+    .concat(cur().links.filter((l) => l.id !== id).map((l) => geo(l, 'l')))
+    .concat(cur().areas.filter((a) => a.id !== id).map((a) => geo(a, 'a')));
+}
 function magnet(o, k, x, y) {
   if (!prefs.magnet) return { x: Math.max(0, snap(x)), y: Math.max(0, snap(y)) };
   const w = o.w, h = bh(o, k);
@@ -213,8 +266,9 @@ function magnet(o, k, x, y) {
 }
 const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 function unstack(o, k) {                         // 겹쳐 있으면 가장 가까운 쪽으로 밀어 딱 붙인다
-  if (k !== 'n' || !prefs.magnet) return;
-  const me = geo(o, 'n'), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'));
+  if (k === 'a' || !prefs.magnet) return;
+  const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'))
+    .concat(cur().links.filter((l) => l.id !== o.id).map((l) => geo(l, 'l')));
   for (let i = 0; i < 8; i++) {
     const t = list.find((b) => hits(me, b)); if (!t) break;
     const c = [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]
@@ -225,7 +279,7 @@ function unstack(o, k) {                         // 겹쳐 있으면 가장 가�
   o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
 }
 
-const find = (k, id) => (k === 'n' ? cur().notes : cur().areas).find((o) => o.id === id);
+const find = (k, id) => (k === 'n' ? cur().notes : k === 'l' ? cur().links : cur().areas).find((o) => o.id === id);
 const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
 function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) }; }
 
@@ -238,6 +292,12 @@ function newNote(x, y) {
 $('#addNote').onclick = () => {
   const c = viewCenter(), k = cur().notes.length;
   newNote(c.x - prefs.w / 2 + (k % 5) * 20, c.y - prefs.h / 2 + (k % 5) * 20);
+};
+$('#addLink').onclick = () => {
+  const c = viewCenter();
+  const l = { id: uid(), x: Math.max(0, snap(c.x - 48)), y: Math.max(0, snap(c.y - 44)), w: 96, h: 88, name: '', url: '', icon: '', color: 'gray' };
+  cur().links.push(l); unstack(l, 'l'); sel = l.id; touch(); render();
+  const el = document.querySelector(`.lnk[data-id="${l.id}"]`); if (el) openLnkEd(el, l.id);
 };
 $('#addArea').onclick = () => {
   const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: prefs.acolor };
@@ -287,9 +347,16 @@ $('#canvas').addEventListener('click', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) { sel = null; render(); return; }
   const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
   if (e.target.classList.contains('x')) {         // 지우면 휴지통으로 (되살릴 수 있음)
-    if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id); else cur().areas = cur().areas.filter((x) => x.id !== id);
+    if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
+    else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
+    else cur().areas = cur().areas.filter((x) => x.id !== id);
     trash.unshift({ k, del: Date.now(), b: cur().id, bn: cur().name, o }); trash.splice(50);
     sel = null; touch(); render(); return;
+  }
+  if (k === 'l') {                                // 바로가기 타일 = 눌러서 열기
+    if (moved) return;
+    if (!o.url) { openLnkEd(box, id); return; }
+    openLink(o); return;
   }
   if (e.target.classList.contains('ed')) { openPal(e.target, k, id, true); return; }   // 제목 정하기
   if (e.target.classList.contains('plus')) {     // 이 메모 옆에 새 메모
@@ -303,6 +370,7 @@ $('#canvas').addEventListener('click', (e) => {
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
   const box = e.target.closest('[data-k]'); if (!box) return;
   e.preventDefault();
+  if (box.dataset.k === 'l') { openLnkEd({ left: e.clientX, bottom: e.clientY }, box.dataset.id); return; }
   openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
 });
 $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 번 누르면 접었다 폈다
@@ -322,7 +390,7 @@ $('#canvas').addEventListener('input', (e) => {
 // ---- 옮기기 · 크기 ----
 // 메모지는 아무 데나(글자 위에서도) 끌면 옮겨진다. 4px 넘게 움직여야 옮기기로 보고,
 // 그냥 누르기만 하면 평소대로 글자 칸에 커서가 들어간다.
-let drag = null, pend = null;
+let drag = null, pend = null, moved = false;
 $('#canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   const box = e.target.closest('[data-k]'); if (!box) return;
@@ -337,6 +405,8 @@ $('#canvas').addEventListener('mousedown', (e) => {
   const base = { o, box, k, sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
   if (rz) { e.preventDefault(); drag = { ...base, mode: 'rz' }; document.body.style.userSelect = 'none'; }
   else pend = { ...base, mode: 'mv' };
+  moved = false;
+  if (k === 'l' && sel !== o.id) { sel = o.id; box.classList.add('sel'); }
   if (k === 'n' && sel !== o.id) { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch(); }
 });
 document.addEventListener('mousemove', (e) => {
@@ -344,7 +414,7 @@ document.addEventListener('mousemove', (e) => {
     drag = pend; pend = null;
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (err) {}
     try { window.getSelection().removeAllRanges(); } catch (err) {}
-    document.body.style.userSelect = 'none'; drag.box.classList.add('mv');
+    document.body.style.userSelect = 'none'; drag.box.classList.add('mv'); moved = true;
   }
   if (!drag) return;
   e.preventDefault();
@@ -474,6 +544,7 @@ function ago(t) {
 function binName(t) {
   const o = t.o || {};
   if (t.k === 'a') return (o.title || '').trim() || '이름 없는 범위';
+  if (t.k === 'l') return (o.name || '').trim() || o.url || '이름 없는 바로가기';
   return (o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 30) || (o.img ? '사진 메모' : '빈 메모');
 }
 $('#binBtn').onclick = () => { if ($('#bin').hidden) openBin(); else $('#bin').hidden = true; };
@@ -482,7 +553,7 @@ function openBin() {
   $('#bin').innerHTML = '<div class="sec">휴지통 · 지운 메모 (최근 50개까지)</div>'
     + (list.length ? list.map((t, i) => `<div class="it" data-i="${i}">
         <i style="background:${COLORS[t.o.color] ? (t.k === 'n' ? COLORS[t.o.color].bg : COLORS[t.o.color].bd) : '#fde68a'}"></i>
-        <span class="nm">${t.k === 'a' ? '［범위］ ' : ''}${esc(binName(t))}</span>
+        <span class="nm">${t.k === 'a' ? '［범위］ ' : t.k === 'l' ? '［바로가기］ ' : ''}${esc(binName(t))}</span>
         ${t.bn && boards.length > 1 ? `<span class="bn">${esc(t.bn)}</span>` : ''}<span class="dt">${ago(t.del)}</span>
         <button data-a="back">되살리기</button><button class="rm" data-a="rm" title="완전히 지우기">✕</button></div>`).join('')
       + '<div style="text-align:right;padding-top:8px"><button class="rm" data-a="clear" style="background:none;border:1px solid var(--line);color:#f87171;border-radius:6px;font:inherit;font-size:11.5px;padding:4px 9px;cursor:pointer">휴지통 비우기</button></div>'
@@ -504,10 +575,69 @@ $('#bin').onclick = (e) => {
   const o = t.o, home = boards.find((b) => b.id === t.b);
   if (home && home.id !== active) { active = home.id; sel = null; $('#board').scrollTo(0, 0); }
   if (t.k === 'a') cur().areas.push(o);
+  else if (t.k === 'l') { cur().links.push(o); unstack(o, 'l'); sel = o.id; }
   else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
   touch(); render(); $('#bin').hidden = true;
   const el = document.querySelector(`[data-id="${o.id}"]`); if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 };
+
+// ---- 바로가기 (바탕화면 아이콘처럼) ----
+function openLink(l) {
+  if (!l.url) return;
+  if (/^https?:/i.test(l.url)) window.open(l.url, '_blank', 'noopener');
+  else location.href = l.url;                     // mstsc: (원격데스크톱)
+}
+let lnkFor = null;
+function openLnkEd(el, id) {
+  const l = find('l', id); if (!l) return;
+  lnkFor = id;
+  const rdp = /^mstsc:/i.test(l.url);
+  const r = el.getBoundingClientRect ? el.getBoundingClientRect() : el;
+  $('#lnkEd').innerHTML = `
+    <div class="sec">종류</div>
+    <div class="kind"><button data-kd="web" class="${rdp ? '' : 'on'}">🌐 웹 주소</button>
+      <button data-kd="rdp" class="${rdp ? 'on' : ''}">🖥️ 원격데스크톱</button></div>
+    <div class="sec" style="margin-top:9px">이름</div>
+    <input class="nm" maxlength="30" placeholder="예: 그룹웨어" value="${esc(l.name || '')}">
+    <div class="sec" style="margin-top:9px">주소</div>
+    <input class="ur" maxlength="500" placeholder="${rdp ? '192.168.0.9' : 'gw.ilsancorp.co.kr'}" value="${esc(l.url.replace(/^mstsc:/i, ''))}">
+    <div class="sec" style="margin-top:9px">아이콘 (이모지, 비우면 자동)</div>
+    <input class="ik" maxlength="4" placeholder="예: 📁 ⭐ 📊" value="${esc(l.icon || '')}">
+    <button class="go2">저장</button>
+    <div class="tip">${rdp ? '원격데스크톱은 PC마다 한 번 <b>deploy\\rdp-protocol.reg</b> 를 실행해 두어야 열립니다.'
+      : '주소만 적으면 <b>https://</b> 는 자동으로 붙습니다. 아이콘은 그 사이트 그림을 자동으로 가져옵니다.'}</div>`;
+  $('#lnkEd').style.left = Math.max(8, Math.min(window.innerWidth - 290, r.left)) + 'px';
+  $('#lnkEd').style.top = Math.min(window.innerHeight - 330, r.bottom + 6) + 'px';
+  $('#lnkEd').hidden = false;
+  const n = $('#lnkEd .nm'); if (n) { n.focus(); n.select(); }
+}
+function saveLnk() {
+  const l = find('l', lnkFor); if (!l) return;
+  const rdp = $('#lnkEd .kind button.on').dataset.kd === 'rdp';
+  let u = $('#lnkEd .ur').value.trim();
+  if (u) u = rdp ? 'mstsc:' + u.replace(/^(mstsc:|rdp:\/\/)/i, '') : (/^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, ''));
+  l.url = u; l.icon = $('#lnkEd .ik').value.trim().slice(0, 4);
+  let nm = $('#lnkEd .nm').value.trim();
+  if (!nm && u) { try { nm = rdp ? u.replace(/^mstsc:/i, '') : new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} }
+  l.name = nm.slice(0, 30);
+  touch(); render(); $('#lnkEd').hidden = true; lnkFor = null;
+}
+$('#lnkEd').onclick = (e) => {
+  const kd = e.target.dataset.kd;
+  if (kd) {
+    const on = $('#lnkEd .kind button.on'); if (on) on.classList.remove('on');
+    e.target.classList.add('on');
+    const tip = $('#lnkEd .tip'), ur = $('#lnkEd .ur');
+    if (kd === 'rdp') { ur.placeholder = '192.168.0.9'; tip.innerHTML = '원격데스크톱은 PC마다 한 번 <b>deploy\\rdp-protocol.reg</b> 를 실행해 두어야 열립니다.'; }
+    else { ur.placeholder = 'gw.ilsancorp.co.kr'; tip.innerHTML = '주소만 적으면 <b>https://</b> 는 자동으로 붙습니다. 아이콘은 그 사이트 그림을 자동으로 가져옵니다.'; }
+    return;
+  }
+  if (e.target.classList.contains('go2')) saveLnk();
+};
+$('#lnkEd').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') saveLnk();
+  else if (e.key === 'Escape') { $('#lnkEd').hidden = true; lnkFor = null; }
+});
 
 // ---- 기본 설정 (톱니바퀴) ----
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
@@ -542,6 +672,7 @@ $('#cfg').onclick = (e) => {
 
 document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#cfg') && !e.target.closest('#cfgBtn')) $('#cfg').hidden = true;
+  if (!e.target.closest('#lnkEd') && !e.target.closest('.lnk')) { $('#lnkEd').hidden = true; lnkFor = null; }
   if (!e.target.closest('#bin') && !e.target.closest('#binBtn')) $('#bin').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
