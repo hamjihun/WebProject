@@ -140,12 +140,17 @@
   .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
   .x:hover { color:#dc2626; }
   .area .x { color:rgba(20,52,46,.35); } .area .x:hover { color:var(--bad); }
-  .rz { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; }
-  .rz::after { content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px; border-right:2px solid rgba(0,0,0,.3); border-bottom:2px solid rgba(0,0,0,.3); }
-  .rz.bl { right:auto; left:0; cursor:nesw-resize; }
-  .rz.bl::after { right:auto; left:3px; border-right:0; border-left:2px solid rgba(0,0,0,.3); }
-  .area .rz::after { border-color:var(--bd,#94a3b8); }
-  .area .rz.bl::after { border-right:0; border-left:2px solid var(--bd,#94a3b8); }
+  .rz { position:absolute; z-index:2; }
+  .rz.se, .rz.sw { width:16px; height:16px; bottom:0; }
+  .rz.se { right:0; cursor:nwse-resize; } .rz.sw { left:0; cursor:nesw-resize; }
+  .rz.se::after, .rz.sw::after { content:''; position:absolute; bottom:3px; width:7px; height:7px;
+    border-bottom:2px solid rgba(0,0,0,.3); }
+  .rz.se::after { right:3px; border-right:2px solid rgba(0,0,0,.3); }
+  .rz.sw::after { left:3px; border-left:2px solid rgba(0,0,0,.3); }
+  .rz.e, .rz.w { top:16px; bottom:16px; width:8px; cursor:ew-resize; }
+  .rz.e { right:-2px; } .rz.w { left:-2px; }
+  .rz.s { left:16px; right:16px; bottom:-2px; height:8px; cursor:ns-resize; }
+  .area .rz.se::after, .area .rz.sw::after { border-color:var(--bd,#94a3b8); }
 
   /* 팝업 (색·글자 크기 / 보드 메뉴) */
   .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:9px; box-shadow:0 8px 22px var(--shadow); }
@@ -288,7 +293,7 @@ function render() {
       <div class="hd"><span class="dot" data-pal="1" style="--bg2:${COLORS[a.color] ? COLORS[a.color].bd : '#64748b'}"></span>
         <input class="t" value="${esc(a.title)}" placeholder="범위 이름 (예: 아이디어)" maxlength="40">
         <button class="x" title="범위 지우기">✕</button></div>
-      <div class="rz"></div><div class="rz bl"></div>
+      <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>`).join('') +
     b.notes.map((n) => `
     <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
@@ -297,7 +302,7 @@ function render() {
         <button class="hb ed" title="제목 정하기 (오른쪽 단추 = 색·글자 크기)">✎</button>
         <button class="x" title="메모 지우기">✕</button></div>
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
-      <div class="rz"></div><div class="rz bl"></div>
+      <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>`).join('') +
     '';
   renderBoards(); renderPages();
@@ -536,7 +541,10 @@ $('#canvas').addEventListener('mousedown', (e) => {
     if (!canMove) return;                                            // 제목 줄로만 옮긴다
   }
   const base = { o, box, k, sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
-  if (rz) { e.preventDefault(); drag = { ...base, mode: 'rz', left: t.classList.contains('bl') }; document.body.style.userSelect = 'none'; }
+  if (rz) {
+    const dir = ['se', 'sw', 'e', 'w', 's'].find((c) => t.classList.contains(c)) || 'se';
+    e.preventDefault(); drag = { ...base, mode: 'rz', dir }; document.body.style.userSelect = 'none';
+  }
   else pend = { ...base, mode: 'mv' };
   moved = false;
   if (k === 'n' && sel !== o.id) { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch(); }
@@ -556,19 +564,21 @@ document.addEventListener('mousemove', (e) => {
     drag.o.x = m.x; drag.o.y = m.y;
     drag.box.style.left = drag.o.x + 'px'; drag.box.style.top = drag.o.y + 'px';
   } else {
-    const min = drag.k === 'n' ? [80, 60] : [160, 120];
-    if (drag.left) {                                   // 왼쪽 아래 손잡이: 오른쪽 끝을 붙잡고 왼쪽으로 늘린다
+    const min = drag.k === 'n' ? [80, 60] : [160, 120], d = drag.dir;
+    if (d === 'sw' || d === 'w') {                     // 왼쪽 쪽: 오른쪽 끝을 붙잡고 왼쪽으로 늘린다
       const right = drag.x + drag.w;
       let nx = Math.max(0, snap(drag.x + dx)), w = right - nx;
       if (w < min[0]) { w = min[0]; nx = right - w; }
       drag.o.x = nx; drag.o.w = w;
       drag.box.style.left = nx + 'px'; drag.box.style.width = w + 'px';
-    } else {
+    } else if (d === 'se' || d === 'e') {              // 오른쪽 쪽
       drag.o.w = Math.max(min[0], snap(drag.w + dx));
       drag.box.style.width = drag.o.w + 'px';
     }
-    drag.o.h = Math.max(min[1], snap(drag.h + dy));
-    drag.box.style.height = drag.o.h + 'px';
+    if (d === 'se' || d === 'sw' || d === 's') {       // 아래쪽
+      drag.o.h = Math.max(min[1], snap(drag.h + dy));
+      drag.box.style.height = drag.o.h + 'px';
+    }
   }
 });
 document.addEventListener('mouseup', () => {
@@ -780,7 +790,7 @@ const HELP = `
     <li><b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다 (한 장 3MB까지).</li></ul>
   <h4>메모 다루기</h4>
   <ul><li><b>제목 줄을 끌어서</b> 옮깁니다. 내용 글자 위에서 끌면 글자가 선택됩니다.</li>
-    <li><b>아래 양쪽 모서리</b>를 끌어 크기를 바꿉니다.</li>
+    <li><b>아래 두 모서리</b>나 <b>좌·우·아래 가장자리</b>를 끌어 크기를 바꿉니다.</li>
     <li>제목 줄의 <b>✎</b> 로 제목을 정하고, 메모 위에서 <b>오른쪽 단추</b>를 누르면 <b>색·글자 크기</b>도 함께 정합니다.</li>
     <li>제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다. 다시 두 번 누르면 펴집니다.</li>
     <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
