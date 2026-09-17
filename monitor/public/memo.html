@@ -70,17 +70,6 @@
   #tools .st { color:var(--muted); font-size:11.5px; min-width:44px; }
   #tools #binBtn b { color:var(--accent); font-size:11.5px; margin-left:5px; }
   #tools #cfgBtn { font-size:14px; padding:4px 9px; }
-  #lnkEd { width:270px; }
-  #lnkEd input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
-    border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; }
-  #lnkEd input:focus { outline:none; border-color:var(--accent); }
-  #lnkEd .kind { display:flex; gap:6px; }
-  #lnkEd .kind button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
-    font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
-  #lnkEd .kind button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
-  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:var(--onacc); border:0; border-radius:var(--r);
-    font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
-  #lnkEd .tip { color:var(--muted); font-size:11px; line-height:1.6; margin-top:9px; }
   #cfg { width:250px; max-height:72vh; overflow:auto; }
   #cfg b.sw.on { outline:2px solid var(--accent); outline-offset:2px; }
   #cfg .sec { margin-top:11px; } #cfg .sec:first-child { margin-top:0; }
@@ -127,19 +116,6 @@
   .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
 
   /* 바로가기 타일 (바탕화면 아이콘처럼) */
-  .lnk { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
-    background:var(--card); border:1px solid var(--line); border-radius:var(--r); cursor:pointer; overflow:hidden;
-    box-shadow:0 1px 3px var(--shadow);
-    padding:6px 4px; text-align:center; z-index:6; }
-  .lnk:hover { background:var(--soft); border-color:var(--accent); }
-  .lnk.sel { border-color:var(--accent); }
-  .lnk .ic { font-size:26px; line-height:1; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
-    color:var(--text); font-weight:700; flex:none; }
-  .lnk .ic img { width:28px; height:28px; object-fit:contain; }
-  .lnk .lb { font-size:11.5px; color:var(--text); line-height:1.25; max-height:29px; overflow:hidden; word-break:break-all; }
-  .lnk .x { position:absolute; top:0; right:0; color:rgba(20,52,46,.4); display:none; }
-  .lnk:hover .x { display:block; }
-  .lnk.mv { opacity:.85; }
 
   /* 메모지 (각진 사각형) */
   .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 6px rgba(20,52,46,.18); outline:1px solid rgba(0,0,0,.14); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
@@ -190,9 +166,19 @@
   #bds .bd input.re { width:90px; background:var(--card); border:1px solid var(--accent); color:var(--text);
     border-radius:4px; font:inherit; font-size:12.5px; font-weight:700; padding:1px 4px; }
   #bds .bd input.re:focus { outline:none; }
-  #empty { position:absolute; left:0; right:0; top:34%; color:var(--muted); text-align:center; line-height:1.9; pointer-events:none; }
-  body:not(.nosd) #empty { left:174px; }
-  #empty[hidden] { display:none; }
+  #help { position:static; width:min(720px,96vw); max-height:82vh; display:flex; flex-direction:column; padding:16px 18px 14px; }
+  #help .hdr { display:flex; align-items:baseline; gap:9px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+  #help .hdr b { font-size:15px; } #help .hdr span { color:var(--muted); font-size:11.5px; }
+  #help .body { flex:1; overflow:auto; padding:12px 2px 4px; font-size:13px; line-height:1.85; }
+  #help h4 { margin:14px 0 4px; font-size:12.5px; color:var(--accent); } #help h4:first-child { margin-top:0; }
+  #help ul { margin:0; padding-left:18px; } #help li { margin:2px 0; }
+  #help .ft { display:flex; justify-content:flex-end; padding-top:11px; }
+  #help .ft button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    font:inherit; font-size:12px; padding:6px 14px; cursor:pointer; }
+  #help .ft button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
+  #cfg .hlp { width:100%; margin-top:12px; background:var(--card); border:1px solid var(--line); color:var(--text);
+    border-radius:var(--r); font:inherit; font-size:12px; padding:7px 0; cursor:pointer; }
+  #cfg .hlp:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
 </style>
 </head>
 <body>
@@ -219,13 +205,12 @@
   </div>
   <button id="sdShow" title="탭 보이기">›</button>
   <div id="board"><div id="canvas"></div></div>
-  <div id="empty" hidden></div>
 </div>
 <div class="pop" id="pal" hidden></div>
 <div class="pop" id="bmenu" hidden></div>
 <div class="mask" id="binMask" hidden><div class="pop" id="bin"></div></div>
+<div class="mask" id="helpMask" hidden><div class="pop" id="help"></div></div>
 <div class="pop" id="cfg" hidden></div>
-<div class="pop" id="lnkEd" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
 
 <script>try { const t = localStorage.getItem('imsMemoTheme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -245,15 +230,6 @@ const SIZES = [11, 13, 15, 18, 22];
 const SNAP = 10;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
-const EMPTY = '메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
-  + '<span style="font-size:12px">메모는 <b>제목 줄</b>을 끌어서 옮기고(내용 글자는 끌어서 선택), <b>아래 양쪽 모서리</b>로 크기를 바꿉니다.<br>'
-  + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
-  + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
-  + '빈 바탕에서 <b>오른쪽 단추</b>를 누르면 그 자리에 <b>바로가기</b>(바탕화면 아이콘)를 만듭니다.<br>'
-  + '왼쪽 <b>＋ 새 탭</b> 으로 이 메모판 안에 탭을 더 만듭니다 (예: 회의록 → 9월 17일 회의록). <b>‹ ›</b> 로 접었다 폅니다.<br>'
-  + '지운 것은 오른쪽 <b>🗑 휴지통</b> 에서 되살리고, <b>⚙</b> 에서 기본 색·글자 크기를 정합니다.<br>'
-  + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span>';
-
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
 let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light' };
@@ -293,12 +269,6 @@ function render() {
         <button class="x" title="범위 지우기">✕</button></div>
       <div class="rz"></div><div class="rz bl"></div>
     </div>`).join('') +
-    b.links.map((l) => `
-    <div class="lnk ${sel === l.id ? 'sel' : ''}" data-k="l" data-id="${l.id}" title="${esc(l.url || '')}"
-      style="left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;--bd:${COLORS[l.color] ? COLORS[l.color].bd : '#475569'}">
-      ${icoHtml(l)}<span class="lb">${esc(l.name || '이름 없음')}</span>
-      <button class="x" title="바로가기 지우기">✕</button>
-    </div>`).join('') +
     b.notes.map((n) => `
     <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
       <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><span class="dot" data-pal="1"></span>
@@ -309,22 +279,8 @@ function render() {
       <div class="rz"></div><div class="rz bl"></div>
     </div>`).join('') +
     '';
-  const bare = !(b.notes.length + b.areas.length + b.links.length);
-  $('#empty').hidden = !bare;
-  if (bare && !$('#empty').innerHTML) $('#empty').innerHTML = EMPTY;
   renderBoards(); renderPages();
-  $('#binN').textContent = trash.length ? ' ' + trash.length : '';
-}
-// 바로가기 아이콘: 이모지를 넣었으면 그것, 아니면 그 사이트의 파비콘, 안 나오면 첫 글자
-function icoHtml(l) {
-  if (l.icon) return `<span class="ic">${esc(l.icon)}</span>`;
-  if (/^mstsc:/i.test(l.url)) return '<span class="ic">🖥️</span>';
-  let org = '';
-  try { org = new URL(l.url).origin; } catch (e) {}
-  const ch = esc(((l.name || '').trim()[0] || '·').toUpperCase());
-  if (!org) return `<span class="ic">${ch}</span>`;
-  return `<span class="ic"><img src="${esc(org)}/favicon.ico" alt="" draggable="false"
-    onerror="this.parentNode.textContent='${ch}'"></span>`;
+  $('#binN').textContent = trash.length ? ' ' + trash.filter((t) => t.k !== 'l').length : '';
 }
 function renderBoards() {
   $('#bds').innerHTML = boards.map((b) => `<button class="bd ${b.id === active ? 'on' : ''}" data-b="${b.id}">
@@ -412,7 +368,6 @@ const bh = (o, k) => (k === 'n' && o.min ? 26 : o.h);
 const geo = (o, k) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: bh(o, k) });
 function others(id) {
   return cur().notes.filter((n) => n.id !== id).map((n) => geo(n, 'n'))
-    .concat(cur().links.filter((l) => l.id !== id).map((l) => geo(l, 'l')))
     .concat(cur().areas.filter((a) => a.id !== id).map((a) => geo(a, 'a')));
 }
 function magnet(o, k, x, y) {
@@ -432,8 +387,7 @@ function magnet(o, k, x, y) {
 const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 function unstack(o, k) {                         // 겹쳐 있으면 가장 가까운 쪽으로 밀어 딱 붙인다
   if (k === 'a' || !prefs.magnet) return;
-  const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'))
-    .concat(cur().links.filter((l) => l.id !== o.id).map((l) => geo(l, 'l')));
+  const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'));
   for (let i = 0; i < 8; i++) {
     const t = list.find((b) => hits(me, b)); if (!t) break;
     const c = [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]
@@ -444,7 +398,7 @@ function unstack(o, k) {                         // 겹쳐 있으면 가장 가�
   o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
 }
 
-const find = (k, id) => (k === 'n' ? cur().notes : k === 'l' ? cur().links : cur().areas).find((o) => o.id === id);
+const find = (k, id) => (k === 'n' ? cur().notes : cur().areas).find((o) => o.id === id);
 const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
 function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) }; }
 
@@ -458,11 +412,6 @@ $('#addNote').onclick = () => {
   const c = viewCenter(), k = cur().notes.length;
   newNote(c.x - prefs.w / 2 + (k % 5) * 20, c.y - prefs.h / 2 + (k % 5) * 20);
 };
-function newLink(x, y) {
-  const l = { id: uid(), x: Math.max(0, snap(x - 48)), y: Math.max(0, snap(y - 44)), w: 96, h: 88, name: '', url: '', icon: '', color: 'gray' };
-  cur().links.push(l); unstack(l, 'l'); sel = l.id; touch(); render();
-  const el = document.querySelector(`.lnk[data-id="${l.id}"]`); if (el) openLnkEd(el, l.id);
-}
 $('#addArea').onclick = () => {
   const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: prefs.acolor };
   cur().areas.push(a); touch(); render();
@@ -512,17 +461,11 @@ $('#canvas').addEventListener('click', (e) => {
   const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
   if (e.target.classList.contains('x')) {         // 지우면 휴지통으로 (되살릴 수 있음)
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
-    else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
     else cur().areas = cur().areas.filter((x) => x.id !== id);
     const B = curB(), G = cur();
     trash.unshift({ k, del: Date.now(), b: B.id, p: G.id, bn: (boards.length > 1 ? B.name + ' · ' : '') + G.name, o });
     trash.splice(50);
     sel = null; touch(); render(); return;
-  }
-  if (k === 'l') {                                // 바로가기 타일 = 눌러서 열기
-    if (moved) return;
-    if (!o.url) { openLnkEd(box, id); return; }
-    openLink(o); return;
   }
   if (e.target.classList.contains('ed')) { openPal(e.target, k, id, true); return; }   // 제목 정하기
   if (e.target.classList.contains('plus')) {     // 이 메모 옆에 새 메모
@@ -537,15 +480,8 @@ $('#canvas').addEventListener('click', (e) => {
   }
 });
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
-  const box = e.target.closest('[data-k]');
-  if (!box) {                                              // 빈 바탕: 여기에 바로가기 만들기
-    e.preventDefault();
-    const r = $('#canvas').getBoundingClientRect();
-    newLink(e.clientX - r.left, e.clientY - r.top);
-    return;
-  }
+  const box = e.target.closest('[data-k]'); if (!box) return;
   e.preventDefault();
-  if (box.dataset.k === 'l') { openLnkEd({ left: e.clientX, bottom: e.clientY }, box.dataset.id); return; }
   openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
 });
 $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 번 누르면 접었다 폈다
@@ -575,14 +511,13 @@ $('#canvas').addEventListener('mousedown', (e) => {
   const rz = t.classList.contains('rz');
   if (!rz) {
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;    // 글자 칸: 글자 선택이 우선
-    const canMove = t.closest('.hd') || k === 'l' || (k === 'n' && t.tagName === 'IMG');
+    const canMove = t.closest('.hd') || (k === 'n' && t.tagName === 'IMG');
     if (!canMove) return;                                            // 제목 줄로만 옮긴다
   }
   const base = { o, box, k, sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
   if (rz) { e.preventDefault(); drag = { ...base, mode: 'rz', left: t.classList.contains('bl') }; document.body.style.userSelect = 'none'; }
   else pend = { ...base, mode: 'mv' };
   moved = false;
-  if (k === 'l' && sel !== o.id) { sel = o.id; box.classList.add('sel'); }
   if (k === 'n' && sel !== o.id) { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch(); }
 });
 document.addEventListener('mousemove', (e) => {
@@ -674,6 +609,12 @@ $('#bds').addEventListener('click', (e) => {
   if (id === active) { openBoardMenu(chip); return; }   // 지금 보고 있는 판을 다시 누르면 메뉴
   active = id; sel = null; $('#board').scrollTo(0, 0); touch(); render();
 });
+$('#bds').addEventListener('contextmenu', (e) => {            // 오른쪽 단추 → 메모판 메뉴
+  const chip = e.target.closest('.bd'); if (!chip) return;
+  e.preventDefault();
+  if (chip.dataset.b !== active) { active = chip.dataset.b; sel = null; touch(); render(); }
+  openBoardMenu(document.querySelector(`.bd[data-b="${active}"]`));
+});
 $('#bds').addEventListener('dblclick', (e) => {              // 탭 두 번 누르면 이름 바꾸기
   const chip = e.target.closest('.bd'); if (!chip || chip.querySelector('input')) return;
   $('#bmenu').hidden = true; startRename(chip);
@@ -756,14 +697,18 @@ function binName(t) {
   return (o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 30) || (o.img ? '사진 메모' : '빈 메모');
 }
 $('#binBtn').onclick = () => { if ($('#binMask').hidden) openBin(); else $('#binMask').hidden = true; };
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#binMask').hidden) $('#binMask').hidden = true; });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#binMask').hidden) $('#binMask').hidden = true;
+  if (!$('#helpMask').hidden) $('#helpMask').hidden = true;
+});
 function openBin() {
-  const list = trash;
-  $('#bin').innerHTML = `<div class="hdr"><b>🗑 휴지통</b><span>지운 메모 · 범위 · 바로가기 (최근 50개까지 보관)</span>
+  const list = trash.map((t, i) => ({ t, i })).filter((x) => x.t.k !== 'l');   // 바로가기 기능은 없앴다
+  $('#bin').innerHTML = `<div class="hdr"><b>🗑 휴지통</b><span>지운 메모 · 범위 (최근 50개까지 보관)</span>
       <button class="cl" data-a="close" title="닫기">✕</button></div>
-    <div class="list">${list.length ? list.map((t, i) => `<div class="it" data-i="${i}">
+    <div class="list">${list.length ? list.map(({ t, i }) => `<div class="it" data-i="${i}">
         ${binPv(t)}
-        <div class="mt"><div class="tt"><span class="kd">${t.k === 'a' ? '범위' : t.k === 'l' ? '바로가기' : '메모'}</span>${esc(binName(t))}</div>
+        <div class="mt"><div class="tt"><span class="kd">${t.k === 'a' ? '범위' : '메모'}</span>${esc(binName(t))}</div>
           <div class="sub">${binSub(t)}</div></div>
         <button data-a="back">되살리기</button><button class="rm" data-a="rm" title="완전히 지우기">✕</button></div>`).join('')
       : '<div style="color:var(--muted);font-size:13px;padding:26px 4px;text-align:center">비어 있습니다.<br>메모의 ✕ 로 지우면 여기로 들어옵니다.</div>'}</div>
@@ -789,71 +734,47 @@ $('#binMask').onclick = (e) => {
     if (t.p && (home.pages || []).some((g) => g.id === t.p)) home.ap = t.p;
   }
   if (t.k === 'a') cur().areas.push(o);
-  else if (t.k === 'l') { cur().links.push(o); unstack(o, 'l'); sel = o.id; }
   else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
   touch(); render(); $('#binMask').hidden = true;
   const el = document.querySelector(`[data-id="${o.id}"]`); if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 };
 
-// ---- 바로가기 (바탕화면 아이콘처럼) ----
-function openLink(l) {
-  if (!l.url) return;
-  if (/^https?:/i.test(l.url)) window.open(l.url, '_blank', 'noopener');
-  else location.href = l.url;                     // mstsc: (원격데스크톱)
-}
-let lnkFor = null;
-function openLnkEd(el, id) {
-  const l = find('l', id); if (!l) return;
-  lnkFor = id;
-  const rdp = /^mstsc:/i.test(l.url);
-  const r = el.getBoundingClientRect ? el.getBoundingClientRect() : el;
-  $('#lnkEd').innerHTML = `
-    <div class="sec">종류</div>
-    <div class="kind"><button data-kd="web" class="${rdp ? '' : 'on'}">🌐 웹 주소</button>
-      <button data-kd="rdp" class="${rdp ? 'on' : ''}">🖥️ 원격데스크톱</button></div>
-    <div class="sec" style="margin-top:9px">이름</div>
-    <input class="nm" maxlength="30" placeholder="예: 그룹웨어" value="${esc(l.name || '')}">
-    <div class="sec" style="margin-top:9px">주소</div>
-    <input class="ur" maxlength="500" placeholder="${rdp ? '192.168.0.9' : 'gw.ilsancorp.co.kr'}" value="${esc(l.url.replace(/^mstsc:/i, ''))}">
-    <div class="sec" style="margin-top:9px">아이콘 (이모지, 비우면 자동)</div>
-    <input class="ik" maxlength="4" placeholder="예: 📁 ⭐ 📊" value="${esc(l.icon || '')}">
-    <button class="go2">저장</button>
-    <div class="tip">${rdp ? '원격데스크톱은 PC마다 한 번 <b>deploy\\rdp-protocol.reg</b> 를 실행해 두어야 열립니다.'
-      : '주소만 적으면 <b>https://</b> 는 자동으로 붙습니다. 아이콘은 그 사이트 그림을 자동으로 가져옵니다.'}</div>`;
-  $('#lnkEd').style.left = Math.max(8, Math.min(window.innerWidth - 290, r.left)) + 'px';
-  $('#lnkEd').style.top = Math.min(window.innerHeight - 330, r.bottom + 6) + 'px';
-  $('#lnkEd').hidden = false;
-  const n = $('#lnkEd .nm'); if (n) { n.focus(); n.select(); }
-}
-function saveLnk() {
-  const l = find('l', lnkFor); if (!l) return;
-  const rdp = $('#lnkEd .kind button.on').dataset.kd === 'rdp';
-  let u = $('#lnkEd .ur').value.trim();
-  if (u) u = rdp ? 'mstsc:' + u.replace(/^(mstsc:|rdp:\/\/)/i, '') : (/^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, ''));
-  l.url = u; l.icon = $('#lnkEd .ik').value.trim().slice(0, 4);
-  let nm = $('#lnkEd .nm').value.trim();
-  if (!nm && u) { try { nm = rdp ? u.replace(/^mstsc:/i, '') : new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} }
-  l.name = nm.slice(0, 30);
-  touch(); render(); $('#lnkEd').hidden = true; lnkFor = null;
-}
-$('#lnkEd').onclick = (e) => {
-  const kd = e.target.dataset.kd;
-  if (kd) {
-    const on = $('#lnkEd .kind button.on'); if (on) on.classList.remove('on');
-    e.target.classList.add('on');
-    const tip = $('#lnkEd .tip'), ur = $('#lnkEd .ur');
-    if (kd === 'rdp') { ur.placeholder = '192.168.0.9'; tip.innerHTML = '원격데스크톱은 PC마다 한 번 <b>deploy\\rdp-protocol.reg</b> 를 실행해 두어야 열립니다.'; }
-    else { ur.placeholder = 'gw.ilsancorp.co.kr'; tip.innerHTML = '주소만 적으면 <b>https://</b> 는 자동으로 붙습니다. 아이콘은 그 사이트 그림을 자동으로 가져옵니다.'; }
-    return;
-  }
-  if (e.target.classList.contains('go2')) saveLnk();
-};
-$('#lnkEd').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') saveLnk();
-  else if (e.key === 'Escape') { $('#lnkEd').hidden = true; lnkFor = null; }
-});
 
-// ---- 기본 설정 (톱니바퀴) ----
+// ---- 도움말 ----
+const HELP = `
+  <h4>메모 만들기</h4>
+  <ul><li>위쪽 <b>＋ 새 메모</b> 를 누르면 화면 가운데에 붙습니다.</li>
+    <li>제목 줄의 <b>＋</b> 를 누르면 그 메모 바로 옆에 새 메모가 붙습니다.</li>
+    <li><b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다 (한 장 3MB까지).</li></ul>
+  <h4>메모 다루기</h4>
+  <ul><li><b>제목 줄을 끌어서</b> 옮깁니다. 내용 글자 위에서 끌면 글자가 선택됩니다.</li>
+    <li><b>아래 양쪽 모서리</b>를 끌어 크기를 바꿉니다.</li>
+    <li>제목 줄의 <b>✎</b> 나 메모 위에서 <b>오른쪽 단추</b>를 누르면 제목·색·글자 크기를 정합니다.</li>
+    <li>제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다. 다시 두 번 누르면 펴집니다.</li>
+    <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
+  <h4>범위</h4>
+  <ul><li><b>＋ 새 범위</b> 는 메모를 묶어 두는 점선 칸입니다. 제목 줄로 옮기고 이름을 적습니다.</li>
+    <li>범위를 지워도 <b>안에 있던 메모는 그대로</b> 남습니다.</li></ul>
+  <h4>메모판과 탭</h4>
+  <ul><li>맨 위 탭 = <b>메모판</b>. <b>＋</b> 로 더 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.
+      탭을 다시 누르거나 <b>오른쪽 단추</b>를 누르면 메뉴(이름·색·순서·지우기)가 나옵니다.</li>
+    <li>왼쪽 = 그 메모판 안의 <b>탭</b> (예: 회의록 → 9월 17일 회의록). <b>＋ 새 탭</b> 으로 만들고
+      <b>‹ ›</b> 로 접었다 폅니다.</li></ul>
+  <h4>휴지통과 설정</h4>
+  <ul><li>메모의 <b>✕</b> 로 지우면 <b>🗑 휴지통</b> 으로 들어가고, 거기서 내용을 확인하고 되살립니다 (최근 50개).</li>
+    <li><b>⚙</b> 에서 새 메모의 색·글자 크기·크기, 새 범위 색, 자석, <b>화면 테마(밝게/어둡게)</b> 를 정합니다.</li>
+    <li>모든 변경은 <b>자동 저장</b>됩니다. 오른쪽 위에 "저장됨" 이 뜹니다.</li></ul>`;
+function openHelp() {
+  $('#help').innerHTML = `<div class="hdr"><b>❓ 메모 보드 사용법</b><span>모르는 게 있으면 여기를 보세요</span>
+      <button class="cl" data-a="close" title="닫기" style="margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);border-radius:var(--r);font:inherit;font-size:15px;line-height:1;padding:3px 8px;cursor:pointer">✕</button></div>
+    <div class="body">${HELP}</div>
+    <div class="ft"><button data-a="close">닫기</button></div>`;
+  $('#helpMask').hidden = false;
+}
+$('#helpMask').onclick = (e) => {
+  if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
+};
+
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -872,7 +793,8 @@ function openCfg() {
     <div class="sec">자석으로 붙이기</div>
     <div class="row"><button data-p="magnet" data-v="1" class="${prefs.magnet ? 'on' : ''}">켜기</button>
       <button data-p="magnet" data-v="0" class="${prefs.magnet ? '' : 'on'}">끄기</button></div>
-    <div style="color:var(--muted);font-size:11px;margin-top:11px;line-height:1.6">여기서 정한 색·크기는 <b>앞으로 새로 만드는</b> 메모에 적용됩니다. 이미 붙여 둔 메모는 그대로입니다.</div>`;
+    <div style="color:var(--muted);font-size:11px;margin-top:11px;line-height:1.6">여기서 정한 색·크기는 <b>앞으로 새로 만드는</b> 메모에 적용됩니다. 이미 붙여 둔 메모는 그대로입니다.</div>
+    <button class="hlp" data-p="help">❓ 도움말 (사용법 보기)</button>`;
   const r = $('#cfgBtn').getBoundingClientRect();
   $('#cfg').style.left = Math.max(8, Math.min(window.innerWidth - 270, r.right - 250)) + 'px';
   $('#cfg').style.top = (r.bottom + 6) + 'px';
@@ -884,13 +806,13 @@ $('#cfg').onclick = (e) => {
   else if (k === 'magnet') prefs.magnet = v === '1';
   else if (k === 'fs') prefs.fs = Number(v);
   else if (k === 'theme') { prefs.theme = v; applyTheme(); }
+  else if (k === 'help') { $('#cfg').hidden = true; openHelp(); return; }
   else prefs[k] = v;
   touch(); openCfg();
 };
 
 document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#cfg') && !e.target.closest('#cfgBtn')) $('#cfg').hidden = true;
-  if (!e.target.closest('#lnkEd') && !e.target.closest('.lnk')) { $('#lnkEd').hidden = true; lnkFor = null; }
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
   if (!e.target.closest('#pmenu') && !e.target.closest('.pg')) $('#pmenu').hidden = true;
