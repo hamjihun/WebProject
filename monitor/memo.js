@@ -48,17 +48,35 @@ function create(opts) {
     w: clamp(num(a.w, 520), 160, 4000), h: clamp(num(a.h, 380), 120, 4000),
     title: str(a.title, 40), color: color(a.color, 'green'),
   });
-  // 휴지통: 지운 메모·범위를 보드마다 최근 50개까지 들고 있는다
-  const trashItem = (t) => (t && t.k === 'a'
-    ? { k: 'a', del: num(t.del, Date.now()), o: area(t.o || {}) }
-    : { k: 'n', del: num(t.del, Date.now()), o: note((t && t.o) || {}) });
+  // 휴지통: 사람마다 하나. 지운 메모·범위를 최근 50개까지 들고 있다 (b/bn = 원래 있던 메모판)
+  const trashItem = (t) => {
+    const c = { del: num(t && t.del, Date.now()), b: str(t && t.b, 32), bn: str(t && t.bn, 20) };
+    return t && t.k === 'a' ? { k: 'a', ...c, o: area(t.o || {}) } : { k: 'n', ...c, o: note((t && t.o) || {}) };
+  };
+  const trashOf = (u, boards) => {
+    let list = Array.isArray(u && u.trash) ? u.trash : null;
+    if (!list) {                                   // 예전 형식: 메모판마다 휴지통 → 하나로 합친다
+      list = [];
+      for (const b of boards) if (Array.isArray(b.trash)) for (const t of b.trash) list.push({ ...t, b: b.id, bn: b.name });
+      list.sort((x, y) => num(y.del) - num(x.del));
+    }
+    return list.slice(0, MAX_TRASH).map(trashItem);
+  };
+  // 기본값 (새 메모·새 범위를 만들 때 쓰는 설정)
+  const prefs = (p) => ({
+    color: color(p && p.color, 'yellow'),
+    fs: clamp(num(p && p.fs, 13), 10, 40),
+    w: clamp(num(p && p.w, 200), 80, 1600),
+    h: clamp(num(p && p.h, 200), 60, 1600),
+    acolor: color(p && p.acolor, 'green'),
+    magnet: !(p && p.magnet === false),
+  });
   const board = (b, i) => ({
     id: str(b.id, 32) || rid(),
     name: str(b.name, 20) || `메모 ${i + 1}`,
     color: color(b.color, 'yellow'),
     notes: (Array.isArray(b.notes) ? b.notes : []).slice(0, MAX_NOTES).map(note),
     areas: (Array.isArray(b.areas) ? b.areas : []).slice(0, MAX_AREAS).map(area),
-    trash: (Array.isArray(b.trash) ? b.trash : []).slice(0, MAX_TRASH).map(trashItem),
   });
 
   // 예전 형식({ notes, areas })을 보드 하나로 옮긴다
@@ -76,18 +94,19 @@ function create(opts) {
       const list = boards.slice(0, MAX_BOARDS).map(board);
       if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [] });
       const act = list.some((b) => b.id === active) ? active : list[0].id;
-      return { boards: list, active: act };
+      return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs) };
     },
     set(uid, data) {
       const list = (Array.isArray(data && data.boards) ? data.boards : []).slice(0, MAX_BOARDS).map(board);
       if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [] });
       const active = list.some((b) => b.id === data.active) ? data.active : list[0].id;
-      const next = { active, boards: list };
+      const trash = (Array.isArray(data && data.trash) ? data.trash : []).slice(0, MAX_TRASH).map(trashItem);
+      const next = { active, boards: list, trash, prefs: prefs(data && data.prefs) };
       const size = JSON.stringify(next).length;
       if (size > MAX_USER) throw new Error('사진이 너무 많습니다. 오래된 사진 메모를 지운 뒤 다시 저장해 주세요');
       all[uid] = next;
       save();
-      return { boards: list, active };
+      return { boards: list, active, trash, prefs: next.prefs };
     },
     removeUser(uid) { if (all[uid]) { delete all[uid]; save(); } },
   };
