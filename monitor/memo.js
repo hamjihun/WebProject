@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAX_BOARDS = 20, MAX_NOTES = 500, MAX_AREAS = 60, MAX_TEXT = 5000;
+const MAX_BOARDS = 20, MAX_NOTES = 500, MAX_AREAS = 60, MAX_TEXT = 5000, MAX_TRASH = 50;
 const MAX_IMG = 3 * 1024 * 1024;          // 사진 한 장 (data URL 글자 수)
 const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 용량
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
@@ -48,12 +48,17 @@ function create(opts) {
     w: clamp(num(a.w, 520), 160, 4000), h: clamp(num(a.h, 380), 120, 4000),
     title: str(a.title, 40), color: color(a.color, 'green'),
   });
+  // 휴지통: 지운 메모·범위를 보드마다 최근 50개까지 들고 있는다
+  const trashItem = (t) => (t && t.k === 'a'
+    ? { k: 'a', del: num(t.del, Date.now()), o: area(t.o || {}) }
+    : { k: 'n', del: num(t.del, Date.now()), o: note((t && t.o) || {}) });
   const board = (b, i) => ({
     id: str(b.id, 32) || rid(),
     name: str(b.name, 20) || `메모 ${i + 1}`,
     color: color(b.color, 'yellow'),
     notes: (Array.isArray(b.notes) ? b.notes : []).slice(0, MAX_NOTES).map(note),
     areas: (Array.isArray(b.areas) ? b.areas : []).slice(0, MAX_AREAS).map(area),
+    trash: (Array.isArray(b.trash) ? b.trash : []).slice(0, MAX_TRASH).map(trashItem),
   });
 
   // 예전 형식({ notes, areas })을 보드 하나로 옮긴다

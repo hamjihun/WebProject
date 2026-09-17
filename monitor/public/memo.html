@@ -25,11 +25,22 @@
   #bds .bd .mn { opacity:.7; margin-left:1px; }
   #bds #addBoard { background:none; border:1px dashed var(--line); color:var(--muted); border-radius:7px; padding:5px 10px; font:inherit; cursor:pointer; }
   #bds #addBoard:hover { color:var(--accent); border-color:var(--accent); }
-  #tools { display:flex; align-items:center; gap:6px; }
+  #tools { display:flex; align-items:center; gap:6px; flex:1; min-width:0; }
   #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
   #tools button:hover { border-color:var(--accent); }
   #tools button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
   #tools .st { color:var(--muted); font-size:11.5px; min-width:44px; }
+  #tools .sp { flex:1; }
+  #tools #binBtn b { color:var(--accent); font-size:11.5px; margin-left:5px; }
+  #bin { width:290px; max-height:62vh; overflow:auto; }
+  #bin .it { display:flex; align-items:center; gap:7px; padding:5px 4px; border-bottom:1px solid var(--line); }
+  #bin .it i { width:11px; height:11px; border-radius:3px; flex:none; }
+  #bin .it .nm { flex:1; min-width:0; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #bin .it .dt { color:var(--muted); font-size:11px; flex:none; }
+  #bin .it button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px;
+    font:inherit; font-size:11.5px; padding:3px 7px; cursor:pointer; flex:none; }
+  #bin .it button:hover { border-color:var(--accent); color:var(--accent); }
+  #bin .it button.rm:hover { border-color:#f87171; color:#f87171; }
   /* 메모판 탭은 맨 위 탭줄 안으로 옮겨진다 */
   #bds { padding:6px 12px; }
   #topnav #bds { max-width:52vw; padding:0; }
@@ -43,7 +54,7 @@
 
   /* 메모지 (각진 사각형) */
   .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 7px rgba(0,0,0,.32); outline:1px solid rgba(0,0,0,.22); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
-  .note.sel { outline:2px solid var(--accent); outline-offset:-2px; box-shadow:0 5px 14px rgba(0,0,0,.45); }
+  .note.sel { box-shadow:0 7px 18px rgba(0,0,0,.5); }
   .note .hd { display:flex; align-items:center; gap:5px; padding:3px 5px; cursor:move; background:rgba(0,0,0,.08); }
   .note .nt { flex:1; min-width:0; color:#1f2937; font-size:12.5px; font-weight:700; padding:1px 3px; cursor:move;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -97,11 +108,14 @@
     <button class="go" id="addNote">＋ 새 메모</button>
     <button id="addArea">＋ 새 범위</button>
     <span class="st" id="st"></span>
+    <span class="sp"></span>
+    <button id="binBtn" title="지운 메모 보기">🗑 휴지통<b id="binN"></b></button>
   </div>
 </div>
 <div id="board"><div id="canvas"></div></div>
 <div class="pop" id="pal" hidden></div>
 <div class="pop" id="bmenu" hidden></div>
+<div class="pop" id="bin" hidden></div>
 
 <script src="common.js"></script>
 <script>
@@ -122,13 +136,15 @@ const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = 
 const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
   + '<span style="font-size:12px">메모는 아무 데나 끌어서 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
   + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
-  + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다.<br>'
+  + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
+  + '지운 메모는 오른쪽 <b>🗑 휴지통</b> 에서 되살릴 수 있습니다.<br>'
   + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span></div>';
 
 let boards = [], active = '', sel = null;
 let dirty = false, saving = false;
 const uid = () => Math.random().toString(36).slice(2, 10);
 const cur = () => boards.find((b) => b.id === active) || boards[0] || { notes: [], areas: [] };
+const bin = () => { const b = cur(); if (!Array.isArray(b.trash)) b.trash = []; return b.trash; };   // 휴지통
 
 // ---- 그리기 ----
 function render() {
@@ -155,12 +171,46 @@ function render() {
     </div>`).join('') +
     (b.notes.length + b.areas.length ? '' : EMPTY);
   renderBoards();
+  $('#binN').textContent = bin().length ? ' ' + bin().length : '';
 }
 function renderBoards() {
   $('#bds').innerHTML = boards.map((b) => `<button class="bd ${b.id === active ? 'on' : ''}" data-b="${b.id}">
     <i style="background:${COLORS[b.color] ? COLORS[b.color].bg : '#fde68a'}"></i>${esc(b.name)}${b.id === active ? '<span class="mn">▾</span>' : ''}</button>`).join('')
     + `<button id="addBoard" title="메모판 추가">＋</button>`;
 }
+// ---- 자석 (딱딱 떨어지게 붙이기) ----
+const MAG = 14;                                  // 이 거리 안이면 자석처럼 붙는다
+const NEAR = 60;                                 // 다른 축으로 이만큼 가까운 것만 상대로 본다
+const bh = (o, k) => (k === 'n' && o.min ? 26 : o.h);
+const geo = (o, k) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: bh(o, k) });
+function others(id) { return cur().notes.filter((n) => n.id !== id).map((n) => geo(n, 'n')).concat(cur().areas.filter((a) => a.id !== id).map((a) => geo(a, 'a'))); }
+function magnet(o, k, x, y) {
+  const w = o.w, h = bh(o, k);
+  let bx = { d: MAG + 1, v: x }, by = { d: MAG + 1, v: y };
+  for (const t of others(o.id)) {
+    if (y < t.y + t.h + NEAR && t.y < y + h + NEAR) {
+      for (const v of [t.x + t.w, t.x - w, t.x, t.x + t.w - w]) { const d = Math.abs(v - x); if (d < bx.d) bx = { d, v }; }
+    }
+    if (x < t.x + t.w + NEAR && t.x < x + w + NEAR) {
+      for (const v of [t.y + t.h, t.y - h, t.y, t.y + t.h - h]) { const d = Math.abs(v - y); if (d < by.d) by = { d, v }; }
+    }
+  }
+  return { x: Math.max(0, Math.round(bx.d <= MAG ? bx.v : snap(x))), y: Math.max(0, Math.round(by.d <= MAG ? by.v : snap(y))) };
+}
+const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+function unstack(o, k) {                         // 겹쳐 있으면 가장 가까운 쪽으로 밀어 딱 붙인다
+  if (k !== 'n') return;
+  const me = geo(o, 'n'), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'));
+  for (let i = 0; i < 8; i++) {
+    const t = list.find((b) => hits(me, b)); if (!t) break;
+    const c = [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]
+      .filter((p) => p.v >= 0).map((p) => ({ ...p, d: Math.abs(p.v - me[p.a]) })).sort((a, b) => a.d - b.d)[0];
+    if (!c) break;
+    me[c.a] = c.v;
+  }
+  o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
+}
+
 const find = (k, id) => (k === 'n' ? cur().notes : cur().areas).find((o) => o.id === id);
 const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
 function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) }; }
@@ -168,7 +218,7 @@ function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLe
 // ---- 만들기 ----
 function newNote(x, y) {
   const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: 200, h: 200, title: '', text: '', color: 'yellow', z: topZ() + 1, fs: 13 };
-  cur().notes.push(n); sel = n.id; touch(); render();
+  cur().notes.push(n); unstack(n, 'n'); sel = n.id; touch(); render();
   const el = document.querySelector(`.note[data-id="${n.id}"] textarea`); if (el) el.focus();
 }
 $('#addNote').onclick = () => {
@@ -222,10 +272,9 @@ document.addEventListener('paste', async (e) => {
 $('#canvas').addEventListener('click', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) { sel = null; render(); return; }
   const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
-  if (e.target.classList.contains('x')) {
-    const has = k === 'n' ? ((o.text || '').trim() || (o.title || '').trim() || o.img) : (o.title || '').trim();
-    if (has && !confirm(k === 'n' ? '이 메모를 지울까요?' : '이 범위를 지울까요? (안에 있는 메모는 그대로 남습니다)')) return;
+  if (e.target.classList.contains('x')) {         // 지우면 휴지통으로 (되살릴 수 있음)
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id); else cur().areas = cur().areas.filter((x) => x.id !== id);
+    bin().unshift({ k, del: Date.now(), o }); bin().splice(50);
     sel = null; touch(); render(); return;
   }
   if (e.target.classList.contains('ed')) { openPal(e.target, k, id, true); return; }   // 제목 정하기
@@ -287,7 +336,8 @@ document.addEventListener('mousemove', (e) => {
   e.preventDefault();
   const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (drag.mode === 'mv') {
-    drag.o.x = Math.max(0, snap(drag.x + dx)); drag.o.y = Math.max(0, snap(drag.y + dy));
+    const m = magnet(drag.o, drag.k, drag.x + dx, drag.y + dy);
+    drag.o.x = m.x; drag.o.y = m.y;
     drag.box.style.left = drag.o.x + 'px'; drag.box.style.top = drag.o.y + 'px';
   } else {
     const min = drag.k === 'n' ? [80, 60] : [160, 120];
@@ -298,7 +348,9 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
   pend = null;
   if (!drag) return;
-  drag.box.classList.remove('mv'); drag = null; document.body.style.userSelect = ''; touch(); render();
+  drag.box.classList.remove('mv');
+  if (drag.mode === 'mv') unstack(drag.o, drag.k);
+  drag = null; document.body.style.userSelect = ''; touch(); render();
 });
 
 // ---- 색 · 글자 크기 ----
@@ -398,7 +450,52 @@ $('#bmenu').onclick = (e) => {
   }
   $('#bmenu').hidden = true;
 };
+// ---- 휴지통 ----
+function ago(t) {
+  const m = Math.floor((Date.now() - (t || 0)) / 60000);
+  if (m < 1) return '방금'; if (m < 60) return m + '분 전';
+  const h = Math.floor(m / 60); if (h < 24) return h + '시간 전';
+  return Math.floor(h / 24) + '일 전';
+}
+function binName(t) {
+  const o = t.o || {};
+  if (t.k === 'a') return (o.title || '').trim() || '이름 없는 범위';
+  return (o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 30) || (o.img ? '사진 메모' : '빈 메모');
+}
+$('#binBtn').onclick = () => { if ($('#bin').hidden) openBin(); else $('#bin').hidden = true; };
+function openBin() {
+  const list = bin();
+  $('#bin').innerHTML = '<div class="sec">휴지통 · 지운 메모 (최근 50개까지)</div>'
+    + (list.length ? list.map((t, i) => `<div class="it" data-i="${i}">
+        <i style="background:${COLORS[t.o.color] ? (t.k === 'n' ? COLORS[t.o.color].bg : COLORS[t.o.color].bd) : '#fde68a'}"></i>
+        <span class="nm">${t.k === 'a' ? '［범위］ ' : ''}${esc(binName(t))}</span>
+        <span class="dt">${ago(t.del)}</span>
+        <button data-a="back">되살리기</button><button class="rm" data-a="rm" title="완전히 지우기">✕</button></div>`).join('')
+      + '<div style="text-align:right;padding-top:8px"><button class="rm" data-a="clear" style="background:none;border:1px solid var(--line);color:#f87171;border-radius:6px;font:inherit;font-size:11.5px;padding:4px 9px;cursor:pointer">휴지통 비우기</button></div>'
+      : '<div style="color:var(--muted);font-size:12.5px;padding:10px 2px">비어 있습니다. 메모의 ✕ 로 지우면 여기로 들어옵니다.</div>');
+  const r = $('#binBtn').getBoundingClientRect();
+  $('#bin').style.left = Math.max(8, Math.min(window.innerWidth - 310, r.right - 290)) + 'px';
+  $('#bin').style.top = (r.bottom + 6) + 'px';
+  $('#bin').hidden = false;
+}
+$('#bin').onclick = (e) => {
+  const a = e.target.dataset.a; if (!a) return;
+  if (a === 'clear') {
+    if (!confirm('휴지통을 비울까요? 되살릴 수 없습니다.')) return;
+    bin().length = 0; touch(); render(); $('#bin').hidden = true; return;
+  }
+  const i = Number(e.target.closest('.it').dataset.i), t = bin()[i]; if (!t) return;
+  if (a === 'rm') { bin().splice(i, 1); touch(); render(); openBin(); return; }
+  bin().splice(i, 1);                                   // 되살리기
+  const o = t.o;
+  if (t.k === 'a') cur().areas.push(o);
+  else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
+  touch(); render(); $('#bin').hidden = true;
+  const el = document.querySelector(`[data-id="${o.id}"]`); if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+};
+
 document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#bin') && !e.target.closest('#binBtn')) $('#bin').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
 });
