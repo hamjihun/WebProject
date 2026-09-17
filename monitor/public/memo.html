@@ -19,7 +19,7 @@
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
   #topnav { flex:none; }
-  #main { flex:1; display:flex; min-height:0; }
+  #main { position:relative; flex:1; display:flex; min-height:0; }
   #side { flex:none; width:174px; display:flex; flex-direction:column; overflow:auto;
     background:var(--side); border-right:1px solid var(--line); padding:9px 9px 12px; }
   body.nosd #side { display:none; }
@@ -190,7 +190,9 @@
   #bds .bd input.re { width:90px; background:var(--card); border:1px solid var(--accent); color:var(--text);
     border-radius:4px; font:inherit; font-size:12.5px; font-weight:700; padding:1px 4px; }
   #bds .bd input.re:focus { outline:none; }
-  .empty { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
+  #empty { position:absolute; left:0; right:0; top:34%; color:var(--muted); text-align:center; line-height:1.9; pointer-events:none; }
+  body:not(.nosd) #empty { left:174px; }
+  #empty[hidden] { display:none; }
 </style>
 </head>
 <body>
@@ -217,6 +219,7 @@
   </div>
   <button id="sdShow" title="탭 보이기">›</button>
   <div id="board"><div id="canvas"></div></div>
+  <div id="empty" hidden></div>
 </div>
 <div class="pop" id="pal" hidden></div>
 <div class="pop" id="bmenu" hidden></div>
@@ -242,14 +245,14 @@ const SIZES = [11, 13, 15, 18, 22];
 const SNAP = 10;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
-const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
+const EMPTY = '메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
   + '<span style="font-size:12px">메모는 <b>제목 줄</b>을 끌어서 옮기고(내용 글자는 끌어서 선택), <b>아래 양쪽 모서리</b>로 크기를 바꿉니다.<br>'
   + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
   + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
   + '빈 바탕에서 <b>오른쪽 단추</b>를 누르면 그 자리에 <b>바로가기</b>(바탕화면 아이콘)를 만듭니다.<br>'
   + '왼쪽 <b>＋ 새 탭</b> 으로 이 메모판 안에 탭을 더 만듭니다 (예: 회의록 → 9월 17일 회의록). <b>‹ ›</b> 로 접었다 폅니다.<br>'
   + '지운 것은 오른쪽 <b>🗑 휴지통</b> 에서 되살리고, <b>⚙</b> 에서 기본 색·글자 크기를 정합니다.<br>'
-  + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span></div>';
+  + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span>';
 
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
@@ -305,7 +308,10 @@ function render() {
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
       <div class="rz"></div><div class="rz bl"></div>
     </div>`).join('') +
-    (b.notes.length + b.areas.length + b.links.length ? '' : EMPTY);
+    '';
+  const bare = !(b.notes.length + b.areas.length + b.links.length);
+  $('#empty').hidden = !bare;
+  if (bare && !$('#empty').innerHTML) $('#empty').innerHTML = EMPTY;
   renderBoards(); renderPages();
   $('#binN').textContent = trash.length ? ' ' + trash.length : '';
 }
@@ -659,7 +665,7 @@ $('#bds').addEventListener('click', (e) => {
   if (e.target.closest('#addBoard')) {
     if (boards.length >= 20) { alert('메모판은 20개까지 만들 수 있습니다.'); return; }
     const nm = `메모 ${boards.length + 1}`;
-    const g = { id: uid(), name: nm, notes: [], areas: [], links: [] };
+    const g = { id: uid(), name: '새 탭 1', notes: [], areas: [], links: [] };
     const b = { id: uid(), name: nm, color: KEYS[boards.length % KEYS.length], pages: [g], ap: g.id };
     boards.push(b); active = b.id; sel = null; touch(); render(); return;
   }
