@@ -22,21 +22,21 @@
   #tools .st { color:var(--muted); font-size:11.5px; margin-left:4px; min-width:58px; }
 
   /* 구역 */
-  .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); border-radius:14px; }
-  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(15,23,42,.55); border-radius:12px 12px 0 0; }
+  .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); }
+  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(15,23,42,.55); }
   .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:5px; min-width:40px; }
   .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
   .area .t:focus { outline:none; background:rgba(15,23,42,.45); }
   .area .dot, .area .x { flex:none; }
 
   /* 메모지 */
-  .note { position:absolute; background:var(--bg2,#fde68a); border-radius:10px; box-shadow:0 6px 16px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden; }
-  .note.sel { box-shadow:0 0 0 2px var(--accent), 0 10px 22px rgba(0,0,0,.45); }
-  .note .hd { display:flex; align-items:center; gap:6px; padding:4px 6px; cursor:move; background:rgba(0,0,0,.07); }
-  .note textarea { flex:1; width:100%; background:none; border:0; resize:none; padding:6px 9px 9px; font:inherit; font-size:13px; line-height:1.55; color:#1f2937; }
+  .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 7px rgba(0,0,0,.32); outline:1px solid rgba(0,0,0,.22); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
+  .note.sel { outline:2px solid var(--accent); outline-offset:-2px; box-shadow:0 5px 14px rgba(0,0,0,.45); }
+  .note .hd { display:flex; align-items:center; gap:5px; padding:3px 5px; cursor:move; background:rgba(0,0,0,.08); }
+  .note textarea { flex:1; width:100%; background:none; border:0; resize:none; padding:5px 7px 7px; font-family:inherit; font-size:var(--fs,13px); line-height:1.5; color:#1f2937; }
   .note textarea:focus { outline:none; }
 
-  .dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); }
+  .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); }
   .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
   .x:hover { color:#dc2626; }
   .area .x { color:rgba(148,163,184,.6); } .area .x:hover { color:#f87171; }
@@ -45,10 +45,15 @@
   .area .rz::after { border-color:rgba(148,163,184,.5); }
 
   /* 색 고르기 */
-  #pal { position:fixed; z-index:70; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; display:grid; grid-template-columns:repeat(4,24px); gap:6px; }
+  #pal { position:fixed; z-index:70; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px; }
   #pal[hidden] { display:none; }
-  #pal b { width:24px; height:24px; border-radius:6px; border:1px solid rgba(0,0,0,.3); cursor:pointer; }
+  #pal .sec { color:var(--muted); font-size:11px; margin:0 0 5px; }
+  #pal .cols { display:grid; grid-template-columns:repeat(4,24px); gap:6px; margin-bottom:9px; }
+  #pal b { width:24px; height:24px; border-radius:4px; border:1px solid rgba(0,0,0,.3); cursor:pointer; display:block; }
   #pal b:hover { outline:2px solid var(--accent); }
+  #pal .sizes { display:flex; gap:5px; align-items:flex-end; }
+  #pal .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
+  #pal .sizes button:hover { border-color:var(--accent); } #pal .sizes button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
   .empty { position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
 </style>
 </head>
@@ -74,10 +79,13 @@ const COLORS = {
   gray: { bg: '#e2e8f0', bd: '#475569' }, white: { bg: '#f8fafc', bd: '#94a3b8' },
 };
 const KEYS = Object.keys(COLORS);
+const SIZES = [11, 13, 15, 18, 22];          // 글자 크기 (작게 ~ 아주 크게)
+const SNAP = 10;                             // 격자에 맞춰 붙여서 다닥다닥 놓이게
+const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 
 const EMPTY = '<div class="empty">메모가 없습니다.<br>왼쪽 위 <b>＋ 메모</b> 를 눌러 붙이세요.<br>'
-  + '<span style="font-size:12px">색 동그라미로 색을 바꾸고, 제목 줄을 끌어 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
+  + '<span style="font-size:12px">색 동그라미를 누르면 <b>색</b>과 <b>글자 크기</b>를 바꿀 수 있습니다. 제목 줄을 끌어 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
   + '<b>＋ 구역</b> 으로 "아이디어", "이번 주 중요" 같은 영역을 만들어 메모를 모아 둘 수 있습니다.</span></div>';
 let board = { notes: [], areas: [] };
 let dirty = false, saving = false, sel = null;
@@ -98,7 +106,7 @@ function render() {
       <div class="rz"></div>
     </div>`).join('') +
     board.notes.map((n) => `
-    <div class="note ${sel === n.id ? 'sel' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'}">
+    <div class="note ${sel === n.id ? 'sel' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
       <div class="hd"><span class="dot" data-pal="1"></span><button class="x" title="메모 지우기">✕</button></div>
       <textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>
       <div class="rz"></div>
@@ -114,12 +122,13 @@ function viewCenter() {
   return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) };
 }
 $('#addNote').onclick = () => {
-  const c = viewCenter(), n = { id: uid(), x: Math.max(20, c.x - 110 + (board.notes.length % 5) * 18), y: Math.max(20, c.y - 90 + (board.notes.length % 5) * 18), w: 220, h: 180, text: '', color: KEYS[board.notes.length % KEYS.length], z: topZ() + 1 };
+  const c = viewCenter(), k = board.notes.length;
+  const n = { id: uid(), x: Math.max(0, snap(c.x - 100 + (k % 5) * 20)), y: Math.max(0, snap(c.y - 100 + (k % 5) * 20)), w: 200, h: 200, text: '', color: KEYS[k % KEYS.length], z: topZ() + 1, fs: 13 };
   board.notes.push(n); sel = n.id; touch(); render();
   const el = document.querySelector(`.note[data-id="${n.id}"] textarea`); if (el) el.focus();
 };
 $('#addArea').onclick = () => {
-  const c = viewCenter(), a = { id: uid(), x: Math.max(20, c.x - 260), y: Math.max(20, c.y - 190), w: 520, h: 380, title: '', color: 'gray' };
+  const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: 'gray' };
   board.areas.push(a); touch(); render();
   const el = document.querySelector(`.area[data-id="${a.id}"] .t`); if (el) el.focus();
 };
@@ -163,11 +172,11 @@ document.addEventListener('mousemove', (e) => {
   if (!drag) return;
   const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (drag.mode === 'mv') {
-    drag.o.x = Math.max(0, drag.x + dx); drag.o.y = Math.max(0, drag.y + dy);
+    drag.o.x = Math.max(0, snap(drag.x + dx)); drag.o.y = Math.max(0, snap(drag.y + dy));
     drag.box.style.left = drag.o.x + 'px'; drag.box.style.top = drag.o.y + 'px';
   } else {
-    const min = drag.box.dataset.k === 'n' ? [120, 90] : [160, 120];
-    drag.o.w = Math.max(min[0], drag.w + dx); drag.o.h = Math.max(min[1], drag.h + dy);
+    const min = drag.box.dataset.k === 'n' ? [80, 60] : [160, 120];
+    drag.o.w = Math.max(min[0], snap(drag.w + dx)); drag.o.h = Math.max(min[1], snap(drag.h + dy));
     drag.box.style.width = drag.o.w + 'px'; drag.box.style.height = drag.o.h + 'px';
   }
 });
@@ -181,16 +190,26 @@ document.addEventListener('mouseup', () => {
 let palFor = null;
 function openPal(el, k, id) {
   palFor = { k, id };
+  const o = find(k, id) || {};
   const r = el.getBoundingClientRect();
-  $('#pal').innerHTML = KEYS.map((c) => `<b data-c="${c}" title="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('');
-  $('#pal').style.left = Math.min(window.innerWidth - 140, r.left) + 'px';
-  $('#pal').style.top = (r.bottom + 6) + 'px';
+  $('#pal').innerHTML = '<div class="sec">색</div><div class="cols">'
+    + KEYS.map((c) => `<b data-c="${c}" title="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('') + '</div>'
+    + (k === 'n' ? '<div class="sec">글자 크기</div><div class="sizes">'
+      + SIZES.map((f) => `<button type="button" data-f="${f}" class="${(o.fs || 13) === f ? 'on' : ''}" style="font-size:${Math.min(17, f)}px">가</button>`).join('') + '</div>' : '');
+  $('#pal').style.left = Math.min(window.innerWidth - 190, r.left) + 'px';
+  $('#pal').style.top = Math.min(window.innerHeight - 180, r.bottom + 6) + 'px';
   $('#pal').hidden = false;
 }
 $('#pal').onclick = (e) => {
-  const c = e.target.dataset.c; if (!c || !palFor) return;
-  const o = find(palFor.k, palFor.id); if (o) { o.color = c; touch(); render(); }
-  $('#pal').hidden = true; palFor = null;
+  if (!palFor) return;
+  const o = find(palFor.k, palFor.id); if (!o) return;
+  const c = e.target.dataset.c, f = e.target.dataset.f;
+  if (c) { o.color = c; touch(); render(); $('#pal').hidden = true; palFor = null; return; }
+  if (f) {
+    o.fs = Number(f); touch(); render();
+    const dot = document.querySelector(`[data-id="${palFor.id}"] .dot`);
+    if (dot) openPal(dot, palFor.k, palFor.id);
+  }
 };
 document.addEventListener('mousedown', (e) => { if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; } });
 

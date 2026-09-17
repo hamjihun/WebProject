@@ -28,8 +28,8 @@ function create(opts) {
   const note = (n) => ({
     id: str(n.id, 32) || Math.random().toString(36).slice(2, 10),
     x: clamp(num(n.x), 0, 20000), y: clamp(num(n.y), 0, 20000),
-    w: clamp(num(n.w, 220), 120, 1200), h: clamp(num(n.h, 180), 90, 1200),
-    text: str(n.text, MAX_TEXT), color: color(n.color), z: num(n.z, 1),
+    w: clamp(num(n.w, 200), 80, 1600), h: clamp(num(n.h, 200), 60, 1600),
+    text: str(n.text, MAX_TEXT), color: color(n.color), z: num(n.z, 1), fs: clamp(num(n.fs, 13), 10, 40),
     updated: num(n.updated, Date.now()),
   });
   const area = (a) => ({
