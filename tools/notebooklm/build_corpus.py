@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import shutil
 import sys
 import tempfile
@@ -237,7 +238,7 @@ def read_hwpx(src: Source) -> None:
 
 
 def read_office_text(src: Source) -> None:
-    """워드/슬라이드를 텍스트로 뽑는다."""
+    """워드 문서를 텍스트로 뽑는다."""
     with tempfile.TemporaryDirectory() as tmp:
         made = soffice_convert(src.file, "txt:Text (encoded):UTF8", Path(tmp))
         if not made:
@@ -247,6 +248,87 @@ def read_office_text(src: Source) -> None:
     src.kind = f"문서 ({src.file.suffix.lower()})"
     src.lines = tag_paragraphs(src.sid, text.splitlines())
     src.detail = f"{len(src.lines) // 2}단락"
+
+
+def slide_texts(path: Path) -> list[tuple[str, str]]:
+    """pptx 슬라이드별 (본문, 발표자노트). XML에서 직접 읽는다.
+
+    LibreOffice의 텍스트 필터는 Writer 전용이라 슬라이드에서는 아무것도 나오지
+    않는다. 슬라이드 순서를 지켜야 출처의 장 번호가 원본과 맞는다.
+    """
+    from xml.etree import ElementTree
+
+    def collect_text(blob: bytes) -> str:
+        root = ElementTree.fromstring(blob)
+        parts: list[str] = []
+        for para in root.iter():
+            if not para.tag.endswith("}p"):
+                continue
+            line = "".join(t.text or "" for t in para.iter() if t.tag.endswith("}t"))
+            line = " ".join(line.split())
+            if line:
+                parts.append(line)
+        return "\n".join(parts)
+
+    with zipfile.ZipFile(path) as zf:
+        names = [n for n in zf.namelist()
+                 if n.startswith("ppt/slides/slide") and n.endswith(".xml")]
+        def slide_no(name: str) -> int:
+            return int("".join(ch for ch in Path(name).stem if ch.isdigit()) or 0)
+
+        names.sort(key=slide_no)
+        out: list[tuple[str, str]] = []
+        for name in names:
+            note_name = f"ppt/notesSlides/notesSlide{slide_no(name)}.xml"
+            note = ""
+            if note_name in zf.namelist():
+                try:
+                    note = collect_text(zf.read(note_name))
+                except ElementTree.ParseError:
+                    note = ""
+            out.append((collect_text(zf.read(name)), note))
+    return out
+
+
+def read_slides(src: Source) -> None:
+    """슬라이드를 장별로 읽는다. 출처는 `S07·3장`처럼 장 번호로 남는다."""
+    path, tmp = src.file, None
+    if src.file.suffix.lower() not in (".pptx", ".potx"):
+        tmp = tempfile.TemporaryDirectory()
+        made = soffice_convert(src.file, "pptx", Path(tmp.name))
+        if not made:
+            src.error = "LibreOffice 변환 실패"
+            tmp.cleanup()
+            return
+        path = made
+
+    try:
+        slides = slide_texts(path)
+    except Exception as exc:  # noqa: BLE001
+        src.error = f"읽기 실패: {exc}"
+        return
+    finally:
+        if tmp:
+            tmp.cleanup()
+
+    lines: list[str] = []
+    filled = 0
+    for no, (body, note) in enumerate(slides, 1):
+        if not body and not note:
+            continue
+        filled += 1
+        lines.append(f"[{src.sid}·{no}장]")
+        lines.append("")
+        if body:
+            lines += [body, ""]
+        if note:
+            lines += [f"(발표자 노트) {note}", ""]
+
+    src.kind = f"슬라이드 ({src.file.suffix.lower()})"
+    src.detail = f"{len(slides)}장 중 글자 있는 {filled}장"
+    src.lines = lines
+    if not lines:
+        src.error = f"{len(slides)}장 모두 글자가 없음 (스크린샷만 있는 문서)"
 
 
 def read_pdf(src: Source) -> None:
@@ -293,8 +375,10 @@ def load(src: Source) -> None:
         read_hwp(src)
     elif ext == ".hwpx":
         read_hwpx(src)
-    elif ext in DOC_EXT or ext in SLIDE_EXT:
+    elif ext in DOC_EXT:
         read_office_text(src)
+    elif ext in SLIDE_EXT:
+        read_slides(src)
     elif ext == ".pdf":
         read_pdf(src)
     elif ext in (".txt", ".md", ".markdown"):
@@ -309,6 +393,113 @@ def load(src: Source) -> None:
     if not src.title:
         src.title = src.file.stem
 
+
+# ------------------------------------------------------------------ 민감정보
+# 업무 인수인계 문서에는 사이트 로그인 정보가 적혀 있는 경우가 많다. 외부
+# 서비스에 올리기 전에 값만 가리고, 어느 단계에서 로그인이 필요한지는 남긴다.
+_LABELS = r"P\s*/?\s*W|PW|PASSWORD|PASS|비밀번호|패스워드|암호(?!화)|ID|아이디|계정(?!과목)"
+# 값은 다음 라벨이 나오기 전까지만 가져온다. 한 줄에 "ID: x PW: y" 처럼
+# 둘이 붙어 있는 경우가 많아서, 값이 뒤 라벨을 삼키면 기록이 꼬인다.
+_VALUE = rf"(?P<val>(?:(?!{_LABELS})[^|\n])*)"
+SECRET_LABEL = re.compile(
+    rf"(?P<label>P\s*/?\s*W|PW|PASSWORD|PASS|비밀번호|패스워드|암호(?!화))\s*[:：]\s*{_VALUE}",
+    re.IGNORECASE)
+ACCOUNT_LABEL = re.compile(
+    rf"(?P<label>ID|아이디|계정(?!과목))\s*[:：]\s*{_VALUE}", re.IGNORECASE)
+# 라벨 없이 값만 덩그러니 있는 줄 (앞 줄이 "PW :" 로 끝난 경우가 많다)
+BARE_SECRET = re.compile(r"^[A-Za-z0-9!@#$%^&*_.\-]{6,24}$")
+
+MASK = "[삭제됨 — 원본 참조]"
+
+
+def looks_like_secret(text: str) -> bool:
+    if not BARE_SECRET.fullmatch(text.strip()):
+        return False
+    body = text.strip()
+    has_alpha = any(ch.isalpha() for ch in body)
+    has_digit = any(ch.isdigit() for ch in body)
+    if not (has_alpha and has_digit):
+        return False
+    # 날짜, 금액, 파일명, 사업자번호, 메일주소처럼 보이는 건 제외한다
+    return not re.fullmatch(
+        r"[\d.\-]+|\d{6}-\d{7}|.*\.(xlsx?|pptx?|pdf|hwpx?)|[^@\s]+@[^@\s]+",
+        body, re.IGNORECASE)
+
+
+def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str]],
+                                                 list[tuple[str, str]]]:
+    """계정 정보를 가린다.
+
+    돌려주는 값은 (가려진 줄, 라벨이 붙어 있던 항목, 라벨 없이 값만 있던 항목).
+    뒤의 것은 판단이 확실하지 않으니 목록에 따로 실어서 사람이 확인하게 한다.
+    """
+    labeled: list[tuple[str, str]] = []
+    bare: list[tuple[str, str]] = []
+    out: list[str] = []
+    tag = sid
+
+    def mask_labels(text: str) -> str:
+        for pattern in (SECRET_LABEL, ACCOUNT_LABEL):
+            def repl(m):
+                raw = m.group("val")
+                value = raw.strip()
+                if not value or value == MASK:
+                    return m.group(0)
+                labeled.append((tag, f"{m.group('label')}: {value}"))
+                # 표 칸 안에서는 뒤 공백까지 삼키면 `| 값| |` 처럼 붙어버린다
+                trail = raw[len(raw.rstrip()):]
+                return f"{m.group('label')} : {MASK}{trail}"
+            text = pattern.sub(repl, text)
+        return text
+
+    for line in lines:
+        marker = re.match(r"^(?:\[(?P<t>[^\]]+)\]|\| (?P<c>S\d+-\d+:\d+행))", line)
+        if marker:
+            tag = marker.group("t") or marker.group("c")
+
+        if line.startswith("| "):  # 표는 칸 단위로 봐야 행이 깨지지 않는다
+            cells = line.strip().strip("|").split("|")
+            fixed = []
+            for cell in cells:
+                body = cell.strip()
+                if looks_like_secret(body):
+                    bare.append((tag, body))
+                    fixed.append(f" {MASK} ")
+                else:
+                    fixed.append(mask_labels(cell))
+            out.append("|" + "|".join(fixed) + "|")
+            continue
+
+        if looks_like_secret(line):
+            bare.append((tag, line.strip()))
+            out.append(MASK)
+            continue
+
+        out.append(mask_labels(line))
+
+    return out, labeled, bare
+
+
+def write_secret_report(outdir: Path, findings: list[tuple[str, str, str]],
+                        suspects: list[tuple[str, str, str]]) -> Path | None:
+    if not findings and not suspects:
+        return None
+    lines = ["# 가려진 민감정보 목록", "",
+             "외부 서비스에 올리기 전에 계정 정보의 값을 가렸다. 어느 단계에서 로그인이",
+             "필요한지는 본문에 남아 있으니, 실제 값은 아래 출처의 원본 파일에서 확인한다.",
+             "", "## 자동으로 가린 항목", "",
+             "| 출처 | 원본 파일 | 가린 내용 |", "| --- | --- | --- |"]
+    lines += [f"| {tag} | `{path}` | {text} |" for tag, path, text in findings]
+    if suspects:
+        lines += ["", "## 라벨 없이 값만 있던 항목 (같이 가렸음)", "",
+                  "`PW :` 같은 라벨이 없어 계정 정보인지 자동으로 확정할 수 없는 값이다.",
+                  "올리는 쪽이 안전하도록 일단 같이 가렸다. 계정 정보가 아니어서 본문에",
+                  "남겨야 한다면 `--keep-secrets` 로 다시 만들면 된다.", "",
+                  "| 출처 | 원본 파일 | 가린 내용 |", "| --- | --- | --- |"]
+        lines += [f"| {tag} | `{path}` | {text} |" for tag, path, text in suspects]
+    dest = outdir / "_민감정보_목록.md"
+    dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return dest
 
 # ------------------------------------------------------------------ 출력
 HOWTO = """\
@@ -445,6 +636,8 @@ def main() -> int:
     ap.add_argument("-o", "--outdir", default="corpus", help="출력 폴더")
     ap.add_argument("--per-file", type=int, default=10,
                     help="출력 문서 하나에 넣을 원본 파일 수 (기본 10)")
+    ap.add_argument("--keep-secrets", action="store_true",
+                    help="계정 정보를 가리지 않고 그대로 둔다 (기본은 가린다)")
     args = ap.parse_args()
 
     outdir = Path(args.outdir).expanduser()
@@ -464,14 +657,29 @@ def main() -> int:
                 s.error = f"예외: {exc}"
             print(s.error if s.error else f"{s.kind}, {s.detail}")
 
+        findings: list[tuple[str, str, str]] = []
+        suspects: list[tuple[str, str, str]] = []
+        if not args.keep_secrets:
+            for s_ in sources:
+                if s_.error:
+                    continue
+                s_.lines, hits, bare = redact(s_.sid, s_.lines)
+                findings += [(tag, s_.path, text) for tag, text in hits]
+                suspects += [(tag, s_.path, text) for tag, text in bare]
+
         docs = write_docs(outdir, sources, max(1, args.per_file))
         manifest = write_manifest(outdir, sources)
+        report = write_secret_report(outdir, findings, suspects)
 
     ok = [s for s in sources if not s.error]
     bad = [s for s in sources if s.error]
     print(f"\n수록 {len(ok)}개 / 제외 {len(bad)}개")
     print(f"업로드할 파일 {len(docs) + 1}개: {manifest.name}, " +
           ", ".join(d.name for d in docs))
+    if not args.keep_secrets:
+        print(f"계정 정보 {len(findings) + len(suspects)}건을 가렸습니다"
+              + (f" (그중 라벨 없이 값만 있던 것 {len(suspects)}건)" if suspects else "")
+              + (f" -> {report.name}" if report else ""))
     print(f"출력 폴더: {outdir.resolve()}")
     for s in bad:
         print(f"  - {s.path}: {s.error}")
