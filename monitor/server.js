@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.20.0';
+const VERSION = '1.20.1';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -353,11 +353,15 @@ function ingest(raw, remoteIp) {
 }
 
 // 알림 설정의 backup_hide 에 적힌 Veeam 작업은 화면과 판단에서 뺀다
+// 화면·알림에서 뺄 이름 (rules.backup_hide) — Veeam 작업 이름과 SQL DB 이름 모두에 적용
 function visibleBackups(b) {
-  if (!b || !Array.isArray(b.jobs) || !b.jobs.length) return b;
+  if (!b) return b;
   const hide = String(alerter.getSettings().rules.backup_hide || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (!hide.length) return b;
-  return { ...b, jobs: b.jobs.filter((j) => !hide.includes(String(j.name || '').toLowerCase())) };
+  const out = { ...b };
+  if (Array.isArray(b.jobs)) out.jobs = b.jobs.filter((j) => !hide.includes(String(j.name || '').toLowerCase()));
+  if (b.sql && Array.isArray(b.sql.dbs)) out.sql = { ...b.sql, dbs: b.sql.dbs.filter((d) => !hide.includes(String(d.db || '').toLowerCase())) };
+  return out;
 }
 function serversView() {
   const now = Date.now();
