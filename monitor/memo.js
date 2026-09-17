@@ -33,7 +33,7 @@ function create(opts) {
       id: str(n.id, 32) || rid(),
       x: clamp(num(n.x), 0, 20000), y: clamp(num(n.y), 0, 20000),
       w: clamp(num(n.w, 200), 80, 1600), h: clamp(num(n.h, 200), 60, 1600),
-      text: str(n.text, MAX_TEXT), color: color(n.color, 'yellow'), z: num(n.z, 1),
+      title: str(n.title, 60), text: str(n.text, MAX_TEXT), color: color(n.color, 'yellow'), z: num(n.z, 1),
       fs: clamp(num(n.fs, 13), 10, 40), updated: num(n.updated, Date.now()),
     };
     if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {
