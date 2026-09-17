@@ -5,82 +5,84 @@
 <title>메모 보드</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 4h22v16l-7 8H5z' fill='%23fbbf24'/%3E%3Cpath d='M27 20l-7 8v-8z' fill='%23d97706'/%3E%3Cg fill='%23854d0e'%3E%3Crect x='9' y='9' width='14' height='2.4' rx='1.2'/%3E%3Crect x='9' y='14' width='14' height='2.4' rx='1.2'/%3E%3Crect x='9' y='19' width='8' height='2.4' rx='1.2'/%3E%3C/g%3E%3C/svg%3E">
 <style>
-  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --bad:#ef4444; --accent:#38bdf8; }
+  :root { --bg:#eef4f2; --card:#ffffff; --line:#d3e2de; --text:#14342e; --muted:#6b8a84; --bad:#e11d48;
+    --accent:#0d9488; --soft:#d7f0ea; --r:4px; }
+  #topnav a.alt { border-radius:var(--r) !important; }
   * { box-sizing:border-box; }
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
   #topnav { flex:none; }
   #main { flex:1; display:flex; min-height:0; }
   #side { flex:none; width:174px; display:flex; flex-direction:column; overflow:auto;
-    background:rgba(15,23,42,.5); border-right:1px solid var(--line); padding:9px 9px 12px; }
+    background:#f7fbfa; border-right:1px solid var(--line); padding:9px 9px 12px; }
   body.nosd #side { display:none; }
   #side .sh { color:var(--muted); font-size:11px; padding:0 4px 7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #pgs { display:flex; flex-direction:column; gap:3px; }
   #pgs .pg { display:flex; align-items:center; gap:7px; background:none; border:0; color:var(--muted); text-align:left;
-    border-radius:7px; padding:6px 8px; font:inherit; font-size:12.5px; cursor:pointer; }
+    border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; cursor:pointer; }
   #pgs .pg .nm { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #pgs .pg i { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.45; flex:none; }
-  #pgs .pg:hover { background:rgba(148,163,184,.13); color:var(--text); }
-  #pgs .pg.on { background:var(--accent); color:#0f172a; font-weight:700; }
+  #pgs .pg:hover { background:var(--soft); color:var(--text); }
+  #pgs .pg.on { background:var(--accent); color:#fff; font-weight:700; }
   #pgs .pg.on i { opacity:.8; }
-  #pgs .pg input.re { width:100%; background:rgba(255,255,255,.92); border:1px solid var(--accent); color:#0f172a;
+  #pgs .pg input.re { width:100%; background:#fff; border:1px solid var(--accent); color:var(--text);
     border-radius:4px; font:inherit; font-size:12.5px; padding:1px 4px; }
   #pgs .pg input.re:focus { outline:none; }
-  #addPage { margin-top:9px; background:none; border:1px dashed var(--line); color:var(--muted); border-radius:7px;
+  #addPage { margin-top:9px; background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r);
     padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
   #addPage:hover { color:var(--accent); border-color:var(--accent); }
   #tools #sdBtn { font-size:14px; padding:4px 9px; }
   #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
-      radial-gradient(circle at 1px 1px, rgba(148,163,184,.16) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
+      radial-gradient(circle at 1px 1px, rgba(13,148,136,.18) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
 
   /* 메모판 탭 + 도구 (맨 위 탭줄 안으로 들어간다) */
-  #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(30,41,59,.6); border-bottom:1px solid var(--line); }
+  #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--card); border-bottom:1px solid var(--line); }
   #bds { display:flex; align-items:center; gap:4px; overflow-x:auto; }
-  #bds .bd { display:flex; align-items:center; gap:6px; white-space:nowrap; background:var(--bg); color:var(--muted);
-    border:1px solid var(--line); border-radius:7px; padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
+  #bds .bd { display:flex; align-items:center; gap:6px; white-space:nowrap; background:#f7fbfa; color:var(--muted);
+    border:1px solid var(--line); border-radius:var(--r); padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
   #bds .bd:hover { color:var(--text); }
   #bds .bd i { width:10px; height:10px; border-radius:3px; display:inline-block; flex:none; }
-  #bds .bd.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  #bds .bd.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
   #bds .bd .mn { opacity:.7; margin-left:1px; }
-  #bds #addBoard { background:none; border:1px dashed var(--line); color:var(--muted); border-radius:7px; padding:5px 10px; font:inherit; cursor:pointer; }
+  #bds #addBoard { background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r); padding:5px 10px; font:inherit; cursor:pointer; }
   #bds #addBoard:hover { color:var(--accent); border-color:var(--accent); }
   #tools { display:flex; align-items:center; gap:6px; flex:1; min-width:0; }
-  #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
+  #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
   #tools button:hover { border-color:var(--accent); }
-  #tools button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  #tools button.go { background:var(--accent); color:#fff; font-weight:700; border-color:var(--accent); }
   #tools .st { color:var(--muted); font-size:11.5px; min-width:44px; }
   #tools .sp { flex:1; }
   #tools #binBtn b { color:var(--accent); font-size:11.5px; margin-left:5px; }
   #tools #cfgBtn { font-size:14px; padding:4px 9px; }
   #lnkEd { width:270px; }
   #lnkEd input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
-    border-radius:6px; padding:6px 8px; font:inherit; font-size:12.5px; }
+    border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; }
   #lnkEd input:focus { outline:none; border-color:var(--accent); }
   #lnkEd .kind { display:flex; gap:6px; }
-  #lnkEd .kind button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px;
+  #lnkEd .kind button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
-  #lnkEd .kind button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
-  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:#0f172a; border:0; border-radius:7px;
+  #lnkEd .kind button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:#fff; border:0; border-radius:var(--r);
     font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
   #lnkEd .tip { color:var(--muted); font-size:11px; line-height:1.6; margin-top:9px; }
   #cfg { width:250px; max-height:72vh; overflow:auto; }
   #cfg b.sw.on { outline:2px solid var(--accent); outline-offset:2px; }
   #cfg .sec { margin-top:11px; } #cfg .sec:first-child { margin-top:0; }
   #cfg .row { display:flex; gap:6px; align-items:center; }
-  #cfg .row button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px;
+  #cfg .row button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
   #cfg .row button:hover { border-color:var(--accent); }
-  #cfg .row button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  #cfg .row button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
   #bin { width:290px; max-height:62vh; overflow:auto; }
   #bin .it { display:flex; align-items:center; gap:7px; padding:5px 4px; border-bottom:1px solid var(--line); }
   #bin .it i { width:11px; height:11px; border-radius:3px; flex:none; }
   #bin .it .nm { flex:1; min-width:0; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #bin .it .dt { color:var(--muted); font-size:11px; flex:none; }
   #bin .it .bn { color:var(--muted); font-size:10.5px; border:1px solid var(--line); border-radius:4px; padding:1px 4px; flex:none; }
-  #bin .it button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px;
+  #bin .it button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     font:inherit; font-size:11.5px; padding:3px 7px; cursor:pointer; flex:none; }
-  #bin .it button:hover { border-color:var(--accent); color:var(--accent); }
+  #bin .it button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
   #bin .it button.rm:hover { border-color:#f87171; color:#f87171; }
   /* 메모판 탭은 맨 위 탭줄 안으로 옮겨진다 */
   #bds { padding:6px 12px; }
@@ -88,28 +90,29 @@
 
   /* 범위 */
   .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); }
-  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(15,23,42,.55); }
-  .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:5px; min-width:40px; }
-  .area .t:focus { outline:none; background:rgba(15,23,42,.45); }
+  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(255,255,255,.75); }
+  .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:var(--r); min-width:40px; }
+  .area .t:focus { outline:none; background:#fff; }
   .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
 
   /* 바로가기 타일 (바탕화면 아이콘처럼) */
   .lnk { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
-    background:rgba(148,163,184,.13); border:1px solid var(--line); border-radius:10px; cursor:pointer; overflow:hidden;
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r); cursor:pointer; overflow:hidden;
+    box-shadow:0 1px 3px rgba(20,52,46,.1);
     padding:6px 4px; text-align:center; z-index:6; }
-  .lnk:hover { background:rgba(56,189,248,.16); border-color:var(--bd,#475569); }
+  .lnk:hover { background:var(--soft); border-color:var(--accent); }
   .lnk.sel { border-color:var(--accent); }
   .lnk .ic { font-size:26px; line-height:1; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
     color:var(--text); font-weight:700; flex:none; }
   .lnk .ic img { width:28px; height:28px; object-fit:contain; }
   .lnk .lb { font-size:11.5px; color:var(--text); line-height:1.25; max-height:29px; overflow:hidden; word-break:break-all; }
-  .lnk .x { position:absolute; top:0; right:0; color:rgba(148,163,184,.6); display:none; }
+  .lnk .x { position:absolute; top:0; right:0; color:rgba(20,52,46,.4); display:none; }
   .lnk:hover .x { display:block; }
   .lnk.mv { opacity:.85; }
 
   /* 메모지 (각진 사각형) */
-  .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 7px rgba(0,0,0,.32); outline:1px solid rgba(0,0,0,.22); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
-  .note.sel { box-shadow:0 7px 18px rgba(0,0,0,.5); }
+  .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 6px rgba(20,52,46,.18); outline:1px solid rgba(0,0,0,.14); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
+  .note.sel { box-shadow:0 6px 16px rgba(20,52,46,.3); outline-color:rgba(0,0,0,.28); }
   .note .hd { display:flex; align-items:center; gap:5px; padding:3px 5px; cursor:move; background:rgba(0,0,0,.08); }
   .note .nt { flex:1; min-width:0; color:#1f2937; font-size:12.5px; font-weight:700; padding:1px 3px; cursor:move;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -129,28 +132,28 @@
   .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); flex:none; }
   .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
   .x:hover { color:#dc2626; }
-  .area .x { color:rgba(148,163,184,.6); } .area .x:hover { color:#f87171; }
+  .area .x { color:rgba(20,52,46,.35); } .area .x:hover { color:var(--bad); }
   .rz { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; }
   .rz::after { content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px; border-right:2px solid rgba(0,0,0,.3); border-bottom:2px solid rgba(0,0,0,.3); }
-  .area .rz::after { border-color:rgba(148,163,184,.5); }
+  .area .rz::after { border-color:var(--bd,#94a3b8); }
 
   /* 팝업 (색·글자 크기 / 보드 메뉴) */
-  .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px; box-shadow:0 10px 26px rgba(0,0,0,.5); }
+  .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:9px; box-shadow:0 8px 22px rgba(20,52,46,.16); }
   .pop[hidden] { display:none; }
   .pop .sec { color:var(--muted); font-size:11px; margin:0 0 5px; }
   .pop .cols { display:grid; grid-template-columns:repeat(4,24px); gap:6px; margin-bottom:9px; }
   .pop b.sw { width:24px; height:24px; border-radius:4px; border:1px solid rgba(0,0,0,.3); cursor:pointer; display:block; }
   .pop b.sw:hover { outline:2px solid var(--accent); }
   .pop .sizes { display:flex; gap:5px; align-items:flex-end; }
-  .pop .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
-  .pop .sizes button:hover { border-color:var(--accent); } .pop .sizes button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
-  .pop .mi { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font:inherit; font-size:12.5px; padding:7px 9px; border-radius:6px; cursor:pointer; }
-  .pop .mi:hover { background:rgba(148,163,184,.14); } .pop .mi.del { color:#f87171; }
+  .pop .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r); width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
+  .pop .sizes button:hover { border-color:var(--accent); } .pop .sizes button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  .pop .mi { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font:inherit; font-size:12.5px; padding:7px 9px; border-radius:var(--r); cursor:pointer; }
+  .pop .mi:hover { background:var(--soft); } .pop .mi.del { color:#f87171; }
   .pop hr { border:0; border-top:1px solid var(--line); margin:6px 0; }
   .pop .ti { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
-    border-radius:6px; padding:6px 8px; font:inherit; font-size:12.5px; }
+    border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; }
   .pop .ti:focus { outline:none; border-color:var(--accent); }
-  #bds .bd input.re { width:90px; background:rgba(255,255,255,.9); border:1px solid var(--accent); color:#0f172a;
+  #bds .bd input.re { width:90px; background:#fff; border:1px solid var(--accent); color:var(--text);
     border-radius:4px; font:inherit; font-size:12.5px; font-weight:700; padding:1px 4px; }
   #bds .bd input.re:focus { outline:none; }
   .empty { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
@@ -202,7 +205,7 @@ const SNAP = 10;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
-  + '<span style="font-size:12px">메모는 아무 데나 끌어서 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
+  + '<span style="font-size:12px">메모는 <b>제목 줄</b>을 끌어서 옮기고(내용 글자는 끌어서 선택), 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
   + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
   + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
   + '<b>＋ 바로가기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둘 수 있습니다.<br>'
@@ -477,7 +480,10 @@ $('#canvas').addEventListener('click', (e) => {
     return;
   }
   if (e.target.dataset.pal) { openPal(e.target, k, id); return; }
-  if (k === 'n' && sel !== id) { sel = id; o.z = topZ() + 1; touch(); render(); }
+  if (k === 'n' && sel !== id) {                   // 다시 그리면 글자 선택이 풀리므로 그 자리에서만 바꾼다
+    const prev = document.querySelector('.note.sel'); if (prev) prev.classList.remove('sel');
+    sel = id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch();
+  }
 });
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
   const box = e.target.closest('[data-k]'); if (!box) return;
@@ -500,8 +506,8 @@ $('#canvas').addEventListener('input', (e) => {
 });
 
 // ---- 옮기기 · 크기 ----
-// 메모지는 아무 데나(글자 위에서도) 끌면 옮겨진다. 4px 넘게 움직여야 옮기기로 보고,
-// 그냥 누르기만 하면 평소대로 글자 칸에 커서가 들어간다.
+// 옮기기는 제목 줄(.hd)로만 한다. 내용 글자 위에서는 평소대로 글자가 드래그로 선택된다.
+// 바로가기 타일은 타일 아무 데나, 사진 메모는 사진 위에서도 끌 수 있다.
 let drag = null, pend = null, moved = false;
 $('#canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
@@ -511,8 +517,9 @@ $('#canvas').addEventListener('mousedown', (e) => {
   if (t.tagName === 'BUTTON' || t.dataset.pal) return;               // 지우기·＋·제목·색 단추
   const rz = t.classList.contains('rz');
   if (!rz) {
-    if (t.tagName === 'INPUT') return;                               // 범위 이름 칸
-    if (k === 'a' && !t.closest('.hd')) return;                      // 범위는 제목 줄로만 옮긴다
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;    // 글자 칸: 글자 선택이 우선
+    const canMove = t.closest('.hd') || k === 'l' || (k === 'n' && t.tagName === 'IMG');
+    if (!canMove) return;                                            // 제목 줄로만 옮긴다
   }
   const base = { o, box, k, sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
   if (rz) { e.preventDefault(); drag = { ...base, mode: 'rz' }; document.body.style.userSelect = 'none'; }
@@ -671,7 +678,7 @@ function openBin() {
         <span class="nm">${t.k === 'a' ? '［범위］ ' : t.k === 'l' ? '［바로가기］ ' : ''}${esc(binName(t))}</span>
         ${t.bn && boards.length > 1 ? `<span class="bn">${esc(t.bn)}</span>` : ''}<span class="dt">${ago(t.del)}</span>
         <button data-a="back">되살리기</button><button class="rm" data-a="rm" title="완전히 지우기">✕</button></div>`).join('')
-      + '<div style="text-align:right;padding-top:8px"><button class="rm" data-a="clear" style="background:none;border:1px solid var(--line);color:#f87171;border-radius:6px;font:inherit;font-size:11.5px;padding:4px 9px;cursor:pointer">휴지통 비우기</button></div>'
+      + '<div style="text-align:right;padding-top:8px"><button class="rm" data-a="clear" style="background:none;border:1px solid var(--line);color:#f87171;border-radius:var(--r);font:inherit;font-size:11.5px;padding:4px 9px;cursor:pointer">휴지통 비우기</button></div>'
       : '<div style="color:var(--muted);font-size:12.5px;padding:10px 2px">비어 있습니다. 메모의 ✕ 로 지우면 여기로 들어옵니다.</div>');
   const r = $('#binBtn').getBoundingClientRect();
   $('#bin').style.left = Math.max(8, Math.min(window.innerWidth - 310, r.right - 290)) + 'px';
