@@ -34,7 +34,7 @@ function create(opts) {
       x: clamp(num(n.x), 0, 20000), y: clamp(num(n.y), 0, 20000),
       w: clamp(num(n.w, 200), 80, 1600), h: clamp(num(n.h, 200), 60, 1600),
       title: str(n.title, 60), text: str(n.text, MAX_TEXT), color: color(n.color, 'yellow'), z: num(n.z, 1),
-      fs: clamp(num(n.fs, 13), 10, 40), updated: num(n.updated, Date.now()),
+      fs: clamp(num(n.fs, 13), 10, 40), min: !!n.min, updated: num(n.updated, Date.now()),
     };
     if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {
       if (n.img.length > MAX_IMG) throw new Error('사진 한 장이 너무 큽니다 (3MB 넘음)');
@@ -46,7 +46,7 @@ function create(opts) {
     id: str(a.id, 32) || rid(),
     x: clamp(num(a.x), 0, 20000), y: clamp(num(a.y), 0, 20000),
     w: clamp(num(a.w, 520), 160, 4000), h: clamp(num(a.h, 380), 120, 4000),
-    title: str(a.title, 40), color: color(a.color, 'gray'),
+    title: str(a.title, 40), color: color(a.color, 'green'),
   });
   const board = (b, i) => ({
     id: str(b.id, 32) || rid(),

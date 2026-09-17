@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>메모 보드</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 4h22v16l-7 8H5z' fill='%23fbbf24'/%3E%3Cpath d='M27 20l-7 8v-8z' fill='%23d97706'/%3E%3Cg fill='%23854d0e'%3E%3Crect x='9' y='9' width='14' height='2.4' rx='1.2'/%3E%3Crect x='9' y='14' width='14' height='2.4' rx='1.2'/%3E%3Crect x='9' y='19' width='8' height='2.4' rx='1.2'/%3E%3C/g%3E%3C/svg%3E">
 <style>
   :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --bad:#ef4444; --accent:#38bdf8; }
   * { box-sizing:border-box; }
@@ -15,7 +15,7 @@
   #canvas { position:relative; }
 
   /* 메모판 탭 + 도구 (맨 위 탭줄 안으로 들어간다) */
-  #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--card); border-bottom:1px solid var(--line); }
+  #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(30,41,59,.6); border-bottom:1px solid var(--line); }
   #bds { display:flex; align-items:center; gap:4px; overflow-x:auto; }
   #bds .bd { display:flex; align-items:center; gap:6px; white-space:nowrap; background:var(--bg); color:var(--muted);
     border:1px solid var(--line); border-radius:7px; padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
@@ -30,10 +30,9 @@
   #tools button:hover { border-color:var(--accent); }
   #tools button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
   #tools .st { color:var(--muted); font-size:11.5px; min-width:44px; }
-  /* 맨 위 탭줄 안으로 옮겨진 뒤 */
-  #topnav #bds { max-width:46vw; }
-  #topnav #tools { border-left:1px solid var(--line); padding-left:10px; margin-left:6px; }
-  #topnav #tools .st { min-width:0; }
+  /* 메모판 탭은 맨 위 탭줄 안으로 옮겨진다 */
+  #bds { padding:6px 12px; }
+  #topnav #bds { max-width:52vw; padding:0; }
 
   /* 범위 */
   .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); }
@@ -46,11 +45,15 @@
   .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 7px rgba(0,0,0,.32); outline:1px solid rgba(0,0,0,.22); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
   .note.sel { outline:2px solid var(--accent); outline-offset:-2px; box-shadow:0 5px 14px rgba(0,0,0,.45); }
   .note .hd { display:flex; align-items:center; gap:5px; padding:3px 5px; cursor:move; background:rgba(0,0,0,.08); }
-  .note .nt { flex:1; min-width:0; background:none; border:0; color:#1f2937; font:inherit; font-size:12.5px; font-weight:700; padding:1px 3px; border-radius:4px; }
-  .note .nt:focus { outline:none; background:rgba(255,255,255,.55); }
-  .note .nt::placeholder { color:rgba(31,41,55,.38); font-weight:400; }
-  .note .plus { background:none; border:0; color:rgba(31,41,55,.5); font:inherit; font-size:15px; line-height:1; cursor:pointer; padding:0 3px; flex:none; }
-  .note .plus:hover { color:#0f766e; }
+  .note .nt { flex:1; min-width:0; color:#1f2937; font-size:12.5px; font-weight:700; padding:1px 3px; cursor:move;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note .nt.no { color:rgba(31,41,55,.38); font-weight:400; }
+  .note .hb { background:none; border:0; color:rgba(31,41,55,.5); font:inherit; font-size:13px; line-height:1; cursor:pointer; padding:0 3px; flex:none; }
+  .note .hb:hover { color:#0f766e; }
+  .note .hb.plus { font-size:15px; }
+  /* 제목 줄 두 번 누르면 접힘 (제목만 보임) */
+  .note.min { height:auto !important; }
+  .note.min textarea, .note.min img, .note.min .rz { display:none; }
   .note img { cursor:move; }
   .note.mv, .area.mv { cursor:grabbing; opacity:.92; }
   .note textarea { flex:1; width:100%; background:none; border:0; resize:none; padding:5px 7px 7px; font-family:inherit; font-size:var(--fs,13px); line-height:1.5; color:#1f2937; }
@@ -82,8 +85,8 @@
 </style>
 </head>
 <body>
+<div id="bds"></div>
 <div id="bar">
-  <div id="bds"></div>
   <div id="tools">
     <button class="go" id="addNote">＋ 새 메모</button>
     <button id="addArea">＋ 새 범위</button>
@@ -112,7 +115,8 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
   + '<span style="font-size:12px">메모는 아무 데나 끌어서 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
-  + '메모 위쪽 줄에 제목을 적고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
+  + '제목 줄의 <b>✎</b> 로 제목을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
+  + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다.<br>'
   + '색 동그라미를 누르면 색과 글자 크기를 정할 수 있고, 맨 위 탭에서 메모판을 여러 개 만들 수 있습니다.</span></div>';
 
 let boards = [], active = '', sel = null;
@@ -135,10 +139,11 @@ function render() {
       <div class="rz"></div>
     </div>`).join('') +
     b.notes.map((n) => `
-    <div class="note ${sel === n.id ? 'sel' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
-      <div class="hd"><span class="dot" data-pal="1"></span>
-        <input class="nt" value="${esc(n.title || '')}" placeholder="제목" maxlength="60">
-        <button class="plus" title="옆에 새 메모">＋</button><button class="x" title="메모 지우기">✕</button></div>
+    <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
+      <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><span class="dot" data-pal="1"></span>
+        <span class="nt ${n.title ? '' : 'no'}">${esc(n.title || '제목 없음')}</span>
+        <button class="hb ed" title="제목 정하기">✎</button>
+        <button class="hb plus" title="옆에 새 메모">＋</button><button class="x" title="메모 지우기">✕</button></div>
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
       <div class="rz"></div>
     </div>`).join('') +
@@ -158,14 +163,14 @@ function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLe
 function newNote(x, y) {
   const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: 200, h: 200, title: '', text: '', color: 'yellow', z: topZ() + 1, fs: 13 };
   cur().notes.push(n); sel = n.id; touch(); render();
-  const el = document.querySelector(`.note[data-id="${n.id}"] .nt`); if (el) el.focus();
+  const el = document.querySelector(`.note[data-id="${n.id}"] textarea`); if (el) el.focus();
 }
 $('#addNote').onclick = () => {
   const c = viewCenter(), k = cur().notes.length;
   newNote(c.x - 100 + (k % 5) * 20, c.y - 100 + (k % 5) * 20);
 };
 $('#addArea').onclick = () => {
-  const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: 'gray' };
+  const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: 'green' };
   cur().areas.push(a); touch(); render();
   const el = document.querySelector(`.area[data-id="${a.id}"] .t`); if (el) el.focus();
 };
@@ -217,6 +222,11 @@ $('#canvas').addEventListener('click', (e) => {
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id); else cur().areas = cur().areas.filter((x) => x.id !== id);
     sel = null; touch(); render(); return;
   }
+  if (e.target.classList.contains('ed')) {       // 제목 정하기
+    const v = prompt('메모 제목', o.title || '');
+    if (v != null) { o.title = v.trim().slice(0, 60); o.updated = Date.now(); touch(); render(); }
+    return;
+  }
   if (e.target.classList.contains('plus')) {     // 이 메모 옆에 새 메모
     const right = o.x + o.w + 10, below = o.y + o.h + 10;
     if (right + 200 < ($('#canvas').clientWidth || 4000)) newNote(right, o.y); else newNote(o.x, below);
@@ -225,11 +235,17 @@ $('#canvas').addEventListener('click', (e) => {
   if (e.target.dataset.pal) { openPal(e.target, k, id); return; }
   if (k === 'n' && sel !== id) { sel = id; o.z = topZ() + 1; touch(); render(); }
 });
+$('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 번 누르면 접었다 폈다
+  const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.target.dataset.pal) return;
+  const box = e.target.closest('[data-k]'); if (!box || box.dataset.k !== 'n') return;
+  const o = find('n', box.dataset.id); if (!o) return;
+  o.min = !o.min; touch(); render();
+});
 $('#canvas').addEventListener('input', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) return;
   const o = find(box.dataset.k, box.dataset.id); if (!o) return;
   if (e.target.tagName === 'TEXTAREA') { o.text = e.target.value; o.updated = Date.now(); }
-  else if (e.target.classList.contains('t') || e.target.classList.contains('nt')) { o.title = e.target.value; o.updated = Date.now(); }
+  else if (e.target.classList.contains('t')) { o.title = e.target.value; }
   touch();
 });
 
@@ -242,7 +258,7 @@ $('#canvas').addEventListener('mousedown', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) return;
   const k = box.dataset.k, o = find(k, box.dataset.id); if (!o) return;
   const t = e.target;
-  if (t.classList.contains('x') || t.classList.contains('plus') || t.dataset.pal) return;   // 지우기·＋·색 단추
+  if (t.tagName === 'BUTTON' || t.dataset.pal) return;               // 지우기·＋·제목·색 단추
   const rz = t.classList.contains('rz');
   if (!rz) {
     if (t.tagName === 'INPUT') return;                               // 범위 이름 칸
@@ -378,8 +394,7 @@ window.addEventListener('resize', render);
     const my = tabs && tabs.querySelector('a[data-page="memo.html"]');
     if (my) {
       my.remove();
-      tabs.appendChild($('#bds')); tabs.appendChild($('#tools'));
-      $('#bar').remove();
+      tabs.appendChild($('#bds'));
       clearInterval(t); render();
     } else if (++tries > 60) clearInterval(t);   // 상단바가 없으면(창 안에 끼워 쓸 때) 그대로 둔다
   }, 50);
