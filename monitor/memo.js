@@ -76,6 +76,7 @@ function create(opts) {
     acolor: color(p && p.acolor, 'green'),
     magnet: !(p && p.magnet === false),
     side: !(p && p.side === false),        // 왼쪽 탭 보이기
+    theme: (p && p.theme) === 'dark' ? 'dark' : 'light',   // 화면 테마 (기본: 밝게)
   });
   // 바로가기 타일 (바탕화면 아이콘처럼 눌러서 여는 것)
   const link = (l) => ({

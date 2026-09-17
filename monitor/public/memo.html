@@ -6,7 +6,14 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 4h22v16l-7 8H5z' fill='%23fbbf24'/%3E%3Cpath d='M27 20l-7 8v-8z' fill='%23d97706'/%3E%3Cg fill='%23854d0e'%3E%3Crect x='9' y='9' width='14' height='2.4' rx='1.2'/%3E%3Crect x='9' y='14' width='14' height='2.4' rx='1.2'/%3E%3Crect x='9' y='19' width='8' height='2.4' rx='1.2'/%3E%3C/g%3E%3C/svg%3E">
 <style>
   :root { --bg:#eef4f2; --card:#ffffff; --line:#d3e2de; --text:#14342e; --muted:#6b8a84; --bad:#e11d48;
-    --accent:#0d9488; --soft:#d7f0ea; --r:4px; }
+    --accent:#0d9488; --soft:#d7f0ea; --onacc:#ffffff; --dot:rgba(13,148,136,.18); --side:#f7fbfa;
+    --hdbg:rgba(255,255,255,.75); --shadow:rgba(20,52,46,.16); --veil:rgba(20,52,46,.35); --r:4px; }
+  /* 어두운 테마 (설정 ⚙ → 화면 테마) */
+  :root[data-theme="dark"] { --bg:#0f1b19; --card:#172725; --line:#2a4540; --text:#e3efec; --muted:#8ea8a2; --bad:#fb7185;
+    --accent:#2dd4bf; --soft:#1e3a35; --onacc:#0f1b19; --dot:rgba(45,212,191,.2); --side:#13211f;
+    --hdbg:rgba(0,0,0,.35); --shadow:rgba(0,0,0,.55); --veil:rgba(0,0,0,.6); }
+  :root[data-theme="dark"] .note .hd { background:rgba(0,0,0,.12); }
+  :root[data-theme="dark"] #bin .ft button.rm:hover { background:rgba(251,113,133,.14); }
   #topnav a.alt { border-radius:var(--r) !important; }
   * { box-sizing:border-box; }
   html, body { height:100%; }
@@ -14,7 +21,7 @@
   #topnav { flex:none; }
   #main { flex:1; display:flex; min-height:0; }
   #side { flex:none; width:174px; display:flex; flex-direction:column; overflow:auto;
-    background:#f7fbfa; border-right:1px solid var(--line); padding:9px 9px 12px; }
+    background:var(--side); border-right:1px solid var(--line); padding:9px 9px 12px; }
   body.nosd #side { display:none; }
   #side .sh { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:11px; padding:0 0 7px 4px; }
   #side .sh span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -31,26 +38,26 @@
   #pgs .pg .nm { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #pgs .pg i { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.45; flex:none; }
   #pgs .pg:hover { background:var(--soft); color:var(--text); }
-  #pgs .pg.on { background:var(--accent); color:#fff; font-weight:700; }
+  #pgs .pg.on { background:var(--accent); color:var(--onacc); font-weight:700; }
   #pgs .pg.on i { opacity:.8; }
-  #pgs .pg input.re { width:100%; background:#fff; border:1px solid var(--accent); color:var(--text);
+  #pgs .pg input.re { width:100%; background:var(--card); border:1px solid var(--accent); color:var(--text);
     border-radius:4px; font:inherit; font-size:12.5px; padding:1px 4px; }
   #pgs .pg input.re:focus { outline:none; }
   #addPage { margin-top:9px; background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r);
     padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
   #addPage:hover { color:var(--accent); border-color:var(--accent); }
   #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
-      radial-gradient(circle at 1px 1px, rgba(13,148,136,.18) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
+      radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
 
   /* 메모판 탭 + 도구 (맨 위 탭줄 안으로 들어간다) */
   #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--card); border-bottom:1px solid var(--line); }
   #bds { display:flex; align-items:center; gap:4px; overflow-x:auto; }
-  #bds .bd { display:flex; align-items:center; gap:6px; white-space:nowrap; background:#f7fbfa; color:var(--muted);
+  #bds .bd { display:flex; align-items:center; gap:6px; white-space:nowrap; background:var(--side); color:var(--muted);
     border:1px solid var(--line); border-radius:var(--r); padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
   #bds .bd:hover { color:var(--text); }
   #bds .bd i { width:10px; height:10px; border-radius:3px; display:inline-block; flex:none; }
-  #bds .bd.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  #bds .bd.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
   #bds .bd .mn { opacity:.7; margin-left:1px; }
   #bds #addBoard { background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r); padding:5px 10px; font:inherit; cursor:pointer; }
   #bds #addBoard:hover { color:var(--accent); border-color:var(--accent); }
@@ -59,7 +66,7 @@
   #tools .tr { display:flex; align-items:center; gap:6px; justify-content:flex-end; min-width:0; }
   #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
   #tools button:hover { border-color:var(--accent); }
-  #tools button.go { background:var(--accent); color:#fff; font-weight:700; border-color:var(--accent); }
+  #tools button.go { background:var(--accent); color:var(--onacc); font-weight:700; border-color:var(--accent); }
   #tools .st { color:var(--muted); font-size:11.5px; min-width:44px; }
   #tools #binBtn b { color:var(--accent); font-size:11.5px; margin-left:5px; }
   #tools #cfgBtn { font-size:14px; padding:4px 9px; }
@@ -70,8 +77,8 @@
   #lnkEd .kind { display:flex; gap:6px; }
   #lnkEd .kind button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
-  #lnkEd .kind button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
-  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:#fff; border:0; border-radius:var(--r);
+  #lnkEd .kind button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
+  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:var(--onacc); border:0; border-radius:var(--r);
     font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
   #lnkEd .tip { color:var(--muted); font-size:11px; line-height:1.6; margin-top:9px; }
   #cfg { width:250px; max-height:72vh; overflow:auto; }
@@ -81,8 +88,8 @@
   #cfg .row button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
   #cfg .row button:hover { border-color:var(--accent); }
-  #cfg .row button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
-  .mask { position:fixed; inset:0; background:rgba(20,52,46,.35); z-index:9500; display:flex; align-items:center; justify-content:center; padding:24px; }
+  #cfg .row button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
+  .mask { position:fixed; inset:0; background:var(--veil); z-index:9500; display:flex; align-items:center; justify-content:center; padding:24px; }
   .mask[hidden] { display:none; }
   #bin { position:static; width:min(760px,96vw); max-height:82vh; display:flex; flex-direction:column; padding:16px 18px 14px; }
   #bin .hdr { display:flex; align-items:baseline; gap:9px; padding-bottom:10px; border-bottom:1px solid var(--line); }
@@ -94,6 +101,7 @@
   #bin .it { display:flex; align-items:center; gap:12px; padding:10px 4px; border-bottom:1px solid var(--line); }
   #bin .it .pv { flex:none; width:132px; height:78px; border:1px solid var(--line); border-radius:var(--r); overflow:hidden;
     background:var(--pv,#f1f5f4); padding:6px 7px; font-size:11px; line-height:1.45; color:#1f2937;
+    
     white-space:pre-wrap; word-break:break-all; position:relative; }
   #bin .it .pv img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   #bin .it .pv.ico { display:flex; align-items:center; justify-content:center; font-size:26px; }
@@ -106,22 +114,22 @@
   #bin .it button, #bin .ft button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     font:inherit; font-size:12px; padding:6px 12px; cursor:pointer; flex:none; }
   #bin .it button:hover, #bin .ft button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
-  #bin .it button.rm:hover, #bin .ft button.rm:hover { border-color:var(--bad); color:var(--bad); background:#fff1f2; }
+  #bin .it button.rm:hover, #bin .ft button.rm:hover { border-color:var(--bad); color:var(--bad); background:rgba(225,29,72,.08); }
   /* 메모판 탭은 맨 위 탭줄 안으로 옮겨진다 */
   #bds { padding:6px 12px; }
   #topnav #bds { max-width:52vw; padding:0; }
 
   /* 범위 */
   .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); }
-  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(255,255,255,.75); }
+  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:var(--hdbg); }
   .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:var(--r); min-width:40px; }
-  .area .t:focus { outline:none; background:#fff; }
+  .area .t:focus { outline:none; background:var(--hdbg); }
   .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
 
   /* 바로가기 타일 (바탕화면 아이콘처럼) */
   .lnk { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
     background:var(--card); border:1px solid var(--line); border-radius:var(--r); cursor:pointer; overflow:hidden;
-    box-shadow:0 1px 3px rgba(20,52,46,.1);
+    box-shadow:0 1px 3px var(--shadow);
     padding:6px 4px; text-align:center; z-index:6; }
   .lnk:hover { background:var(--soft); border-color:var(--accent); }
   .lnk.sel { border-color:var(--accent); }
@@ -164,7 +172,7 @@
   .area .rz.bl::after { border-right:0; border-left:2px solid var(--bd,#94a3b8); }
 
   /* 팝업 (색·글자 크기 / 보드 메뉴) */
-  .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:9px; box-shadow:0 8px 22px rgba(20,52,46,.16); }
+  .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:9px; box-shadow:0 8px 22px var(--shadow); }
   .pop[hidden] { display:none; }
   .pop .sec { color:var(--muted); font-size:11px; margin:0 0 5px; }
   .pop .cols { display:grid; grid-template-columns:repeat(4,24px); gap:6px; margin-bottom:9px; }
@@ -172,14 +180,14 @@
   .pop b.sw:hover { outline:2px solid var(--accent); }
   .pop .sizes { display:flex; gap:5px; align-items:flex-end; }
   .pop .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r); width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
-  .pop .sizes button:hover { border-color:var(--accent); } .pop .sizes button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  .pop .sizes button:hover { border-color:var(--accent); } .pop .sizes button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
   .pop .mi { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font:inherit; font-size:12.5px; padding:7px 9px; border-radius:var(--r); cursor:pointer; }
   .pop .mi:hover { background:var(--soft); } .pop .mi.del { color:#f87171; }
   .pop hr { border:0; border-top:1px solid var(--line); margin:6px 0; }
   .pop .ti { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
     border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; }
   .pop .ti:focus { outline:none; border-color:var(--accent); }
-  #bds .bd input.re { width:90px; background:#fff; border:1px solid var(--accent); color:var(--text);
+  #bds .bd input.re { width:90px; background:var(--card); border:1px solid var(--accent); color:var(--text);
     border-radius:4px; font:inherit; font-size:12.5px; font-weight:700; padding:1px 4px; }
   #bds .bd input.re:focus { outline:none; }
   .empty { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
@@ -217,6 +225,7 @@
 <div class="pop" id="lnkEd" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
 
+<script>try { const t = localStorage.getItem('imsMemoTheme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <script src="common.js"></script>
 <script>
 MON.renderNav('memo.html');
@@ -244,7 +253,12 @@ const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 �
 
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
-let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true };   // 기본 설정
+let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light' };
+function applyTheme() {                                        // 밝게 / 어둡게
+  const d = prefs.theme === 'dark';
+  document.documentElement.dataset.theme = d ? 'dark' : 'light';
+  try { localStorage.setItem('imsMemoTheme', d ? 'dark' : 'light'); } catch (e) {}   // 일정 화면도 같은 테마로
+}   // 기본 설정
 let dirty = false, saving = false;
 const uid = () => Math.random().toString(36).slice(2, 10);
 const curB = () => boards.find((x) => x.id === active) || boards[0] || { pages: [] };   // 상단 탭 = 메모판
@@ -319,6 +333,7 @@ function renderPages() {
   $('#pgs').innerHTML = (b.pages || []).map((g) => `<button class="pg ${g.id === b.ap ? 'on' : ''}" data-p="${g.id}"
     title="${esc(g.name)}"><i></i><span class="nm">${esc(g.name)}</span></button>`).join('');
   document.body.classList.toggle('nosd', prefs.side === false);
+  applyTheme();
 }
 const sideToggle = () => { prefs.side = prefs.side === false; touch(); render(); };
 $('#sdHide').onclick = sideToggle;
@@ -717,8 +732,8 @@ function binPv(t) {                                  // 어떤 내용이었는�
     const txt = (o.text || '').slice(0, 160);
     return `<div class="pv" style="--pv:${bg}">${txt ? esc(txt) : '<span style="opacity:.45">(빈 메모)</span>'}</div>`;
   }
-  if (t.k === 'a') return `<div class="pv ico" style="--pv:${tint(o.color)};border-style:dashed;border-color:${COLORS[o.color] ? COLORS[o.color].bd : '#64748b'}">▭</div>`;
-  return `<div class="pv ico" style="--pv:#fff">${o.icon ? esc(o.icon) : (/^mstsc:/i.test(o.url || '') ? '🖥️' : '🔗')}</div>`;
+  if (t.k === 'a') return `<div class="pv ico" style="color:var(--text);--pv:${tint(o.color)};border-style:dashed;border-color:${COLORS[o.color] ? COLORS[o.color].bd : '#64748b'}">▭</div>`;
+  return `<div class="pv ico" style="--pv:var(--card);color:var(--text)">${o.icon ? esc(o.icon) : (/^mstsc:/i.test(o.url || '') ? '🖥️' : '🔗')}</div>`;
 }
 function binSub(t) {
   const o = t.o || {}, bits = [];
@@ -845,6 +860,9 @@ function openCfg() {
     <div class="row">${SZ.map((z) => `<button data-p="wh" data-v="${z.w},${z.h}" class="${prefs.w === z.w && prefs.h === z.h ? 'on' : ''}">${z.n}</button>`).join('')}</div>
     <div class="sec">새 범위 색</div>
     <div class="cols">${KEYS.map((c) => `<b class="sw ${prefs.acolor === c ? 'on' : ''}" data-p="acolor" data-v="${c}" style="background:${COLORS[c].bd}"></b>`).join('')}</div>
+    <div class="sec">화면 테마</div>
+    <div class="row"><button data-p="theme" data-v="light" class="${prefs.theme === 'dark' ? '' : 'on'}">☀ 밝게</button>
+      <button data-p="theme" data-v="dark" class="${prefs.theme === 'dark' ? 'on' : ''}">🌙 어둡게</button></div>
     <div class="sec">자석으로 붙이기</div>
     <div class="row"><button data-p="magnet" data-v="1" class="${prefs.magnet ? 'on' : ''}">켜기</button>
       <button data-p="magnet" data-v="0" class="${prefs.magnet ? '' : 'on'}">끄기</button></div>
@@ -859,6 +877,7 @@ $('#cfg').onclick = (e) => {
   if (k === 'wh') { const [w, h] = v.split(',').map(Number); prefs.w = w; prefs.h = h; }
   else if (k === 'magnet') prefs.magnet = v === '1';
   else if (k === 'fs') prefs.fs = Number(v);
+  else if (k === 'theme') { prefs.theme = v; applyTheme(); }
   else prefs[k] = v;
   touch(); openCfg();
 };
