@@ -16,7 +16,15 @@
   #side { flex:none; width:174px; display:flex; flex-direction:column; overflow:auto;
     background:#f7fbfa; border-right:1px solid var(--line); padding:9px 9px 12px; }
   body.nosd #side { display:none; }
-  #side .sh { color:var(--muted); font-size:11px; padding:0 4px 7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #side .sh { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:11px; padding:0 0 7px 4px; }
+  #side .sh span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #side .sh button { flex:none; background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
+    width:20px; height:20px; line-height:1; font:inherit; font-size:13px; cursor:pointer; padding:0; }
+  #side .sh button:hover { color:var(--accent); border-color:var(--accent); }
+  #sdShow { display:none; flex:none; align-self:flex-start; margin:9px 0 0 4px; background:var(--card); border:1px solid var(--line);
+    color:var(--muted); border-radius:var(--r); width:20px; height:34px; font:inherit; font-size:13px; cursor:pointer; padding:0; }
+  #sdShow:hover { color:var(--accent); border-color:var(--accent); }
+  body.nosd #sdShow { display:block; }
   #pgs { display:flex; flex-direction:column; gap:3px; }
   #pgs .pg { display:flex; align-items:center; gap:7px; background:none; border:0; color:var(--muted); text-align:left;
     border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; cursor:pointer; }
@@ -31,7 +39,6 @@
   #addPage { margin-top:9px; background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r);
     padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
   #addPage:hover { color:var(--accent); border-color:var(--accent); }
-  #tools #sdBtn { font-size:14px; padding:4px 9px; }
   #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
       radial-gradient(circle at 1px 1px, rgba(13,148,136,.18) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
@@ -47,12 +54,13 @@
   #bds .bd .mn { opacity:.7; margin-left:1px; }
   #bds #addBoard { background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r); padding:5px 10px; font:inherit; cursor:pointer; }
   #bds #addBoard:hover { color:var(--accent); border-color:var(--accent); }
-  #tools { display:flex; align-items:center; gap:6px; flex:1; min-width:0; }
+  #tools { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:6px; flex:1; min-width:0; }
+  #tools .tc { display:flex; align-items:center; gap:6px; justify-content:center; }
+  #tools .tr { display:flex; align-items:center; gap:6px; justify-content:flex-end; min-width:0; }
   #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:5px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
   #tools button:hover { border-color:var(--accent); }
   #tools button.go { background:var(--accent); color:#fff; font-weight:700; border-color:var(--accent); }
   #tools .st { color:var(--muted); font-size:11.5px; min-width:44px; }
-  #tools .sp { flex:1; }
   #tools #binBtn b { color:var(--accent); font-size:11.5px; margin-left:5px; }
   #tools #cfgBtn { font-size:14px; padding:4px 9px; }
   #lnkEd { width:270px; }
@@ -135,7 +143,10 @@
   .area .x { color:rgba(20,52,46,.35); } .area .x:hover { color:var(--bad); }
   .rz { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; }
   .rz::after { content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px; border-right:2px solid rgba(0,0,0,.3); border-bottom:2px solid rgba(0,0,0,.3); }
+  .rz.bl { right:auto; left:0; cursor:nesw-resize; }
+  .rz.bl::after { right:auto; left:3px; border-right:0; border-left:2px solid rgba(0,0,0,.3); }
   .area .rz::after { border-color:var(--bd,#94a3b8); }
+  .area .rz.bl::after { border-right:0; border-left:2px solid var(--bd,#94a3b8); }
 
   /* 팝업 (색·글자 크기 / 보드 메뉴) */
   .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:9px; box-shadow:0 8px 22px rgba(20,52,46,.16); }
@@ -163,22 +174,25 @@
 <div id="bds"></div>
 <div id="bar">
   <div id="tools">
-    <button id="sdBtn" title="왼쪽 탭 숨기기 / 보이기">☰</button>
-    <button class="go" id="addNote">＋ 새 메모</button>
-    <button id="addArea">＋ 새 범위</button>
-    <button id="addLink">＋ 바로가기</button>
-    <span class="st" id="st"></span>
-    <span class="sp"></span>
-    <button id="binBtn" title="지운 메모 보기">🗑 휴지통<b id="binN"></b></button>
-    <button id="cfgBtn" title="메모 기본 설정">⚙</button>
+    <div class="tl"></div>
+    <div class="tc">
+      <button class="go" id="addNote">＋ 새 메모</button>
+      <button id="addArea">＋ 새 범위</button>
+    </div>
+    <div class="tr">
+      <span class="st" id="st"></span>
+      <button id="binBtn" title="지운 메모 보기">🗑 휴지통<b id="binN"></b></button>
+      <button id="cfgBtn" title="메모 기본 설정">⚙</button>
+    </div>
   </div>
 </div>
 <div id="main">
   <div id="side">
-    <div class="sh" id="sdName"></div>
+    <div class="sh"><span id="sdName"></span><button id="sdHide" title="탭 숨기기">‹</button></div>
     <div id="pgs"></div>
     <button id="addPage">＋ 새 탭</button>
   </div>
+  <button id="sdShow" title="탭 보이기">›</button>
   <div id="board"><div id="canvas"></div></div>
 </div>
 <div class="pop" id="pal" hidden></div>
@@ -205,11 +219,11 @@ const SNAP = 10;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
-  + '<span style="font-size:12px">메모는 <b>제목 줄</b>을 끌어서 옮기고(내용 글자는 끌어서 선택), 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
+  + '<span style="font-size:12px">메모는 <b>제목 줄</b>을 끌어서 옮기고(내용 글자는 끌어서 선택), <b>아래 양쪽 모서리</b>로 크기를 바꿉니다.<br>'
   + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
   + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
-  + '<b>＋ 바로가기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둘 수 있습니다.<br>'
-  + '왼쪽 <b>＋ 새 탭</b> 으로 이 메모판 안에 탭을 더 만듭니다 (예: 회의록 → 9월 17일 회의록). <b>☰</b> 로 접었다 폅니다.<br>'
+  + '빈 바탕에서 <b>오른쪽 단추</b>를 누르면 그 자리에 <b>바로가기</b>(바탕화면 아이콘)를 만듭니다.<br>'
+  + '왼쪽 <b>＋ 새 탭</b> 으로 이 메모판 안에 탭을 더 만듭니다 (예: 회의록 → 9월 17일 회의록). <b>‹ ›</b> 로 접었다 폅니다.<br>'
   + '지운 것은 오른쪽 <b>🗑 휴지통</b> 에서 되살리고, <b>⚙</b> 에서 기본 색·글자 크기를 정합니다.<br>'
   + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span></div>';
 
@@ -245,7 +259,7 @@ function render() {
       <div class="hd"><span class="dot" data-pal="1" style="--bg2:${COLORS[a.color] ? COLORS[a.color].bd : '#64748b'}"></span>
         <input class="t" value="${esc(a.title)}" placeholder="범위 이름 (예: 아이디어)" maxlength="40">
         <button class="x" title="범위 지우기">✕</button></div>
-      <div class="rz"></div>
+      <div class="rz"></div><div class="rz bl"></div>
     </div>`).join('') +
     b.links.map((l) => `
     <div class="lnk ${sel === l.id ? 'sel' : ''}" data-k="l" data-id="${l.id}" title="${esc(l.url || '')}"
@@ -260,7 +274,7 @@ function render() {
         <button class="hb ed" title="제목 정하기">✎</button>
         <button class="hb plus" title="옆에 새 메모">＋</button><button class="x" title="메모 지우기">✕</button></div>
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
-      <div class="rz"></div>
+      <div class="rz"></div><div class="rz bl"></div>
     </div>`).join('') +
     (b.notes.length + b.areas.length + b.links.length ? '' : EMPTY);
   renderBoards(); renderPages();
@@ -291,7 +305,9 @@ function renderPages() {
     title="${esc(g.name)}"><i></i><span class="nm">${esc(g.name)}</span></button>`).join('');
   document.body.classList.toggle('nosd', prefs.side === false);
 }
-$('#sdBtn').onclick = () => { prefs.side = prefs.side === false; touch(); render(); };
+const sideToggle = () => { prefs.side = prefs.side === false; touch(); render(); };
+$('#sdHide').onclick = sideToggle;
+$('#sdShow').onclick = sideToggle;
 $('#addPage').onclick = () => {
   const b = curB();
   if (b.pages.length >= 50) { alert('탭은 50개까지 만들 수 있습니다.'); return; }
@@ -406,12 +422,11 @@ $('#addNote').onclick = () => {
   const c = viewCenter(), k = cur().notes.length;
   newNote(c.x - prefs.w / 2 + (k % 5) * 20, c.y - prefs.h / 2 + (k % 5) * 20);
 };
-$('#addLink').onclick = () => {
-  const c = viewCenter();
-  const l = { id: uid(), x: Math.max(0, snap(c.x - 48)), y: Math.max(0, snap(c.y - 44)), w: 96, h: 88, name: '', url: '', icon: '', color: 'gray' };
+function newLink(x, y) {
+  const l = { id: uid(), x: Math.max(0, snap(x - 48)), y: Math.max(0, snap(y - 44)), w: 96, h: 88, name: '', url: '', icon: '', color: 'gray' };
   cur().links.push(l); unstack(l, 'l'); sel = l.id; touch(); render();
   const el = document.querySelector(`.lnk[data-id="${l.id}"]`); if (el) openLnkEd(el, l.id);
-};
+}
 $('#addArea').onclick = () => {
   const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: prefs.acolor };
   cur().areas.push(a); touch(); render();
@@ -486,7 +501,13 @@ $('#canvas').addEventListener('click', (e) => {
   }
 });
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
-  const box = e.target.closest('[data-k]'); if (!box) return;
+  const box = e.target.closest('[data-k]');
+  if (!box) {                                              // 빈 바탕: 여기에 바로가기 만들기
+    e.preventDefault();
+    const r = $('#canvas').getBoundingClientRect();
+    newLink(e.clientX - r.left, e.clientY - r.top);
+    return;
+  }
   e.preventDefault();
   if (box.dataset.k === 'l') { openLnkEd({ left: e.clientX, bottom: e.clientY }, box.dataset.id); return; }
   openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
@@ -522,7 +543,7 @@ $('#canvas').addEventListener('mousedown', (e) => {
     if (!canMove) return;                                            // 제목 줄로만 옮긴다
   }
   const base = { o, box, k, sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
-  if (rz) { e.preventDefault(); drag = { ...base, mode: 'rz' }; document.body.style.userSelect = 'none'; }
+  if (rz) { e.preventDefault(); drag = { ...base, mode: 'rz', left: t.classList.contains('bl') }; document.body.style.userSelect = 'none'; }
   else pend = { ...base, mode: 'mv' };
   moved = false;
   if (k === 'l' && sel !== o.id) { sel = o.id; box.classList.add('sel'); }
@@ -544,8 +565,18 @@ document.addEventListener('mousemove', (e) => {
     drag.box.style.left = drag.o.x + 'px'; drag.box.style.top = drag.o.y + 'px';
   } else {
     const min = drag.k === 'n' ? [80, 60] : [160, 120];
-    drag.o.w = Math.max(min[0], snap(drag.w + dx)); drag.o.h = Math.max(min[1], snap(drag.h + dy));
-    drag.box.style.width = drag.o.w + 'px'; drag.box.style.height = drag.o.h + 'px';
+    if (drag.left) {                                   // 왼쪽 아래 손잡이: 오른쪽 끝을 붙잡고 왼쪽으로 늘린다
+      const right = drag.x + drag.w;
+      let nx = Math.max(0, snap(drag.x + dx)), w = right - nx;
+      if (w < min[0]) { w = min[0]; nx = right - w; }
+      drag.o.x = nx; drag.o.w = w;
+      drag.box.style.left = nx + 'px'; drag.box.style.width = w + 'px';
+    } else {
+      drag.o.w = Math.max(min[0], snap(drag.w + dx));
+      drag.box.style.width = drag.o.w + 'px';
+    }
+    drag.o.h = Math.max(min[1], snap(drag.h + dy));
+    drag.box.style.height = drag.o.h + 'px';
   }
 });
 document.addEventListener('mouseup', () => {
