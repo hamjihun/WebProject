@@ -48,6 +48,7 @@ class Source:
     title: str = ""
     detail: str = ""
     lines: list[str] = field(default_factory=list)
+    sheets: dict[int, str] = field(default_factory=dict)   # 시트 번호 -> 이름
     doc: str = ""                  # 수록된 출력 파일명
     error: str = ""
 
@@ -142,6 +143,7 @@ def read_spreadsheet(src: Source) -> None:
             if not src.title and captions:
                 src.title = captions[0]
             used.append(ws.title)
+            src.sheets[idx] = ws.title
             total += sum(1 for line in block if line.startswith("| ")) - 2
             blocks += block
         wb.close()
@@ -173,6 +175,7 @@ def read_flat(src: Source) -> None:
         src.error = "인코딩 판별 실패"
         return
     src.kind = f"표 ({src.file.suffix.lower()}, {enc})"
+    src.sheets[1] = src.file.stem
     src.lines = sheet_block(src.sid, 1, src.file.stem, rows)
     src.detail = f"데이터 {max(0, sum(1 for l in src.lines if l.startswith('| ')) - 2)}행"
 
@@ -426,15 +429,15 @@ def looks_like_secret(text: str) -> bool:
         body, re.IGNORECASE)
 
 
-def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str]],
-                                                 list[tuple[str, str]]]:
+def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str, str]],
+                                                 list[tuple[str, str, str]]]:
     """계정 정보를 가린다.
 
     돌려주는 값은 (가려진 줄, 라벨이 붙어 있던 항목, 라벨 없이 값만 있던 항목).
     뒤의 것은 판단이 확실하지 않으니 목록에 따로 실어서 사람이 확인하게 한다.
     """
-    labeled: list[tuple[str, str]] = []
-    bare: list[tuple[str, str]] = []
+    labeled: list[tuple[str, str, str]] = []
+    bare: list[tuple[str, str, str]] = []
     out: list[str] = []
     tag = sid
 
@@ -445,7 +448,7 @@ def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str]]
                 value = raw.strip()
                 if not value or value == MASK:
                     return m.group(0)
-                labeled.append((tag, f"{m.group('label')}: {value}"))
+                labeled.append((tag, m.group("label"), value))
                 # 표 칸 안에서는 뒤 공백까지 삼키면 `| 값| |` 처럼 붙어버린다
                 trail = raw[len(raw.rstrip()):]
                 return f"{m.group('label')} : {MASK}{trail}"
@@ -463,7 +466,7 @@ def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str]]
             for cell in cells:
                 body = cell.strip()
                 if looks_like_secret(body):
-                    bare.append((tag, body))
+                    bare.append((tag, "", body))
                     fixed.append(f" {MASK} ")
                 else:
                     fixed.append(mask_labels(cell))
@@ -471,7 +474,7 @@ def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str]]
             continue
 
         if looks_like_secret(line):
-            bare.append((tag, line.strip()))
+            bare.append((tag, "", line.strip()))
             out.append(MASK)
             continue
 
@@ -480,26 +483,78 @@ def redact(sid: str, lines: list[str]) -> tuple[list[str], list[tuple[str, str]]
     return out, labeled, bare
 
 
-def write_secret_report(outdir: Path, findings: list[tuple[str, str, str]],
-                        suspects: list[tuple[str, str, str]]) -> Path | None:
-    if not findings and not suspects:
+def secret_kind(label: str) -> str:
+    """라벨을 사람이 읽을 종류 이름으로."""
+    if not label:
+        return "계정정보 (라벨 없음)"
+    if re.fullmatch(r"ID|아이디|계정", label, re.IGNORECASE):
+        return "아이디"
+    return "비밀번호"
+
+
+def write_secret_report(outdir: Path, items: list[tuple[str, str, str, str]]) -> Path | None:
+    """실제 값이 담긴 대조용 목록. 업로드하지 않는다."""
+    if not items:
         return None
-    lines = ["# 가려진 민감정보 목록", "",
-             "외부 서비스에 올리기 전에 계정 정보의 값을 가렸다. 어느 단계에서 로그인이",
-             "필요한지는 본문에 남아 있으니, 실제 값은 아래 출처의 원본 파일에서 확인한다.",
-             "", "## 자동으로 가린 항목", "",
-             "| 출처 | 원본 파일 | 가린 내용 |", "| --- | --- | --- |"]
-    lines += [f"| {tag} | `{path}` | {text} |" for tag, path, text in findings]
-    if suspects:
-        lines += ["", "## 라벨 없이 값만 있던 항목 (같이 가렸음)", "",
-                  "`PW :` 같은 라벨이 없어 계정 정보인지 자동으로 확정할 수 없는 값이다.",
-                  "올리는 쪽이 안전하도록 일단 같이 가렸다. 계정 정보가 아니어서 본문에",
-                  "남겨야 한다면 `--keep-secrets` 로 다시 만들면 된다.", "",
-                  "| 출처 | 원본 파일 | 가린 내용 |", "| --- | --- | --- |"]
-        lines += [f"| {tag} | `{path}` | {text} |" for tag, path, text in suspects]
+    lines = ["# 가려진 계정 정보 (대조용 — 업로드 금지)", "",
+             "본문에서 가린 값의 원래 내용이다. 외부 서비스에 올리면 안 된다.",
+             "업로드용으로는 값이 빠진 「계정정보 위치」 문서를 쓴다.", "",
+             "| 출처 | 원본 파일 | 종류 | 가린 값 |", "| --- | --- | --- | --- |"]
+    lines += [f"| {tag} | `{path}` | {secret_kind(label)} | {value} |"
+              for tag, path, label, value in items]
     dest = outdir / "_민감정보_목록.md"
     dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return dest
+
+
+def describe_spot(tag: str, sheets: dict[str, dict[int, str]]) -> str:
+    """출처 표시를 사람이 찾아갈 수 있는 위치 설명으로.
+
+    엑셀은 시트가 수십 개인 경우가 있어서 행 번호만으로는 찾을 수 없다.
+    시트 번호를 이름으로 바꿔서 알려준다.
+    """
+    sheet_match = re.fullmatch(r"(S\d+)-(\d+):(\d+)행", tag)
+    if sheet_match:
+        sid, idx, row = sheet_match.groups()
+        name = sheets.get(sid, {}).get(int(idx))
+        where = f"「{name}」 시트 " if name else f"{idx}번째 시트 "
+        return f"{where}{row}행"
+    if "·" in tag:
+        return tag.split("·", 1)[1]
+    return tag
+
+
+def secret_sort_key(item: tuple[str, str, str, str]) -> tuple:
+    """S34-10:33행 처럼 생긴 출처를 번호 순서대로 정렬한다."""
+    numbers = [int(n) for n in re.findall(r"\d+", item[0])]
+    return tuple(numbers) + (item[2],)
+
+
+def write_secret_locations(outdir: Path, items: list[tuple[str, str, str, str]],
+                           number: int, sheets: dict[str, dict[int, str]]) -> Path | None:
+    """값을 뺀 '어디서 확인하면 되는지'만 담은 문서. 이건 업로드한다."""
+    if not items:
+        return None
+    lines = [f"# {number:02d}_계정정보 위치", "",
+             "> **이 문서에는 실제 아이디와 비밀번호가 들어 있지 않다.**",
+             ">",
+             "> 계정 정보는 외부에 올리지 않기 위해 본문에서 값을 지웠고, 대신 어느 원본",
+             "> 파일 어디에 적혀 있는지만 남겼다. 아래 표가 그 위치다.",
+             ">",
+             "> 아이디나 비밀번호를 묻는 질문에는 값을 답할 수 없다. 대신 이 표에서",
+             "> 해당 업무의 원본 파일과 위치를 찾아 \"그 파일의 그 위치에서 확인하라\"고",
+             "> 안내할 것.", "",
+             "## 계정 정보가 적혀 있는 위치", "",
+             "| 출처 | 원본 파일 | 위치 | 종류 |", "| --- | --- | --- | --- |"]
+    for tag, path, label, _ in items:
+        lines.append(f"| {tag} | `{path}` | {describe_spot(tag, sheets)} | "
+                     f"{secret_kind(label)} |")
+    lines += ["", "값을 확인하려면 위 원본 파일을 직접 열어야 한다. 엑셀이면 `Ctrl+G`로",
+              "행 번호를 입력하면 해당 행으로 바로 간다."]
+    dest = outdir / f"{number:02d}_계정정보 위치.md"
+    dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return dest
+
 
 # ------------------------------------------------------------------ 출력
 HOWTO = """\
@@ -657,29 +712,34 @@ def main() -> int:
                 s.error = f"예외: {exc}"
             print(s.error if s.error else f"{s.kind}, {s.detail}")
 
-        findings: list[tuple[str, str, str]] = []
-        suspects: list[tuple[str, str, str]] = []
+        secrets: list[tuple[str, str, str, str]] = []
         if not args.keep_secrets:
             for s_ in sources:
                 if s_.error:
                     continue
                 s_.lines, hits, bare = redact(s_.sid, s_.lines)
-                findings += [(tag, s_.path, text) for tag, text in hits]
-                suspects += [(tag, s_.path, text) for tag, text in bare]
+                secrets += [(tag, s_.path, label, value)
+                            for tag, label, value in hits + bare]
 
         docs = write_docs(outdir, sources, max(1, args.per_file))
         manifest = write_manifest(outdir, sources)
-        report = write_secret_report(outdir, findings, suspects)
+        report = write_secret_report(outdir, secrets)
+        sheet_names = {s_.sid: s_.sheets for s_ in sources}
+        secrets.sort(key=secret_sort_key)
+        locations = write_secret_locations(outdir, secrets, len(docs) + 1, sheet_names)
 
     ok = [s for s in sources if not s.error]
     bad = [s for s in sources if s.error]
     print(f"\n수록 {len(ok)}개 / 제외 {len(bad)}개")
-    print(f"업로드할 파일 {len(docs) + 1}개: {manifest.name}, " +
-          ", ".join(d.name for d in docs))
-    if not args.keep_secrets:
-        print(f"계정 정보 {len(findings) + len(suspects)}건을 가렸습니다"
-              + (f" (그중 라벨 없이 값만 있던 것 {len(suspects)}건)" if suspects else "")
-              + (f" -> {report.name}" if report else ""))
+    uploads = [manifest.name] + [d.name for d in docs]
+    if locations:
+        uploads.append(locations.name)
+    print(f"업로드할 파일 {len(uploads)}개: " + ", ".join(uploads))
+    if secrets:
+        bare_count = sum(1 for _, _, label, _ in secrets if not label)
+        print(f"계정 정보 {len(secrets)}건을 가렸습니다"
+              + (f" (그중 라벨 없이 값만 있던 것 {bare_count}건)" if bare_count else ""))
+        print(f"업로드 금지: {report.name} (가린 값의 원본이 들어 있음)")
     print(f"출력 폴더: {outdir.resolve()}")
     for s in bad:
         print(f"  - {s.path}: {s.error}")
