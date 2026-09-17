@@ -390,10 +390,20 @@ def decode_zip_name(info: zipfile.ZipInfo) -> str:
 
 
 def collect(inputs: list[str], workdir: Path) -> list[Source]:
-    """폴더와 zip을 받아 (상대경로, 실제파일) 목록으로."""
-    found: list[tuple[str, Path]] = []
+    """폴더와 zip을 받아 (상대경로, 실제파일) 목록으로.
+
+    zip을 여러 개 받을 수 있다. 30MB 같은 업로드 용량 제한 때문에 자료를 나눠
+    압축한 경우, 두 zip을 한 번에 넘기면 ID와 출처목록이 하나로 이어진다.
+    (분할압축(.z01, .zip.001)은 조각 하나만으로 열 수 없어 지원하지 않는다.)
+    """
+    found: list[tuple[str, Path, str]] = []
     for item in inputs:
         path = Path(item).expanduser()
+        if path.is_file() and path.suffix.lower() in (".z01", ".001") or \
+                path.name.lower().endswith((".zip.001", ".part1.rar")):
+            print(f"[오류] 분할압축은 읽을 수 없습니다: {path.name}\n"
+                  f"       각각 단독으로 열리는 zip으로 다시 압축해 주세요.", file=sys.stderr)
+            continue
         if path.is_file() and path.suffix.lower() == ".zip":
             dest = workdir / safe_name(path.stem)
             with zipfile.ZipFile(path) as zf:
@@ -407,19 +417,26 @@ def collect(inputs: list[str], workdir: Path) -> list[Source]:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(info) as fh, target.open("wb") as out:
                         shutil.copyfileobj(fh, out)
-                    found.append((name, target))
+                    found.append((name, target, path.stem))
         elif path.is_dir():
             for p in sorted(path.rglob("*")):
                 if p.is_file() and not p.name.startswith("~$"):
-                    found.append((str(p.relative_to(path)), p))
+                    found.append((str(p.relative_to(path)), p, path.name))
         elif path.is_file():
-            found.append((path.name, path))
+            found.append((path.name, path, ""))
         else:
             print(f"[경고] 찾을 수 없음: {item}", file=sys.stderr)
 
+    # 나눠 압축한 zip끼리 같은 경로가 겹치면 어느 zip에서 온 것인지 밝힌다
+    seen: dict[str, set[str]] = {}
+    for rel, _, origin in found:
+        seen.setdefault(rel, set()).add(origin)
+    found = [(f"{origin}/{rel}" if len(seen[rel]) > 1 and origin else rel, f, origin)
+             for rel, f, origin in found]
+
     found.sort(key=lambda t: t[0])
     return [Source(sid=f"S{i:02d}", path=rel, file=f)
-            for i, (rel, f) in enumerate(found, 1)]
+            for i, (rel, f, _) in enumerate(found, 1)]
 
 
 def main() -> int:
