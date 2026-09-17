@@ -82,16 +82,31 @@
     font:inherit; font-size:12px; padding:5px 0; cursor:pointer; }
   #cfg .row button:hover { border-color:var(--accent); }
   #cfg .row button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
-  #bin { width:290px; max-height:62vh; overflow:auto; }
-  #bin .it { display:flex; align-items:center; gap:7px; padding:5px 4px; border-bottom:1px solid var(--line); }
-  #bin .it i { width:11px; height:11px; border-radius:3px; flex:none; }
-  #bin .it .nm { flex:1; min-width:0; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #bin .it .dt { color:var(--muted); font-size:11px; flex:none; }
-  #bin .it .bn { color:var(--muted); font-size:10.5px; border:1px solid var(--line); border-radius:4px; padding:1px 4px; flex:none; }
-  #bin .it button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
-    font:inherit; font-size:11.5px; padding:3px 7px; cursor:pointer; flex:none; }
-  #bin .it button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
-  #bin .it button.rm:hover { border-color:#f87171; color:#f87171; }
+  .mask { position:fixed; inset:0; background:rgba(20,52,46,.35); z-index:9500; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .mask[hidden] { display:none; }
+  #bin { position:static; width:min(760px,96vw); max-height:82vh; display:flex; flex-direction:column; padding:16px 18px 14px; }
+  #bin .hdr { display:flex; align-items:baseline; gap:9px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+  #bin .hdr b { font-size:15px; } #bin .hdr span { color:var(--muted); font-size:11.5px; }
+  #bin .hdr .cl { margin-left:auto; background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
+    font:inherit; font-size:15px; line-height:1; padding:3px 8px; cursor:pointer; }
+  #bin .hdr .cl:hover { color:var(--accent); border-color:var(--accent); }
+  #bin .list { flex:1; overflow:auto; margin:0 -4px; padding:0 4px; }
+  #bin .it { display:flex; align-items:center; gap:12px; padding:10px 4px; border-bottom:1px solid var(--line); }
+  #bin .it .pv { flex:none; width:132px; height:78px; border:1px solid var(--line); border-radius:var(--r); overflow:hidden;
+    background:var(--pv,#f1f5f4); padding:6px 7px; font-size:11px; line-height:1.45; color:#1f2937;
+    white-space:pre-wrap; word-break:break-all; position:relative; }
+  #bin .it .pv img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  #bin .it .pv.ico { display:flex; align-items:center; justify-content:center; font-size:26px; }
+  #bin .it .mt { flex:1; min-width:0; }
+  #bin .it .tt { font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #bin .it .sub { color:var(--muted); font-size:11.5px; margin-top:4px; }
+  #bin .it .kd { display:inline-block; border:1px solid var(--line); border-radius:4px; padding:0 5px; margin-right:6px; font-size:10.5px; }
+  #bin .ft { display:flex; align-items:center; gap:8px; padding-top:11px; }
+  #bin .ft .sp { flex:1; }
+  #bin .it button, #bin .ft button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    font:inherit; font-size:12px; padding:6px 12px; cursor:pointer; flex:none; }
+  #bin .it button:hover, #bin .ft button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
+  #bin .it button.rm:hover, #bin .ft button.rm:hover { border-color:var(--bad); color:var(--bad); background:#fff1f2; }
   /* 메모판 탭은 맨 위 탭줄 안으로 옮겨진다 */
   #bds { padding:6px 12px; }
   #topnav #bds { max-width:52vw; padding:0; }
@@ -197,7 +212,7 @@
 </div>
 <div class="pop" id="pal" hidden></div>
 <div class="pop" id="bmenu" hidden></div>
-<div class="pop" id="bin" hidden></div>
+<div class="mask" id="binMask" hidden><div class="pop" id="bin"></div></div>
 <div class="pop" id="cfg" hidden></div>
 <div class="pop" id="lnkEd" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
@@ -694,33 +709,55 @@ function ago(t) {
   const h = Math.floor(m / 60); if (h < 24) return h + '시간 전';
   return Math.floor(h / 24) + '일 전';
 }
+function binPv(t) {                                  // 어떤 내용이었는지 보여 주는 작은 미리보기
+  const o = t.o || {};
+  if (t.k === 'n') {
+    const bg = COLORS[o.color] ? COLORS[o.color].bg : '#fde68a';
+    if (o.img) return `<div class="pv" style="--pv:${bg}"><img src="${o.img}" alt=""></div>`;
+    const txt = (o.text || '').slice(0, 160);
+    return `<div class="pv" style="--pv:${bg}">${txt ? esc(txt) : '<span style="opacity:.45">(빈 메모)</span>'}</div>`;
+  }
+  if (t.k === 'a') return `<div class="pv ico" style="--pv:${tint(o.color)};border-style:dashed;border-color:${COLORS[o.color] ? COLORS[o.color].bd : '#64748b'}">▭</div>`;
+  return `<div class="pv ico" style="--pv:#fff">${o.icon ? esc(o.icon) : (/^mstsc:/i.test(o.url || '') ? '🖥️' : '🔗')}</div>`;
+}
+function binSub(t) {
+  const o = t.o || {}, bits = [];
+  if (t.bn) bits.push(esc(t.bn));
+  if (t.k === 'n') bits.push(`${o.w || 0}×${o.h || 0}`);
+  if (t.k === 'l' && o.url) bits.push(esc(o.url));
+  bits.push(ago(t.del));
+  return bits.join(' · ');
+}
 function binName(t) {
   const o = t.o || {};
   if (t.k === 'a') return (o.title || '').trim() || '이름 없는 범위';
   if (t.k === 'l') return (o.name || '').trim() || o.url || '이름 없는 바로가기';
   return (o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 30) || (o.img ? '사진 메모' : '빈 메모');
 }
-$('#binBtn').onclick = () => { if ($('#bin').hidden) openBin(); else $('#bin').hidden = true; };
+$('#binBtn').onclick = () => { if ($('#binMask').hidden) openBin(); else $('#binMask').hidden = true; };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#binMask').hidden) $('#binMask').hidden = true; });
 function openBin() {
   const list = trash;
-  $('#bin').innerHTML = '<div class="sec">휴지통 · 지운 메모 (최근 50개까지)</div>'
-    + (list.length ? list.map((t, i) => `<div class="it" data-i="${i}">
-        <i style="background:${COLORS[t.o.color] ? (t.k === 'n' ? COLORS[t.o.color].bg : COLORS[t.o.color].bd) : '#fde68a'}"></i>
-        <span class="nm">${t.k === 'a' ? '［범위］ ' : t.k === 'l' ? '［바로가기］ ' : ''}${esc(binName(t))}</span>
-        ${t.bn && boards.length > 1 ? `<span class="bn">${esc(t.bn)}</span>` : ''}<span class="dt">${ago(t.del)}</span>
+  $('#bin').innerHTML = `<div class="hdr"><b>🗑 휴지통</b><span>지운 메모 · 범위 · 바로가기 (최근 50개까지 보관)</span>
+      <button class="cl" data-a="close" title="닫기">✕</button></div>
+    <div class="list">${list.length ? list.map((t, i) => `<div class="it" data-i="${i}">
+        ${binPv(t)}
+        <div class="mt"><div class="tt"><span class="kd">${t.k === 'a' ? '범위' : t.k === 'l' ? '바로가기' : '메모'}</span>${esc(binName(t))}</div>
+          <div class="sub">${binSub(t)}</div></div>
         <button data-a="back">되살리기</button><button class="rm" data-a="rm" title="완전히 지우기">✕</button></div>`).join('')
-      + '<div style="text-align:right;padding-top:8px"><button class="rm" data-a="clear" style="background:none;border:1px solid var(--line);color:#f87171;border-radius:var(--r);font:inherit;font-size:11.5px;padding:4px 9px;cursor:pointer">휴지통 비우기</button></div>'
-      : '<div style="color:var(--muted);font-size:12.5px;padding:10px 2px">비어 있습니다. 메모의 ✕ 로 지우면 여기로 들어옵니다.</div>');
-  const r = $('#binBtn').getBoundingClientRect();
-  $('#bin').style.left = Math.max(8, Math.min(window.innerWidth - 310, r.right - 290)) + 'px';
-  $('#bin').style.top = (r.bottom + 6) + 'px';
-  $('#bin').hidden = false;
+      : '<div style="color:var(--muted);font-size:13px;padding:26px 4px;text-align:center">비어 있습니다.<br>메모의 ✕ 로 지우면 여기로 들어옵니다.</div>'}</div>
+    <div class="ft"><span class="sp"></span>
+      ${list.length ? '<button class="rm" data-a="clear">휴지통 비우기</button>' : ''}
+      <button data-a="close">닫기</button></div>`;
+  $('#binMask').hidden = false;
 }
-$('#bin').onclick = (e) => {
+$('#binMask').onclick = (e) => {
+  if (e.target === $('#binMask')) { $('#binMask').hidden = true; return; }   // 바깥 누르면 닫기
   const a = e.target.dataset.a; if (!a) return;
+  if (a === 'close') { $('#binMask').hidden = true; return; }
   if (a === 'clear') {
     if (!confirm('휴지통을 비울까요? 되살릴 수 없습니다.')) return;
-    trash.length = 0; touch(); render(); $('#bin').hidden = true; return;
+    trash.length = 0; touch(); render(); $('#binMask').hidden = true; return;
   }
   const i = Number(e.target.closest('.it').dataset.i), t = trash[i]; if (!t) return;
   if (a === 'rm') { trash.splice(i, 1); touch(); render(); openBin(); return; }
@@ -733,7 +770,7 @@ $('#bin').onclick = (e) => {
   if (t.k === 'a') cur().areas.push(o);
   else if (t.k === 'l') { cur().links.push(o); unstack(o, 'l'); sel = o.id; }
   else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
-  touch(); render(); $('#bin').hidden = true;
+  touch(); render(); $('#binMask').hidden = true;
   const el = document.querySelector(`[data-id="${o.id}"]`); if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 };
 
@@ -829,7 +866,6 @@ $('#cfg').onclick = (e) => {
 document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#cfg') && !e.target.closest('#cfgBtn')) $('#cfg').hidden = true;
   if (!e.target.closest('#lnkEd') && !e.target.closest('.lnk')) { $('#lnkEd').hidden = true; lnkFor = null; }
-  if (!e.target.closest('#bin') && !e.target.closest('#binBtn')) $('#bin').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
   if (!e.target.closest('#pmenu') && !e.target.closest('.pg')) $('#pmenu').hidden = true;
