@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.21.2';
+  const UI_VERSION = '1.22.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -38,9 +38,13 @@
 #topnav a:hover{color:var(--text,#e2e8f0);background:rgba(148,163,184,.12)}
 #topnav a.on{color:#fff;background:var(--accent,#38bdf8);font-weight:700}
 :root[data-theme="light"] #topnav a.on{color:#0f172a}
-#topnav .spacer{flex:1}#topnav .ver{font-size:11px;color:var(--muted,#94a3b8);margin-right:8px}
+#topnav .spacer{flex:1;order:1}
+#topnav .who,#topnav .ver,#topnav .snd,#topnav .bell{order:3}#topnav .ver{font-size:11px;color:var(--muted,#94a3b8);margin-right:8px}
 #topnav .home{margin-right:10px;border:1px solid var(--line,#334155)}
 #topnav .who{font-size:12px;color:var(--muted,#94a3b8);margin-right:8px}
+#topnav a.alt{order:2;margin-right:10px;border:1px solid var(--line,#334155);border-radius:999px;padding:5px 14px;font-weight:600}
+#topnav a.alt:hover{border-color:var(--accent,#38bdf8);color:var(--text,#e2e8f0)}
+#topnav a.alt.on{background:none;border-color:var(--accent,#38bdf8);color:var(--accent,#38bdf8)}
 #topnav .bell b{background:#ef4444;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:4px}
 #topnav .snd{background:none;border:1px solid var(--line,#334155);color:var(--muted,#94a3b8);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;margin-right:6px;font-family:inherit}
 #topnav .snd.on{color:var(--text,#e2e8f0)}#topnav .snd.ring{background:#ef4444;color:#fff;border-color:#ef4444;animation:sndblink 1s infinite}
@@ -67,7 +71,8 @@
       const tabs = document.getElementById('navtabs');
       if (app && tabs) {
         document.getElementById('navbrand').textContent = app.name;
-        tabs.innerHTML = app.pages.map(([f, t]) => `<a href="${f}" class="${f === here ? 'on' : ''}" data-page="${f}">${t}</a>`).join('');
+        tabs.style.display = 'contents';   // 오른쪽 끝으로 밀 수 있게
+        tabs.innerHTML = app.pages.map(([f, t, opt]) => `<a href="${f}" class="${f === here ? 'on' : ''} ${opt === 'right' ? 'alt' : ''}" data-page="${f}">${t}</a>`).join('');
       } else if (tabs) {
         const allowed = j.user.pages || [];
         for (const a of tabs.querySelectorAll('a[data-page]')) if (!allowed.includes(a.dataset.page)) a.remove();

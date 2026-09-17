@@ -13,8 +13,8 @@ const APPS = [
     pages: [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']],
   },
   {
-    key: 'schedule', name: '일정 관리', desc: '메모 보드 · 부서 업무 일정', icon: '📅', ready: true, home: 'memo.html',
-    pages: [['memo.html', '메모'], ['schedule.html', '일정']],
+    key: 'schedule', name: '메모 · 일정', desc: '메모 보드 · 부서 업무 일정', icon: '📝', ready: true, home: 'memo.html',
+    pages: [['memo.html', '메모'], ['schedule.html', '📅 일정', 'right']],   // 세 번째 값 'right' = 상단 탭 오른쪽 끝에 다른 모양으로
   },
 ];
 const ALL_PAGES = APPS.reduce((a, app) => a.concat(app.pages.map((p) => p[0])), []);

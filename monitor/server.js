@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.21.2';
+const VERSION = '1.22.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -208,13 +208,13 @@ function saveState(sync) {
   } catch (e) { console.warn('스냅샷 저장 실패:', e.message); }
 }
 
-function readBody(req) {
+function readBody(req, maxMB = 1) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > 1024 * 1024) { reject(new Error('body too large')); req.destroy(); return; }
+      if (size > maxMB * 1024 * 1024) { reject(new Error('보낸 내용이 너무 큽니다')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
@@ -543,10 +543,11 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/memo') {
     if (!me || !auth.can(me, 'memo.html')) return json(res, 403, { ok: false, error: '메모 화면 권한이 없습니다' });
     try {
-      if (req.method === 'GET') return json(res, 200, { ok: true, board: memo.get(me.id), me: me.name || me.id });
+      if (req.method === 'GET') { const g = memo.get(me.id); return json(res, 200, { ok: true, boards: g.boards, active: g.active, me: me.name || me.id }); }
       if (req.method === 'PUT') {
-        const raw = JSON.parse((await readBody(req)) || '{}');
-        return json(res, 200, { ok: true, board: memo.set(me.id, raw) });
+        const raw = JSON.parse((await readBody(req, 48)) || '{}');   // 사진이 들어가므로 넉넉히
+        const g = memo.set(me.id, raw);
+        return json(res, 200, { ok: true, boards: g.boards, active: g.active });
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }

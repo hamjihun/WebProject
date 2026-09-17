@@ -5,7 +5,7 @@
 <title>메모 보드</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; }
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --bad:#ef4444; --accent:#38bdf8; }
   * { box-sizing:border-box; }
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; }
@@ -13,30 +13,36 @@
       radial-gradient(circle at 1px 1px, rgba(148,163,184,.16) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
 
-  /* 위쪽 작은 도구 막대 */
-  #tools { position:fixed; bottom:16px; left:14px; z-index:60; display:flex; gap:6px; align-items:center; box-shadow:0 6px 18px rgba(0,0,0,.4);
-    background:rgba(30,41,59,.92); border:1px solid var(--line); border-radius:10px; padding:6px 8px; backdrop-filter:blur(4px); }
-  #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
-  #tools button:hover { border-color:var(--accent); }
-  #tools button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
-  #tools .st { color:var(--muted); font-size:11.5px; margin-left:4px; min-width:58px; }
+  /* 아래쪽 막대: 메모/구역 추가 + 보드 목록 */
+  #bar { position:fixed; bottom:0; left:0; right:0; z-index:60; display:flex; align-items:center; gap:8px; padding:7px 12px;
+    background:rgba(15,23,42,.94); border-top:1px solid var(--line); backdrop-filter:blur(4px); }
+  #bar button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
+  #bar button:hover { border-color:var(--accent); }
+  #bar button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  #bar .sep { width:1px; height:22px; background:var(--line); margin:0 2px; }
+  #bds { display:flex; gap:6px; align-items:center; overflow-x:auto; flex:1; padding:1px; }
+  #bds .bd { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  #bds .bd i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  #bds .bd.on { background:var(--bg); border-color:var(--accent); color:var(--accent); font-weight:700; }
+  #bds .bd .mn { opacity:.75; margin-left:2px; }
+  #bar .st { color:var(--muted); font-size:11.5px; min-width:56px; text-align:right; }
 
   /* 구역 */
   .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); }
   .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(15,23,42,.55); }
   .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:5px; min-width:40px; }
-  .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
   .area .t:focus { outline:none; background:rgba(15,23,42,.45); }
-  .area .dot, .area .x { flex:none; }
+  .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
 
-  /* 메모지 */
+  /* 메모지 (각진 사각형) */
   .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 7px rgba(0,0,0,.32); outline:1px solid rgba(0,0,0,.22); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
   .note.sel { outline:2px solid var(--accent); outline-offset:-2px; box-shadow:0 5px 14px rgba(0,0,0,.45); }
   .note .hd { display:flex; align-items:center; gap:5px; padding:3px 5px; cursor:move; background:rgba(0,0,0,.08); }
   .note textarea { flex:1; width:100%; background:none; border:0; resize:none; padding:5px 7px 7px; font-family:inherit; font-size:var(--fs,13px); line-height:1.5; color:#1f2937; }
   .note textarea:focus { outline:none; }
+  .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
 
-  .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); }
+  .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); flex:none; }
   .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
   .x:hover { color:#dc2626; }
   .area .x { color:rgba(148,163,184,.6); } .area .x:hover { color:#f87171; }
@@ -44,34 +50,39 @@
   .rz::after { content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px; border-right:2px solid rgba(0,0,0,.3); border-bottom:2px solid rgba(0,0,0,.3); }
   .area .rz::after { border-color:rgba(148,163,184,.5); }
 
-  /* 색 고르기 */
-  #pal { position:fixed; z-index:70; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px; }
-  #pal[hidden] { display:none; }
-  #pal .sec { color:var(--muted); font-size:11px; margin:0 0 5px; }
-  #pal .cols { display:grid; grid-template-columns:repeat(4,24px); gap:6px; margin-bottom:9px; }
-  #pal b { width:24px; height:24px; border-radius:4px; border:1px solid rgba(0,0,0,.3); cursor:pointer; display:block; }
-  #pal b:hover { outline:2px solid var(--accent); }
-  #pal .sizes { display:flex; gap:5px; align-items:flex-end; }
-  #pal .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
-  #pal .sizes button:hover { border-color:var(--accent); } #pal .sizes button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
-  .empty { position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
+  /* 팝업 (색·글자 크기 / 보드 메뉴) */
+  .pop { position:fixed; z-index:80; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px; box-shadow:0 10px 26px rgba(0,0,0,.5); }
+  .pop[hidden] { display:none; }
+  .pop .sec { color:var(--muted); font-size:11px; margin:0 0 5px; }
+  .pop .cols { display:grid; grid-template-columns:repeat(4,24px); gap:6px; margin-bottom:9px; }
+  .pop b.sw { width:24px; height:24px; border-radius:4px; border:1px solid rgba(0,0,0,.3); cursor:pointer; display:block; }
+  .pop b.sw:hover { outline:2px solid var(--accent); }
+  .pop .sizes { display:flex; gap:5px; align-items:flex-end; }
+  .pop .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
+  .pop .sizes button:hover { border-color:var(--accent); } .pop .sizes button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  .pop .mi { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font:inherit; font-size:12.5px; padding:7px 9px; border-radius:6px; cursor:pointer; }
+  .pop .mi:hover { background:rgba(148,163,184,.14); } .pop .mi.del { color:#f87171; }
+  .pop hr { border:0; border-top:1px solid var(--line); margin:6px 0; }
+  .empty { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
 </style>
 </head>
 <body>
-<div id="tools">
+<div id="board"><div id="canvas"></div></div>
+<div id="bar">
   <button class="go" id="addNote">＋ 메모</button>
   <button id="addArea">＋ 구역</button>
+  <span class="sep"></span>
+  <div id="bds"></div>
   <span class="st" id="st"></span>
 </div>
-<div id="board"><div id="canvas"></div></div>
-<div id="pal" hidden></div>
+<div class="pop" id="pal" hidden></div>
+<div class="pop" id="bmenu" hidden></div>
 
 <script src="common.js"></script>
 <script>
 MON.renderNav('memo.html');
 const $ = (s) => document.querySelector(s);
 const esc = MON.esc;
-// 메모지 색 (연한 포스트잇 색)
 const COLORS = {
   yellow: { bg: '#fde68a', bd: '#d97706' }, green: { bg: '#bbf7d0', bd: '#059669' },
   blue: { bg: '#bfdbfe', bd: '#2563eb' }, pink: { bg: '#fbcfe8', bd: '#db2777' },
@@ -79,74 +90,114 @@ const COLORS = {
   gray: { bg: '#e2e8f0', bd: '#475569' }, white: { bg: '#f8fafc', bd: '#94a3b8' },
 };
 const KEYS = Object.keys(COLORS);
-const SIZES = [11, 13, 15, 18, 22];          // 글자 크기 (작게 ~ 아주 크게)
-const SNAP = 10;                             // 격자에 맞춰 붙여서 다닥다닥 놓이게
+const SIZES = [11, 13, 15, 18, 22];
+const SNAP = 10;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
+const EMPTY = '<div class="empty">메모가 없습니다.<br>아래 <b>＋ 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
+  + '<span style="font-size:12px">색 동그라미를 누르면 색과 글자 크기를 바꿀 수 있고, 제목 줄을 끌어 옮깁니다.<br>'
+  + '아래 오른쪽에서 메모판을 여러 개 만들어 이름과 색을 정할 수 있습니다.</span></div>';
 
-const EMPTY = '<div class="empty">메모가 없습니다.<br>왼쪽 위 <b>＋ 메모</b> 를 눌러 붙이세요.<br>'
-  + '<span style="font-size:12px">색 동그라미를 누르면 <b>색</b>과 <b>글자 크기</b>를 바꿀 수 있습니다. 제목 줄을 끌어 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
-  + '<b>＋ 구역</b> 으로 "아이디어", "이번 주 중요" 같은 영역을 만들어 메모를 모아 둘 수 있습니다.</span></div>';
-let board = { notes: [], areas: [] };
-let dirty = false, saving = false, sel = null;
+let boards = [], active = '', sel = null;
+let dirty = false, saving = false;
 const uid = () => Math.random().toString(36).slice(2, 10);
+const cur = () => boards.find((b) => b.id === active) || boards[0] || { notes: [], areas: [] };
 
 // ---- 그리기 ----
 function render() {
-  const cv = $('#canvas');
+  const b = cur(), cv = $('#canvas');
   let maxX = 0, maxY = 0;
-  for (const o of board.areas.concat(board.notes)) { maxX = Math.max(maxX, o.x + o.w); maxY = Math.max(maxY, o.y + o.h); }
+  for (const o of b.areas.concat(b.notes)) { maxX = Math.max(maxX, o.x + o.w); maxY = Math.max(maxY, o.y + o.h); }
   cv.style.minWidth = Math.max($('#board').clientWidth - 4, maxX + 320) + 'px';
-  cv.style.minHeight = Math.max($('#board').clientHeight - 4, maxY + 320) + 'px';
-  cv.innerHTML = board.areas.map((a) => `
+  cv.style.minHeight = Math.max($('#board').clientHeight - 60, maxY + 320) + 'px';
+  cv.innerHTML = b.areas.map((a) => `
     <div class="area" data-k="a" data-id="${a.id}" style="left:${a.x}px;top:${a.y}px;width:${a.w}px;height:${a.h}px;--bd:${COLORS[a.color] ? COLORS[a.color].bd : '#64748b'};--tint:${tint(a.color)}">
       <div class="hd"><span class="dot" data-pal="1" style="--bg2:${COLORS[a.color] ? COLORS[a.color].bd : '#64748b'}"></span>
         <input class="t" value="${esc(a.title)}" placeholder="구역 이름 (예: 아이디어)" maxlength="40">
         <button class="x" title="구역 지우기">✕</button></div>
       <div class="rz"></div>
     </div>`).join('') +
-    board.notes.map((n) => `
+    b.notes.map((n) => `
     <div class="note ${sel === n.id ? 'sel' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
       <div class="hd"><span class="dot" data-pal="1"></span><button class="x" title="메모 지우기">✕</button></div>
-      <textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>
+      ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
       <div class="rz"></div>
     </div>`).join('') +
-    (board.notes.length + board.areas.length ? '' : EMPTY);
+    (b.notes.length + b.areas.length ? '' : EMPTY);
+  renderBoards();
 }
-const find = (k, id) => (k === 'n' ? board.notes : board.areas).find((o) => o.id === id);
-function topZ() { return board.notes.reduce((m, n) => Math.max(m, n.z || 1), 1); }
+function renderBoards() {
+  $('#bds').innerHTML = boards.map((b) => `<button class="bd ${b.id === active ? 'on' : ''}" data-b="${b.id}">
+    <i style="background:${COLORS[b.color] ? COLORS[b.color].bg : '#fde68a'}"></i>${esc(b.name)}${b.id === active ? '<span class="mn">▾</span>' : ''}</button>`).join('')
+    + `<button id="addBoard" title="메모판 추가">＋</button>`;
+}
+const find = (k, id) => (k === 'n' ? cur().notes : cur().areas).find((o) => o.id === id);
+const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
+function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) }; }
 
 // ---- 만들기 ----
-function viewCenter() {
-  const b = $('#board');
-  return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) };
-}
 $('#addNote').onclick = () => {
-  const c = viewCenter(), k = board.notes.length;
+  const c = viewCenter(), k = cur().notes.length;
   const n = { id: uid(), x: Math.max(0, snap(c.x - 100 + (k % 5) * 20)), y: Math.max(0, snap(c.y - 100 + (k % 5) * 20)), w: 200, h: 200, text: '', color: KEYS[k % KEYS.length], z: topZ() + 1, fs: 13 };
-  board.notes.push(n); sel = n.id; touch(); render();
+  cur().notes.push(n); sel = n.id; touch(); render();
   const el = document.querySelector(`.note[data-id="${n.id}"] textarea`); if (el) el.focus();
 };
 $('#addArea').onclick = () => {
   const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: 'gray' };
-  board.areas.push(a); touch(); render();
+  cur().areas.push(a); touch(); render();
   const el = document.querySelector(`.area[data-id="${a.id}"] .t`); if (el) el.focus();
 };
 
-// ---- 클릭 (색·삭제·선택) ----
+// ---- 사진 붙여넣기 (Ctrl+V) ----
+function shrink(file, max, q) {
+  return new Promise((ok, no) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const s = Math.min(1, max / Math.max(im.width, im.height));
+        const w = Math.max(1, Math.round(im.width * s)), h = Math.max(1, Math.round(im.height * s));
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(im, 0, 0, w, h);
+        ok({ url: cv.toDataURL('image/jpeg', q), w, h });
+      };
+      im.onerror = no; im.src = fr.result;
+    };
+    fr.onerror = no; fr.readAsDataURL(file);
+  });
+}
+document.addEventListener('paste', async (e) => {
+  const items = e.clipboardData && e.clipboardData.items ? [...e.clipboardData.items] : [];
+  const it = items.find((x) => x.type && x.type.startsWith('image/'));
+  if (!it) return;                                  // 글자 붙여넣기는 그대로 둔다
+  e.preventDefault();
+  const file = it.getAsFile(); if (!file) return;
+  $('#st').textContent = '사진 넣는 중';
+  try {
+    const im = await shrink(file, 1000, 0.82);
+    const used = JSON.stringify(boards).length;
+    if (used + im.url.length > 34 * 1024 * 1024) { alert('사진이 너무 많습니다. 오래된 사진 메모를 지운 뒤 다시 붙여넣어 주세요.'); $('#st').textContent = ''; return; }
+    const c = viewCenter();
+    const s = Math.min(1, 320 / Math.max(im.w, im.h));
+    const w = Math.max(80, snap(im.w * s)), h = Math.max(60, snap(im.h * s) + 22);
+    cur().notes.push({ id: uid(), x: Math.max(0, snap(c.x - w / 2)), y: Math.max(0, snap(c.y - h / 2)), w, h, text: '', img: im.url, color: 'white', z: topZ() + 1, fs: 13 });
+    touch(); render();
+  } catch (err) { alert('사진을 넣지 못했습니다: ' + err.message); $('#st').textContent = ''; }
+});
+
+// ---- 클릭 ----
 $('#canvas').addEventListener('click', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) { sel = null; render(); return; }
-  const k = box.dataset.k, id = box.dataset.id, o = find(k, id);
+  const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
   if (e.target.classList.contains('x')) {
-    const has = k === 'n' ? (o.text || '').trim() : (o.title || '').trim();
+    const has = k === 'n' ? ((o.text || '').trim() || o.img) : (o.title || '').trim();
     if (has && !confirm(k === 'n' ? '이 메모를 지울까요?' : '이 구역을 지울까요? (안에 있는 메모는 그대로 남습니다)')) return;
-    if (k === 'n') board.notes = board.notes.filter((x) => x.id !== id); else board.areas = board.areas.filter((x) => x.id !== id);
+    if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id); else cur().areas = cur().areas.filter((x) => x.id !== id);
     sel = null; touch(); render(); return;
   }
   if (e.target.dataset.pal) { openPal(e.target, k, id); return; }
   if (k === 'n' && sel !== id) { sel = id; o.z = topZ() + 1; touch(); render(); }
 });
-// 글자·이름 입력
 $('#canvas').addEventListener('input', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) return;
   const o = find(box.dataset.k, box.dataset.id); if (!o) return;
@@ -155,16 +206,15 @@ $('#canvas').addEventListener('input', (e) => {
   touch();
 });
 
-// ---- 옮기기 · 크기 바꾸기 ----
+// ---- 옮기기 · 크기 ----
 let drag = null;
 $('#canvas').addEventListener('mousedown', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) return;
   const o = find(box.dataset.k, box.dataset.id); if (!o) return;
-  const rz = e.target.classList.contains('rz');
-  const hd = e.target.closest('.hd');
+  const rz = e.target.classList.contains('rz'), hd = e.target.closest('.hd');
   if (!rz && (!hd || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.dataset.pal)) return;
   e.preventDefault();
-  drag = { o, box, mode: rz ? 'rz' : 'mv', sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
+  drag = { o, box, k: box.dataset.k, mode: rz ? 'rz' : 'mv', sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
   if (box.dataset.k === 'n') { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); }
   document.body.style.userSelect = 'none';
 });
@@ -175,29 +225,25 @@ document.addEventListener('mousemove', (e) => {
     drag.o.x = Math.max(0, snap(drag.x + dx)); drag.o.y = Math.max(0, snap(drag.y + dy));
     drag.box.style.left = drag.o.x + 'px'; drag.box.style.top = drag.o.y + 'px';
   } else {
-    const min = drag.box.dataset.k === 'n' ? [80, 60] : [160, 120];
+    const min = drag.k === 'n' ? [80, 60] : [160, 120];
     drag.o.w = Math.max(min[0], snap(drag.w + dx)); drag.o.h = Math.max(min[1], snap(drag.h + dy));
     drag.box.style.width = drag.o.w + 'px'; drag.box.style.height = drag.o.h + 'px';
   }
 });
-document.addEventListener('mouseup', () => {
-  if (!drag) return;
-  drag = null; document.body.style.userSelect = '';
-  touch(); render();
-});
+document.addEventListener('mouseup', () => { if (!drag) return; drag = null; document.body.style.userSelect = ''; touch(); render(); });
 
-// ---- 색 고르기 ----
+// ---- 색 · 글자 크기 ----
 let palFor = null;
 function openPal(el, k, id) {
   palFor = { k, id };
   const o = find(k, id) || {};
   const r = el.getBoundingClientRect();
   $('#pal').innerHTML = '<div class="sec">색</div><div class="cols">'
-    + KEYS.map((c) => `<b data-c="${c}" title="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('') + '</div>'
-    + (k === 'n' ? '<div class="sec">글자 크기</div><div class="sizes">'
+    + KEYS.map((c) => `<b class="sw" data-c="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('') + '</div>'
+    + (k === 'n' && !o.img ? '<div class="sec">글자 크기</div><div class="sizes">'
       + SIZES.map((f) => `<button type="button" data-f="${f}" class="${(o.fs || 13) === f ? 'on' : ''}" style="font-size:${Math.min(17, f)}px">가</button>`).join('') + '</div>' : '');
   $('#pal').style.left = Math.min(window.innerWidth - 190, r.left) + 'px';
-  $('#pal').style.top = Math.min(window.innerHeight - 180, r.bottom + 6) + 'px';
+  $('#pal').style.top = Math.min(window.innerHeight - 190, r.bottom + 6) + 'px';
   $('#pal').hidden = false;
 }
 $('#pal').onclick = (e) => {
@@ -205,13 +251,54 @@ $('#pal').onclick = (e) => {
   const o = find(palFor.k, palFor.id); if (!o) return;
   const c = e.target.dataset.c, f = e.target.dataset.f;
   if (c) { o.color = c; touch(); render(); $('#pal').hidden = true; palFor = null; return; }
-  if (f) {
-    o.fs = Number(f); touch(); render();
-    const dot = document.querySelector(`[data-id="${palFor.id}"] .dot`);
-    if (dot) openPal(dot, palFor.k, palFor.id);
-  }
+  if (f) { o.fs = Number(f); touch(); render(); const d = document.querySelector(`[data-id="${palFor.id}"] .dot`); if (d) openPal(d, palFor.k, palFor.id); }
 };
-document.addEventListener('mousedown', (e) => { if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; } });
+
+// ---- 메모판(보드) ----
+$('#bds').addEventListener('click', (e) => {
+  if (e.target.closest('#addBoard')) {
+    if (boards.length >= 20) { alert('메모판은 20개까지 만들 수 있습니다.'); return; }
+    const b = { id: uid(), name: `메모 ${boards.length + 1}`, color: KEYS[boards.length % KEYS.length], notes: [], areas: [] };
+    boards.push(b); active = b.id; sel = null; touch(); render(); return;
+  }
+  const chip = e.target.closest('.bd'); if (!chip) return;
+  const id = chip.dataset.b;
+  if (id === active) { openBoardMenu(chip); return; }   // 지금 보고 있는 판을 다시 누르면 메뉴
+  active = id; sel = null; $('#board').scrollTo(0, 0); touch(); render();
+});
+function openBoardMenu(chip) {
+  const b = boards.find((x) => x.id === active); if (!b) return;
+  const i = boards.indexOf(b), r = chip.getBoundingClientRect();
+  $('#bmenu').innerHTML = `<div class="sec">${esc(b.name)}</div>
+    <button class="mi" data-m="rename">이름 바꾸기</button>
+    <div class="sec" style="margin-top:6px">색</div><div class="cols">${KEYS.map((c) => `<b class="sw" data-c="${c}" style="background:${COLORS[c].bg}"></b>`).join('')}</div>
+    <hr><button class="mi" data-m="left"${i === 0 ? ' disabled style="opacity:.4"' : ''}>◀ 왼쪽으로 옮기기</button>
+    <button class="mi" data-m="right"${i === boards.length - 1 ? ' disabled style="opacity:.4"' : ''}>오른쪽으로 옮기기 ▶</button>
+    <hr><button class="mi del" data-m="del">이 메모판 지우기</button>`;
+  $('#bmenu').style.left = Math.min(window.innerWidth - 210, Math.max(8, r.left)) + 'px';
+  $('#bmenu').style.top = Math.max(8, r.top - 300) + 'px';
+  $('#bmenu').hidden = false;
+}
+$('#bmenu').onclick = (e) => {
+  const b = boards.find((x) => x.id === active); if (!b) return;
+  const c = e.target.dataset.c, m = e.target.dataset.m;
+  if (c) { b.color = c; touch(); renderBoards(); $('#bmenu').hidden = true; return; }
+  if (!m) return;
+  const i = boards.indexOf(b);
+  if (m === 'rename') { const v = prompt('메모판 이름', b.name); if (v != null && v.trim()) { b.name = v.trim().slice(0, 20); touch(); renderBoards(); } }
+  else if (m === 'left' && i > 0) { boards.splice(i, 1); boards.splice(i - 1, 0, b); touch(); renderBoards(); }
+  else if (m === 'right' && i < boards.length - 1) { boards.splice(i, 1); boards.splice(i + 1, 0, b); touch(); renderBoards(); }
+  else if (m === 'del') {
+    if (boards.length <= 1) { alert('메모판이 하나뿐이라 지울 수 없습니다.'); return; }
+    if (!confirm(`"${b.name}" 메모판을 지울까요? 안에 있는 메모 ${b.notes.length}개도 함께 지워집니다.`)) return;
+    boards.splice(i, 1); active = boards[Math.max(0, i - 1)].id; sel = null; touch(); render();
+  }
+  $('#bmenu').hidden = true;
+};
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
+  if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
+});
 
 // ---- 저장 ----
 let timer = null;
@@ -219,7 +306,7 @@ function touch() { dirty = true; $('#st').textContent = '저장 대기'; clearTi
 async function saveNow() {
   if (!dirty || saving) return;
   saving = true; $('#st').textContent = '저장 중';
-  const body = JSON.stringify({ notes: board.notes, areas: board.areas });
+  const body = JSON.stringify({ boards, active });
   dirty = false;
   try {
     const r = await fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
@@ -228,11 +315,11 @@ async function saveNow() {
     $('#st').textContent = '저장됨';
   } catch (e) { dirty = true; $('#st').textContent = '저장 실패'; }
   saving = false;
-  if (dirty) setTimeout(saveNow, 1200);
+  if (dirty) setTimeout(saveNow, 1500);
 }
-window.addEventListener('beforeunload', (e) => {
+window.addEventListener('beforeunload', () => {
   if (!dirty) return;
-  try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: board.notes, areas: board.areas }), keepalive: true }); } catch (err) {}
+  try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boards, active }), keepalive: true }); } catch (e) {}
 });
 window.addEventListener('resize', render);
 
@@ -241,7 +328,7 @@ window.addEventListener('resize', render);
   if (r.status === 401) { location.href = 'login.html'; return; }
   if (r.status === 403) { location.href = 'home.html?denied=memo.html'; return; }
   const j = await r.json();
-  board = j.board || { notes: [], areas: [] };
+  boards = j.boards || []; active = j.active || (boards[0] && boards[0].id) || '';
   render();
 })();
 </script>
