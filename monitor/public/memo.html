@@ -10,6 +10,26 @@
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
   #topnav { flex:none; }
+  #main { flex:1; display:flex; min-height:0; }
+  #side { flex:none; width:174px; display:flex; flex-direction:column; overflow:auto;
+    background:rgba(15,23,42,.5); border-right:1px solid var(--line); padding:9px 9px 12px; }
+  body.nosd #side { display:none; }
+  #side .sh { color:var(--muted); font-size:11px; padding:0 4px 7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pgs { display:flex; flex-direction:column; gap:3px; }
+  #pgs .pg { display:flex; align-items:center; gap:7px; background:none; border:0; color:var(--muted); text-align:left;
+    border-radius:7px; padding:6px 8px; font:inherit; font-size:12.5px; cursor:pointer; }
+  #pgs .pg .nm { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pgs .pg i { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.45; flex:none; }
+  #pgs .pg:hover { background:rgba(148,163,184,.13); color:var(--text); }
+  #pgs .pg.on { background:var(--accent); color:#0f172a; font-weight:700; }
+  #pgs .pg.on i { opacity:.8; }
+  #pgs .pg input.re { width:100%; background:rgba(255,255,255,.92); border:1px solid var(--accent); color:#0f172a;
+    border-radius:4px; font:inherit; font-size:12.5px; padding:1px 4px; }
+  #pgs .pg input.re:focus { outline:none; }
+  #addPage { margin-top:9px; background:none; border:1px dashed var(--line); color:var(--muted); border-radius:7px;
+    padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
+  #addPage:hover { color:var(--accent); border-color:var(--accent); }
+  #tools #sdBtn { font-size:14px; padding:4px 9px; }
   #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
       radial-gradient(circle at 1px 1px, rgba(148,163,184,.16) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
@@ -140,6 +160,7 @@
 <div id="bds"></div>
 <div id="bar">
   <div id="tools">
+    <button id="sdBtn" title="왼쪽 탭 숨기기 / 보이기">☰</button>
     <button class="go" id="addNote">＋ 새 메모</button>
     <button id="addArea">＋ 새 범위</button>
     <button id="addLink">＋ 바로가기</button>
@@ -149,12 +170,20 @@
     <button id="cfgBtn" title="메모 기본 설정">⚙</button>
   </div>
 </div>
-<div id="board"><div id="canvas"></div></div>
+<div id="main">
+  <div id="side">
+    <div class="sh" id="sdName"></div>
+    <div id="pgs"></div>
+    <button id="addPage">＋ 새 탭</button>
+  </div>
+  <div id="board"><div id="canvas"></div></div>
+</div>
 <div class="pop" id="pal" hidden></div>
 <div class="pop" id="bmenu" hidden></div>
 <div class="pop" id="bin" hidden></div>
 <div class="pop" id="cfg" hidden></div>
 <div class="pop" id="lnkEd" hidden></div>
+<div class="pop" id="pmenu" hidden></div>
 
 <script src="common.js"></script>
 <script>
@@ -177,18 +206,28 @@ const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 �
   + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
   + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보이고, 끌어서 옮기면 다른 메모에 <b>자석처럼 딱 붙습니다</b>.<br>'
   + '<b>＋ 바로가기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둘 수 있습니다.<br>'
+  + '왼쪽 <b>＋ 새 탭</b> 으로 이 메모판 안에 탭을 더 만듭니다 (예: 회의록 → 9월 17일 회의록). <b>☰</b> 로 접었다 폅니다.<br>'
   + '지운 것은 오른쪽 <b>🗑 휴지통</b> 에서 되살리고, <b>⚙</b> 에서 기본 색·글자 크기를 정합니다.<br>'
   + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span></div>';
 
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
-let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true };   // 기본 설정
+let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true };   // 기본 설정
 let dirty = false, saving = false;
 const uid = () => Math.random().toString(36).slice(2, 10);
-const cur = () => {
-  const b = boards.find((x) => x.id === active) || boards[0] || { notes: [], areas: [], links: [] };
-  if (!Array.isArray(b.links)) b.links = [];                      // 예전 자료에는 바로가기가 없다
-  return b;
+const curB = () => boards.find((x) => x.id === active) || boards[0] || { pages: [] };   // 상단 탭 = 메모판
+const cur = () => {                                                                     // 왼쪽 탭 = 그 안의 쪽
+  const b = curB();
+  if (!Array.isArray(b.pages) || !b.pages.length) {
+    b.pages = [{ id: uid(), name: b.name || '메모', notes: b.notes || [], areas: b.areas || [], links: b.links || [] }];
+    delete b.notes; delete b.areas; delete b.links;
+  }
+  const g = b.pages.find((x) => x.id === b.ap) || b.pages[0];
+  b.ap = g.id;
+  if (!Array.isArray(g.notes)) g.notes = [];
+  if (!Array.isArray(g.areas)) g.areas = [];
+  if (!Array.isArray(g.links)) g.links = [];
+  return g;
 };
 
 // ---- 그리기 ----
@@ -221,7 +260,7 @@ function render() {
       <div class="rz"></div>
     </div>`).join('') +
     (b.notes.length + b.areas.length + b.links.length ? '' : EMPTY);
-  renderBoards();
+  renderBoards(); renderPages();
   $('#binN').textContent = trash.length ? ' ' + trash.length : '';
 }
 // 바로가기 아이콘: 이모지를 넣었으면 그것, 아니면 그 사이트의 파비콘, 안 나오면 첫 글자
@@ -240,6 +279,77 @@ function renderBoards() {
     <i style="background:${COLORS[b.color] ? COLORS[b.color].bg : '#fde68a'}"></i>${esc(b.name)}${b.id === active ? '<span class="mn">▾</span>' : ''}</button>`).join('')
     + `<button id="addBoard" title="메모판 추가">＋</button>`;
 }
+// ---- 왼쪽 탭 (메모판 안의 쪽) ----
+function renderPages() {
+  const b = curB();
+  cur();                                                  // pages 보장
+  $('#sdName').textContent = b.name || '';
+  $('#pgs').innerHTML = (b.pages || []).map((g) => `<button class="pg ${g.id === b.ap ? 'on' : ''}" data-p="${g.id}"
+    title="${esc(g.name)}"><i></i><span class="nm">${esc(g.name)}</span></button>`).join('');
+  document.body.classList.toggle('nosd', prefs.side === false);
+}
+$('#sdBtn').onclick = () => { prefs.side = prefs.side === false; touch(); render(); };
+$('#addPage').onclick = () => {
+  const b = curB();
+  if (b.pages.length >= 50) { alert('탭은 50개까지 만들 수 있습니다.'); return; }
+  const g = { id: uid(), name: `새 탭 ${b.pages.length + 1}`, notes: [], areas: [], links: [] };
+  b.pages.push(g); b.ap = g.id; sel = null; prefs.side = true; touch(); render();
+  renamePage(document.querySelector(`.pg[data-p="${g.id}"]`));
+};
+$('#pgs').addEventListener('click', (e) => {
+  const el = e.target.closest('.pg'); if (!el || e.target.tagName === 'INPUT') return;
+  const b = curB();
+  if (el.dataset.p === b.ap) { openPageMenu(el); return; }       // 보고 있는 탭을 다시 누르면 메뉴
+  b.ap = el.dataset.p; sel = null; $('#board').scrollTo(0, 0); touch(); render();
+});
+$('#pgs').addEventListener('dblclick', (e) => {
+  const el = e.target.closest('.pg'); if (!el || el.querySelector('input')) return;
+  $('#pmenu').hidden = true; renamePage(el);
+});
+$('#pgs').addEventListener('contextmenu', (e) => {
+  const el = e.target.closest('.pg'); if (!el) return;
+  e.preventDefault(); curB().ap = el.dataset.p; render(); openPageMenu(document.querySelector(`.pg[data-p="${el.dataset.p}"]`));
+});
+function renamePage(el) {
+  const b = curB(), g = b.pages.find((x) => x.id === (el && el.dataset.p)); if (!g) return;
+  el.innerHTML = `<input class="re" maxlength="30" value="${esc(g.name)}">`;
+  const i = el.querySelector('input'); i.focus(); i.select();
+  let done = false;
+  const end = (ok) => {
+    if (done) return; done = true;
+    if (ok && i.value.trim()) { g.name = i.value.trim().slice(0, 30); touch(); }
+    renderPages();
+  };
+  i.onblur = () => end(true);
+  i.onkeydown = (ev) => { if (ev.key === 'Enter') end(true); else if (ev.key === 'Escape') end(false); ev.stopPropagation(); };
+}
+function openPageMenu(el) {
+  const b = curB(), g = b.pages.find((x) => x.id === b.ap); if (!g || !el) return;
+  const i = b.pages.indexOf(g), r = el.getBoundingClientRect();
+  $('#pmenu').innerHTML = `<div class="sec">${esc(g.name)}</div>
+    <button class="mi" data-m="rename">이름 바꾸기</button>
+    <hr><button class="mi" data-m="up"${i === 0 ? ' disabled style="opacity:.4"' : ''}>▲ 위로 옮기기</button>
+    <button class="mi" data-m="down"${i === b.pages.length - 1 ? ' disabled style="opacity:.4"' : ''}>▼ 아래로 옮기기</button>
+    <hr><button class="mi del" data-m="del">이 탭 지우기</button>`;
+  $('#pmenu').style.left = Math.min(window.innerWidth - 210, r.right + 6) + 'px';
+  $('#pmenu').style.top = Math.min(window.innerHeight - 200, r.top) + 'px';
+  $('#pmenu').hidden = false;
+}
+$('#pmenu').onclick = (e) => {
+  const m = e.target.dataset.m; if (!m) return;
+  const b = curB(), g = b.pages.find((x) => x.id === b.ap), i = b.pages.indexOf(g);
+  $('#pmenu').hidden = true;
+  if (m === 'rename') { renamePage(document.querySelector(`.pg[data-p="${g.id}"]`)); return; }
+  if (m === 'up' && i > 0) { b.pages.splice(i, 1); b.pages.splice(i - 1, 0, g); touch(); render(); }
+  else if (m === 'down' && i < b.pages.length - 1) { b.pages.splice(i, 1); b.pages.splice(i + 1, 0, g); touch(); render(); }
+  else if (m === 'del') {
+    if (b.pages.length <= 1) { alert('탭이 하나뿐이라 지울 수 없습니다.'); return; }
+    const n = g.notes.length + g.areas.length + g.links.length;
+    if (n && !confirm(`"${g.name}" 탭을 지울까요? 안에 있는 ${n}개도 함께 지워집니다. (되돌릴 수 없습니다)`)) return;
+    b.pages.splice(i, 1); b.ap = b.pages[Math.max(0, i - 1)].id; sel = null; touch(); render();
+  }
+};
+
 // ---- 자석 (딱딱 떨어지게 붙이기) ----
 const MAG = 14;                                  // 이 거리 안이면 자석처럼 붙는다
 const NEAR = 60;                                 // 다른 축으로 이만큼 가까운 것만 상대로 본다
@@ -350,7 +460,9 @@ $('#canvas').addEventListener('click', (e) => {
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
     else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
     else cur().areas = cur().areas.filter((x) => x.id !== id);
-    trash.unshift({ k, del: Date.now(), b: cur().id, bn: cur().name, o }); trash.splice(50);
+    const B = curB(), G = cur();
+    trash.unshift({ k, del: Date.now(), b: B.id, p: G.id, bn: (boards.length > 1 ? B.name + ' · ' : '') + G.name, o });
+    trash.splice(50);
     sel = null; touch(); render(); return;
   }
   if (k === 'l') {                                // 바로가기 타일 = 눌러서 열기
@@ -478,7 +590,9 @@ $('#pal').onclick = (e) => {
 $('#bds').addEventListener('click', (e) => {
   if (e.target.closest('#addBoard')) {
     if (boards.length >= 20) { alert('메모판은 20개까지 만들 수 있습니다.'); return; }
-    const b = { id: uid(), name: `메모 ${boards.length + 1}`, color: KEYS[boards.length % KEYS.length], notes: [], areas: [] };
+    const nm = `메모 ${boards.length + 1}`;
+    const g = { id: uid(), name: nm, notes: [], areas: [], links: [] };
+    const b = { id: uid(), name: nm, color: KEYS[boards.length % KEYS.length], pages: [g], ap: g.id };
     boards.push(b); active = b.id; sel = null; touch(); render(); return;
   }
   const chip = e.target.closest('.bd'); if (!chip || e.target.tagName === 'INPUT') return;
@@ -498,7 +612,7 @@ function startRename(chip) {
   const end = (ok) => {
     if (done) return; done = true;
     if (ok && i.value.trim()) { b.name = i.value.trim().slice(0, 20); touch(); }
-    renderBoards();
+    renderBoards(); renderPages();
   };
   i.onblur = () => end(true);
   i.onkeydown = (ev) => { if (ev.key === 'Enter') end(true); else if (ev.key === 'Escape') end(false); ev.stopPropagation(); };
@@ -529,7 +643,8 @@ $('#bmenu').onclick = (e) => {
   else if (m === 'right' && i < boards.length - 1) { boards.splice(i, 1); boards.splice(i + 1, 0, b); touch(); renderBoards(); }
   else if (m === 'del') {
     if (boards.length <= 1) { alert('메모판이 하나뿐이라 지울 수 없습니다.'); return; }
-    if (!confirm(`"${b.name}" 메모판을 지울까요? 안에 있는 메모 ${b.notes.length}개도 함께 지워집니다.`)) return;
+    const cnt = (b.pages || []).reduce((m, g) => m + g.notes.length + g.areas.length + g.links.length, 0);
+    if (!confirm(`"${b.name}" 메모판을 지울까요? 왼쪽 탭 ${(b.pages || []).length}개와 그 안의 ${cnt}개가 함께 지워집니다.`)) return;
     boards.splice(i, 1); active = boards[Math.max(0, i - 1)].id; sel = null; touch(); render();
   }
   $('#bmenu').hidden = true;
@@ -573,7 +688,10 @@ $('#bin').onclick = (e) => {
   if (a === 'rm') { trash.splice(i, 1); touch(); render(); openBin(); return; }
   trash.splice(i, 1);                                   // 되살리기 (원래 있던 메모판으로)
   const o = t.o, home = boards.find((b) => b.id === t.b);
-  if (home && home.id !== active) { active = home.id; sel = null; $('#board').scrollTo(0, 0); }
+  if (home) {                                            // 원래 있던 메모판·탭으로
+    if (home.id !== active) { active = home.id; sel = null; $('#board').scrollTo(0, 0); }
+    if (t.p && (home.pages || []).some((g) => g.id === t.p)) home.ap = t.p;
+  }
   if (t.k === 'a') cur().areas.push(o);
   else if (t.k === 'l') { cur().links.push(o); unstack(o, 'l'); sel = o.id; }
   else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
@@ -676,6 +794,7 @@ document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#bin') && !e.target.closest('#binBtn')) $('#bin').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
+  if (!e.target.closest('#pmenu') && !e.target.closest('.pg')) $('#pmenu').hidden = true;
 });
 
 // ---- 저장 ----

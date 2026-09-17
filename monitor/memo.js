@@ -1,10 +1,11 @@
 'use strict';
 // 메모 보드 (포스트잇처럼 붙이는 메모판). 사람마다 자기 보드를 여러 개 가진다.
-// 저장 위치: data/memo.json  { "<계정 id>": { active: "<보드 id>", boards: [ { id, name, color, notes: [...], areas: [...] } ] } }
+// 저장 위치: data/memo.json  { "<계정 id>": { active, boards: [ { id, name, color, ap, pages: [ { id, name, notes, areas, links } ] } ], trash, prefs } }
+// 상단 탭 = boards(메모판), 왼쪽 탭 = pages(그 메모판 안의 쪽). 예전 형식(보드가 바로 notes 를 들고 있던 것)은 읽을 때 쪽 하나로 옮긴다.
 const fs = require('fs');
 const path = require('path');
 
-const MAX_BOARDS = 20, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
+const MAX_BOARDS = 20, MAX_PAGES = 50, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
 const MAX_IMG = 3 * 1024 * 1024;          // 사진 한 장 (data URL 글자 수)
 const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 용량
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
@@ -52,7 +53,7 @@ function create(opts) {
   });
   // 휴지통: 사람마다 하나. 지운 메모·범위를 최근 50개까지 들고 있다 (b/bn = 원래 있던 메모판)
   const trashItem = (t) => {
-    const c = { del: num(t && t.del, Date.now()), b: str(t && t.b, 32), bn: str(t && t.bn, 20) };
+    const c = { del: num(t && t.del, Date.now()), b: str(t && t.b, 32), p: str(t && t.p, 32), bn: str(t && t.bn, 50) };
     if (t && t.k === 'a') return { k: 'a', ...c, o: area(t.o || {}) };
     if (t && t.k === 'l') return { k: 'l', ...c, o: link(t.o || {}) };
     return { k: 'n', ...c, o: note((t && t.o) || {}) };
@@ -74,6 +75,7 @@ function create(opts) {
     h: clamp(num(p && p.h, 200), 60, 1600),
     acolor: color(p && p.acolor, 'green'),
     magnet: !(p && p.magnet === false),
+    side: !(p && p.side === false),        // 왼쪽 탭 보이기
   });
   // 바로가기 타일 (바탕화면 아이콘처럼 눌러서 여는 것)
   const link = (l) => ({
@@ -82,21 +84,30 @@ function create(opts) {
     w: clamp(num(l.w, 96), 60, 400), h: clamp(num(l.h, 88), 50, 400),
     name: str(l.name, 30), url: href(l.url), icon: str(l.icon, 8), color: color(l.color, 'gray'),
   });
-  const board = (b, i) => ({
-    id: str(b.id, 32) || rid(),
-    name: str(b.name, 20) || `메모 ${i + 1}`,
-    color: color(b.color, 'yellow'),
-    notes: (Array.isArray(b.notes) ? b.notes : []).slice(0, MAX_NOTES).map(note),
-    areas: (Array.isArray(b.areas) ? b.areas : []).slice(0, MAX_AREAS).map(area),
-    links: (Array.isArray(b.links) ? b.links : []).slice(0, MAX_LINKS).map(link),
+  const page = (g, i) => ({
+    id: str(g.id, 32) || rid(),
+    name: str(g.name, 30) || `쪽 ${i + 1}`,
+    notes: (Array.isArray(g.notes) ? g.notes : []).slice(0, MAX_NOTES).map(note),
+    areas: (Array.isArray(g.areas) ? g.areas : []).slice(0, MAX_AREAS).map(area),
+    links: (Array.isArray(g.links) ? g.links : []).slice(0, MAX_LINKS).map(link),
   });
+  const board = (b, i) => {
+    const name = str(b.name, 20) || `메모 ${i + 1}`;
+    const raw = Array.isArray(b.pages) && b.pages.length ? b.pages
+      : [{ id: rid(), name, notes: b.notes, areas: b.areas, links: b.links }];   // 예전 형식 → 쪽 하나로
+    const pages = raw.slice(0, MAX_PAGES).map(page);
+    return {
+      id: str(b.id, 32) || rid(), name, color: color(b.color, 'yellow'),
+      pages, ap: pages.some((g) => g.id === b.ap) ? b.ap : pages[0].id,
+    };
+  };
 
   // 예전 형식({ notes, areas })을 보드 하나로 옮긴다
   function boardsOf(uid) {
     const u = all[uid];
     if (!u) return { boards: [], active: '' };
     if (Array.isArray(u.boards)) return { boards: u.boards, active: str(u.active, 32) };
-    if (u.notes || u.areas) return { boards: [{ id: rid(), name: '메모 1', color: 'yellow', notes: u.notes || [], areas: u.areas || [] }], active: '' };
+    if (u.notes || u.areas) return { boards: [{ id: rid(), name: '메모 1', color: 'yellow', notes: u.notes || [], areas: u.areas || [] }], active: '' };   // board() 가 쪽 하나로 옮긴다
     return { boards: [], active: '' };
   }
 
@@ -104,13 +115,13 @@ function create(opts) {
     get(uid) {
       const { boards, active } = boardsOf(uid);
       const list = boards.slice(0, MAX_BOARDS).map(board);
-      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [], links: [] });
+      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', pages: [{ id: rid(), name: '메모 1', notes: [], areas: [], links: [] }] });
       const act = list.some((b) => b.id === active) ? active : list[0].id;
       return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs) };
     },
     set(uid, data) {
       const list = (Array.isArray(data && data.boards) ? data.boards : []).slice(0, MAX_BOARDS).map(board);
-      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', notes: [], areas: [], links: [] });
+      if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', pages: [{ id: rid(), name: '메모 1', notes: [], areas: [], links: [] }] });
       const active = list.some((b) => b.id === data.active) ? data.active : list[0].id;
       const trash = (Array.isArray(data && data.trash) ? data.trash : []).slice(0, MAX_TRASH).map(trashItem);
       const next = { active, boards: list, trash, prefs: prefs(data && data.prefs) };
