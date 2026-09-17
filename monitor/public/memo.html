@@ -155,6 +155,14 @@
   .pop b.sw { width:24px; height:24px; border-radius:4px; border:1px solid rgba(0,0,0,.3); cursor:pointer; display:block; }
   .pop b.sw:hover { outline:2px solid var(--accent); }
   .pop .sizes { display:flex; gap:5px; align-items:flex-end; }
+  .pop .fsz { display:flex; align-items:center; gap:5px; }
+  .pop .fsz button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    width:30px; height:30px; cursor:pointer; font-family:inherit; font-size:15px; line-height:1; padding:0; flex:none; }
+  .pop .fsz button:hover { border-color:var(--accent); color:var(--accent); }
+  .pop .fsz input.fi { flex:1; min-width:0; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:var(--r); padding:5px 6px; font:inherit; font-size:13px; text-align:center; }
+  .pop .fsz input.fi:focus { outline:none; border-color:var(--accent); }
+  .pop .fsz .u { color:var(--muted); font-size:11px; flex:none; }
   .pop .sizes button { background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r); width:30px; height:30px; cursor:pointer; font-family:inherit; padding:0; line-height:1; }
   .pop .sizes button:hover { border-color:var(--accent); } .pop .sizes button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
   .pop .mi { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font:inherit; font-size:12.5px; padding:7px 9px; border-radius:var(--r); cursor:pointer; }
@@ -226,7 +234,20 @@ const COLORS = {
   gray: { bg: '#e2e8f0', bd: '#475569' }, white: { bg: '#f8fafc', bd: '#94a3b8' },
 };
 const KEYS = Object.keys(COLORS);
-const SIZES = [11, 13, 15, 18, 22];
+const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72];   // 워드처럼 흔히 쓰는 눈금
+const FS_MIN = 8, FS_MAX = 72;
+const fsFix = (v) => Math.min(FS_MAX, Math.max(FS_MIN, Math.round(Number(v) || 13)));
+function fsStep(v, dir) {                                    // − / ＋ 는 눈금 단위로 움직인다
+  v = fsFix(v);
+  if (dir > 0) return fsFix(SIZES.find((x) => x > v) || FS_MAX);
+  const lower = SIZES.filter((x) => x < v);
+  return fsFix(lower.length ? lower[lower.length - 1] : FS_MIN);
+}
+function fsBox(v) {
+  return `<div class="fsz"><button type="button" data-fs="-" title="작게">−</button>
+    <input class="fi" type="number" min="${FS_MIN}" max="${FS_MAX}" step="1" value="${fsFix(v)}"><span class="u">pt</span>
+    <button type="button" data-fs="+" title="크게">＋</button></div>`;
+}
 const SNAP = 10;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
@@ -566,8 +587,7 @@ function openPal(el, k, id, focusTitle) {
   const r = el.getBoundingClientRect ? el.getBoundingClientRect() : el;
   $('#pal').innerHTML = '<div class="sec">색</div><div class="cols">'
     + KEYS.map((c) => `<b class="sw" data-c="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('') + '</div>'
-    + (k === 'n' && !o.img ? '<div class="sec">글자 크기</div><div class="sizes">'
-      + SIZES.map((f) => `<button type="button" data-f="${f}" class="${(o.fs || 13) === f ? 'on' : ''}" style="font-size:${Math.min(17, f)}px">가</button>`).join('') + '</div>' : '')
+    + (k === 'n' && !o.img ? '<div class="sec">글자 크기 (8~72)</div>' + fsBox(o.fs || 13) : '')
     + `<div class="sec" style="margin-top:9px">제목</div>
        <input class="ti" placeholder="제목을 입력하세요" maxlength="${k === 'n' ? 60 : 40}" value="${esc(o.title || '')}">`;
   $('#pal').style.left = Math.min(window.innerWidth - 210, Math.max(8, r.left)) + 'px';
@@ -575,9 +595,19 @@ function openPal(el, k, id, focusTitle) {
   $('#pal').hidden = false;
   if (focusTitle) { const t = $('#pal .ti'); if (t) { t.focus(); t.select(); } }
 }
-$('#pal').oninput = (e) => {                                  // 제목 바로 저장
-  if (!palFor || !e.target.classList.contains('ti')) return;
+document.addEventListener('change', (e) => {                  // 칸을 벗어나면 8~72 로 맞춰 준다
+  if (e.target.classList && e.target.classList.contains('fi')) e.target.value = fsFix(e.target.value);
+}, true);
+function setFs(o, v) {                                        // 글자 크기 적용 (다시 그리지 않는다)
+  o.fs = fsFix(v); o.updated = Date.now(); touch();
+  const box = document.querySelector(`[data-id="${o.id}"]`);
+  if (box) box.style.setProperty('--fs', o.fs + 'px');
+}
+$('#pal').oninput = (e) => {                                  // 제목·글자 크기 바로 저장
+  if (!palFor) return;
   const o = find(palFor.k, palFor.id); if (!o) return;
+  if (e.target.classList.contains('fi')) { setFs(o, e.target.value); return; }
+  if (!e.target.classList.contains('ti')) return;
   o.title = e.target.value; o.updated = Date.now(); touch();
   const box = document.querySelector(`[data-id="${palFor.id}"]`); if (!box) return;
   const nt = box.querySelector('.nt'), ti = box.querySelector('input.t');
@@ -585,14 +615,16 @@ $('#pal').oninput = (e) => {                                  // 제목 바로 �
   if (ti) ti.value = o.title;
 };
 $('#pal').addEventListener('keydown', (e) => {
-  if (e.target.classList.contains('ti') && (e.key === 'Enter' || e.key === 'Escape')) { $('#pal').hidden = true; palFor = null; render(); }
+  if ((e.target.classList.contains('ti') || e.target.classList.contains('fi')) && (e.key === 'Enter' || e.key === 'Escape')) {
+    $('#pal').hidden = true; palFor = null; render();
+  }
 });
 $('#pal').onclick = (e) => {
   if (!palFor) return;
   const o = find(palFor.k, palFor.id); if (!o) return;
-  const c = e.target.dataset.c, f = e.target.dataset.f;
+  const c = e.target.dataset.c, d = e.target.dataset.fs;
   if (c) { o.color = c; touch(); render(); $('#pal').hidden = true; palFor = null; return; }
-  if (f) { o.fs = Number(f); touch(); render(); const d = document.querySelector(`[data-id="${palFor.id}"] .dot`); if (d) openPal(d, palFor.k, palFor.id); }
+  if (d) { const inp = $('#pal .fi'); const v = fsStep(inp.value, d === '+' ? 1 : -1); inp.value = v; setFs(o, v); }
 };
 
 // ---- 메모판(보드) ----
@@ -781,8 +813,8 @@ function openCfg() {
   $('#cfg').innerHTML = `
     <div class="sec">새 메모 색</div>
     <div class="cols">${KEYS.map((c) => `<b class="sw ${prefs.color === c ? 'on' : ''}" data-p="color" data-v="${c}" style="background:${COLORS[c].bg}"></b>`).join('')}</div>
-    <div class="sec">새 메모 글자 크기</div>
-    <div class="sizes">${SIZES.map((f) => `<button type="button" data-p="fs" data-v="${f}" class="${prefs.fs === f ? 'on' : ''}" style="font-size:${Math.min(17, f)}px">가</button>`).join('')}</div>
+    <div class="sec">새 메모 글자 크기 (8~72)</div>
+    ${fsBox(prefs.fs)}
     <div class="sec">새 메모 크기</div>
     <div class="row">${SZ.map((z) => `<button data-p="wh" data-v="${z.w},${z.h}" class="${prefs.w === z.w && prefs.h === z.h ? 'on' : ''}">${z.n}</button>`).join('')}</div>
     <div class="sec">새 범위 색</div>
@@ -800,7 +832,13 @@ function openCfg() {
   $('#cfg').style.top = (r.bottom + 6) + 'px';
   $('#cfg').hidden = false;
 }
+$('#cfg').oninput = (e) => {
+  if (!e.target.classList.contains('fi')) return;
+  prefs.fs = fsFix(e.target.value); touch();
+};
 $('#cfg').onclick = (e) => {
+  const d = e.target.dataset.fs;
+  if (d) { const inp = $('#cfg .fi'); prefs.fs = fsStep(inp.value, d === '+' ? 1 : -1); inp.value = prefs.fs; touch(); return; }
   const k = e.target.dataset.p, v = e.target.dataset.v; if (!k) return;
   if (k === 'wh') { const [w, h] = v.split(',').map(Number); prefs.w = w; prefs.h = h; }
   else if (k === 'magnet') prefs.magnet = v === '1';

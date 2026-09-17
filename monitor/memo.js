@@ -37,7 +37,7 @@ function create(opts) {
       x: clamp(num(n.x), 0, 20000), y: clamp(num(n.y), 0, 20000),
       w: clamp(num(n.w, 200), 80, 1600), h: clamp(num(n.h, 200), 60, 1600),
       title: str(n.title, 60), text: str(n.text, MAX_TEXT), color: color(n.color, 'yellow'), z: num(n.z, 1),
-      fs: clamp(num(n.fs, 13), 10, 40), min: !!n.min, updated: num(n.updated, Date.now()),
+      fs: clamp(num(n.fs, 13), 8, 72), min: !!n.min, updated: num(n.updated, Date.now()),
     };
     if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {
       if (n.img.length > MAX_IMG) throw new Error('사진 한 장이 너무 큽니다 (3MB 넘음)');
@@ -70,7 +70,7 @@ function create(opts) {
   // 기본값 (새 메모·새 범위를 만들 때 쓰는 설정)
   const prefs = (p) => ({
     color: color(p && p.color, 'yellow'),
-    fs: clamp(num(p && p.fs, 13), 10, 40),
+    fs: clamp(num(p && p.fs, 13), 8, 72),
     w: clamp(num(p && p.w, 200), 80, 1600),
     h: clamp(num(p && p.h, 200), 60, 1600),
     acolor: color(p && p.acolor, 'green'),
