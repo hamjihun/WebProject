@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import re
 import shutil
 import subprocess
 import sys
@@ -69,6 +70,12 @@ def soffice_convert(src: Path, target: str, outdir: Path, infilter: str | None =
     return cand if cand.exists() and cand.stat().st_size > 0 else None
 
 
+def safe_name(text: str) -> str:
+    """제목을 파일명으로 쓸 수 있게 다듬는다."""
+    text = "".join("_" if ch in '\\/:*?"<>|\n\r\t' else ch for ch in text).strip(" .")
+    return (text[:80].strip() or "무제")
+
+
 def unique(path: Path) -> Path:
     if not path.exists():
         return path
@@ -90,41 +97,74 @@ def md_cell(value) -> str:
     return " ".join(text.split())
 
 
-def rows_to_md(rows: list[list], title: str) -> list[str]:
-    """2차원 값 목록을 마크다운 표 문자열 목록으로."""
-    # 뒤쪽 빈 행/열 제거
+def rows_to_md(rows: list[list], title: str) -> tuple[list[str], str | None]:
+    """2차원 값 목록을 (마크다운 줄 목록, 표 제목)으로. 빈 시트는 ([], None)."""
+    # 앞뒤 빈 행 제거
     while rows and all(md_cell(c) == "" for c in rows[-1]):
         rows.pop()
+    while rows and all(md_cell(c) == "" for c in rows[0]):
+        rows.pop(0)
     if not rows:
-        return [f"## {title}\n", "_(빈 시트)_\n"]
+        return [], None
+
     width = max(len(r) for r in rows)
     keep = [i for i in range(width)
             if any(md_cell(r[i]) if i < len(r) else "" for r in rows)]
     if not keep:
-        return [f"## {title}\n", "_(빈 시트)_\n"]
+        return [], None
 
     def cells(row):
         return [md_cell(row[i]) if i < len(row) else "" for i in keep]
 
+    # 표 위에 얹힌 제목 행을 걷어낸다: 값이 하나뿐인 행 다음에 값이 더 많은
+    # 행이 오면, 앞의 행은 데이터가 아니라 표 제목이다.
+    captions: list[str] = []
+    while len(rows) >= 2:
+        filled_first = [c for c in cells(rows[0]) if c]
+        # 제목 행과 헤더 행 사이에 빈 행이 끼어 있는 서식이 흔하다
+        nxt = next((r for r in rows[1:] if any(cells(r))), None)
+        if nxt is None:
+            break
+        if len(filled_first) == 1 and len(filled_first) < len([c for c in cells(nxt) if c]):
+            captions.append(filled_first[0])
+            rows.pop(0)
+            while rows and all(md_cell(c) == "" for c in rows[0]):
+                rows.pop(0)
+        else:
+            break
+
+    if not rows:
+        return [f"## {title}", "", *[f"**{c}**" for c in captions], ""], \
+            (captions[0] if captions else None)
+
+    # 제목 행을 걷어낸 뒤 열이 또 비었을 수 있으니 다시 계산
+    width = max(len(r) for r in rows)
+    keep = [i for i in range(width)
+            if any(md_cell(r[i]) if i < len(r) else "" for r in rows)]
+
     head = cells(rows[0])
-    if not any(head):  # 첫 행이 비면 열 번호를 헤더로
+    if all(head):  # 모든 칸이 채워진 첫 행은 헤더로 본다
+        body = rows[1:]
+    else:
         head = [f"col{i + 1}" for i in range(len(keep))]
         body = rows
-    else:
-        body = rows[1:]
-    out = [f"## {title}", "", "| " + " | ".join(head) + " |",
-           "| " + " | ".join("---" for _ in head) + " |"]
+
+    out = [f"## {title}", ""]
+    for caption in captions:
+        out += [f"**{caption}**", ""]
+    out += ["| " + " | ".join(head) + " |",
+            "| " + " | ".join("---" for _ in head) + " |"]
     for row in body:
         vals = cells(row)
         if not any(vals):
             continue
         out.append("| " + " | ".join(vals) + " |")
     out.append("")
-    return out
+    return out, (captions[0] if captions else None)
 
 
 # ---------------------------------------------------------------- converters
-def convert_spreadsheet(src: Path, outdir: Path) -> Result:
+def convert_spreadsheet(src: Path, outdir: Path, name_from_title: bool = False) -> Result:
     """엑셀 -> 마크다운(시트별 표)."""
     try:
         import openpyxl
@@ -146,7 +186,10 @@ def convert_spreadsheet(src: Path, outdir: Path) -> Result:
         # 계산된 값을 우선 쓰고, 캐시된 값이 없는 셀은 수식 문자열로 채운다.
         wb = openpyxl.load_workbook(work, data_only=True, read_only=True)
         raw = openpyxl.load_workbook(work, data_only=False, read_only=True)
-        lines = [f"# {src.stem}", "", f"> 원본 파일: `{src.name}`", ""]
+        body: list[str] = []
+        empties: list[str] = []
+        used: list[str] = []
+        doc_title: str | None = None
         total = 0
         for ws in wb.worksheets:
             rows = [list(r) for r in ws.iter_rows(values_only=True)]
@@ -159,8 +202,20 @@ def convert_spreadsheet(src: Path, outdir: Path) -> Result:
                         if cell is None and x < len(fallback[y]):
                             row[x] = fallback[y][x]
             total += len(rows)
-            lines += rows_to_md(rows, ws.title)
+            sheet_lines, caption = rows_to_md(rows, ws.title)
+            if not sheet_lines:
+                empties.append(ws.title)
+                continue
+            if doc_title is None and caption:
+                doc_title = caption
+            used.append(ws.title)
+            body += sheet_lines
         wb.close()
+
+        # 시트가 하나뿐이고 이름이 Sheet1 같은 기본값이면 소제목은 군더더기다
+        if (len(used) == 1 and re.fullmatch(r"(Sheet|sheet|시트)\s*\d*", used[0])
+                and body[:1] == [f"## {used[0]}"]):
+            body = body[2:]
         raw.close()
     except Exception as exc:  # noqa: BLE001 - 원본이 깨진 경우까지 보고서에 남긴다
         return Result(src, "fail", note=f"읽기 실패: {exc}")
@@ -168,9 +223,16 @@ def convert_spreadsheet(src: Path, outdir: Path) -> Result:
         if tmp:
             tmp.cleanup()
 
-    dest = unique(outdir / (src.stem + ".md"))
+    stem = doc_title if (name_from_title and doc_title) else src.stem
+    lines = [f"# {stem}", "", f"> 원본 파일: `{src.name}`"]
+    if empties:
+        lines.append(f"> 내용이 없어 제외한 시트: {', '.join(empties)}")
+    lines += ["", *body]
+
+    dest = unique(outdir / (safe_name(stem) + ".md"))
     dest.write_text("\n".join(lines), encoding="utf-8")
-    return Result(src, "ok", dest, f"{total}행")
+    note = f"{total}행" + (f", 빈 시트 {len(empties)}개 제외" if empties else "")
+    return Result(src, "ok", dest, note)
 
 
 def convert_flat(src: Path, outdir: Path) -> Result:
@@ -186,7 +248,7 @@ def convert_flat(src: Path, outdir: Path) -> Result:
     else:
         return Result(src, "fail", note="인코딩 판별 실패")
 
-    lines = [f"# {src.stem}", "", f"> 원본 파일: `{src.name}`", ""] + rows_to_md(rows, src.stem)
+    lines = [f"# {src.stem}", "", f"> 원본 파일: `{src.name}`", ""] + rows_to_md(rows, src.stem)[0]
     dest = unique(outdir / (src.stem + ".md"))
     dest.write_text("\n".join(lines), encoding="utf-8")
     return Result(src, "ok", dest, f"{len(rows)}행 ({enc})")
@@ -266,12 +328,12 @@ def passthru(src: Path, outdir: Path) -> Result:
 
 
 # ---------------------------------------------------------------- driver
-def handle(src: Path, outdir: Path, docs_to: str) -> Result:
+def handle(src: Path, outdir: Path, docs_to: str, name_from_title: bool = False) -> Result:
     ext = src.suffix.lower()
     if ext in PASSTHRU_EXT or ext in AUDIO_EXT:
         return passthru(src, outdir)
     if ext in SHEET_EXT:
-        return convert_spreadsheet(src, outdir)
+        return convert_spreadsheet(src, outdir, name_from_title)
     if ext in FLAT_EXT:
         return convert_flat(src, outdir)
     if ext == ".hwp":
@@ -306,6 +368,9 @@ def main() -> int:
     ap.add_argument("-o", "--outdir", default="notebooklm_out", help="출력 폴더")
     ap.add_argument("--docs-to", choices=["pdf", "txt"], default="pdf",
                     help="워드 문서를 무엇으로 바꿀지 (기본 pdf)")
+    ap.add_argument("--name-from-title", action="store_true",
+                    help="엑셀 표 위에 적힌 제목을 파일명으로 쓴다 "
+                         "(원본 파일명이 깨져 올라온 경우에 유용)")
     ap.add_argument("--merge", action="store_true",
                     help="변환된 md/txt를 _통합.md 한 파일로도 묶는다 "
                          "(NotebookLM 소스 개수 제한 대응)")
@@ -323,7 +388,7 @@ def main() -> int:
     for i, src in enumerate(files, 1):
         print(f"[{i}/{len(files)}] {src.name} ... ", end="", flush=True)
         try:
-            res = handle(src, outdir, args.docs_to)
+            res = handle(src, outdir, args.docs_to, args.name_from_title)
         except Exception as exc:  # noqa: BLE001 - 한 파일 때문에 전체가 멈추지 않게
             res = Result(src, "fail", note=f"예외: {exc}")
         results.append(res)
