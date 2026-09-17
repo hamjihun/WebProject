@@ -172,7 +172,9 @@ function create({ settingsFile, logDir, log = console.log }) {
 
   // ---- 규칙 평가 ----
   // cond: 새로 켜질 조건. opts.hold: 켜진 뒤 유지 조건(완충). opts.threshold 가 바뀌면 완충 없이 새 기준으로 재판단.
+  let seenKeys = null;                                   // 이번 판단에서 실제로 살펴본 항목 (사라진 항목 정리용)
   function check(key, host, name, cond, msgFn, opts = {}) {
+    if (seenKeys) seenKeys.add(key);
     const now = Date.now();
     let st = states.get(key);
     if (!st) { st = { since: null, active: false, notified: false, lastSent: 0 }; states.set(key, st); }
@@ -246,6 +248,7 @@ function create({ settingsFile, logDir, log = console.log }) {
   function evaluate(servers) {
     const r = settings.rules;
     const live = new Set();
+    seenKeys = new Set();
     if (!settings.enabled) { for (const s of servers) clearHost(s.host); return; }
     const diskNow = diskCheckDue(), bkNow = dailyDue('backup', settings.rules.backup_check_time);
     for (const s of servers) {
@@ -332,6 +335,14 @@ function create({ settingsFile, logDir, log = console.log }) {
           () => `백업 저장소 "${rp.name}" ${rp.pct}% 사용 (남은 ${fmtBytes(rp.free)} / ${fmtBytes(rp.total)}, 기준 ${r.disk}%)`,
           { rule: 'backup', threshold: r.disk, hold: rp.pct >= r.disk - 2, recoverMsg: () => `백업 저장소 "${rp.name}" 사용률 정상 (${rp.pct}%)` });
       }
+      // 감시 대상에서 빠진 백업 항목(숨김 목록에 넣었거나 작업·DB 가 없어진 경우)의 알림은 스스로 내려간다
+      if (bkOn && bkNow && s.backups) {
+        for (const key of [...states.keys()]) {
+          if (!key.startsWith(`${H}|backup|`) || seenKeys.has(key)) continue;
+          if (states.get(key).active) log(`[알림] 감시 대상에서 빠져 알림 해제: ${key.split('|').slice(2).join('|')} (${N})`);
+          states.delete(key);
+        }
+      }
     }
     for (const key of [...states.keys()]) if (!live.has(key.split('|')[0])) states.delete(key);
   }
@@ -385,6 +396,17 @@ function create({ settingsFile, logDir, log = console.log }) {
     updateSettings(patch) {
       if (patch && patch.telegram && typeof patch.telegram.token === 'string' && patch.telegram.token.startsWith('****')) delete patch.telegram.token;  // 마스킹된 값은 유지
       settings = deepMerge(settings, patch);
+      // "표시·판단에서 뺄 이름" 에 넣은 항목의 알림은 저장하는 즉시 내린다 (다음 판단 시각까지 기다리지 않게)
+      const hide = String(settings.rules.backup_hide || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+      if (hide.length) {
+        for (const key of [...states.keys()]) {
+          const p = key.split('|');
+          if (p[1] !== 'backup') continue;
+          const subj = String(p[2] || '').toLowerCase();
+          const name = subj.replace(/^(db|repo|sql):/, '');
+          if (hide.includes(name)) { if (states.get(key).active) log(`[알림] 제외 목록에 넣어 알림 해제: ${p.slice(2).join('|')} (${p[0]})`); states.delete(key); }
+        }
+      }
       saveSettings();
       return this.getSettings(true);
     },

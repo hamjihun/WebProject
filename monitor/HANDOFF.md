@@ -6,7 +6,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 ## 구성 (모두 이 저장소 `monitor/` 안, 외부 패키지 없음)
 | 위치 | 역할 | 실행 위치 |
 |---|---|---|
-| `server.js` (v1.20.1) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
+| `server.js` (v1.20.2) | 수집기. Node.js 내장 http. 데이터 수신, 일별 디스크 스냅샷, 상태 스냅샷 `data/state.json`, 카드 순서, 정적 파일 | IMS 서버 192.168.0.9, 포트 **15138**, 작업 스케줄러 `ServerMonitorCollector` |
 | `auth.js` | 로그인·계정·권한. 계정마다 `depts[]`(일정에서 볼 부서, 빈 배열=전체; `deptsOf`/`canDept`). `data/users.json` (users + sessions), scrypt 해시, 쿠키 `ims_sess`(12시간, "로그인 유지" 30일). `APPS` 배열(monitor/schedule)이 홈 타일·권한 목록·탭 필터의 근거. 계정 없으면 admin/rhksflwk1@ 자동 생성 | (수집기 내부) |
 | `public/login.html` · `home.html` · `users.html` · `password.html` | 로그인 / 홈(타일) / 계정 관리(관리자). `/` 는 home.html | 브라우저 |
 | `schedule.js` | 일정 데이터. `data/schedule.json` { events{id:{title,dept,owner,start,end,time,status,repeat{kind,until},desc,notes[],occ{날짜:{status,skip}}}}, depts[] }. 반복은 원본 하나만 저장하고 회차별 상태·메모는 `occ`/`notes[].date` 로 구분 | (수집기 내부) |
@@ -45,6 +45,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-17 (2): 숨긴 항목의 **기존 활성 알림이 안 내려가던 문제** (수집기 1.20.2). ① `updateSettings()` 가 `backup_hide` 에 들어간 이름과 일치하는 `|backup|` 상태를 저장 즉시 삭제(`db:`/`repo:`/`sql:` 접두사와 `|stale` 접미사 포함). ② `evaluate()` 에 `seenKeys` 를 두어 백업 판단 때 살펴보지 않은 `H|backup|*` 상태(작업·DB 삭제, 숨김 처리 등)를 자동 정리 — 감시 대상에서 사라진 항목의 알림이 영원히 남던 구조적 문제 해결.
 - 2026-09-17: `rules.backup_hide` 를 **SQL DB 이름에도 적용** (수집기 1.20.1). `visibleBackups()` 가 `jobs` 뿐 아니라 `sql.dbs` 도 걸러 화면·알림·백업 탭 이력에서 모두 제외. 알림 설정 라벨을 "표시·판단에서 뺄 이름" 으로 바꾸고 설명 추가. 사용자 사례: ERP(김해)의 `GILSAN_260904` 가 전체 백업 "없음" 으로 빨갛게 떠서 제외 요청.
 - 2026-09-16 (40): 공유 폴더 백업 다시 켬(`backup-target.txt` 두 줄). 설치 스크립트에 **비밀번호 없는 방식** 추가 — `-BackupUser` 만 주면 `New-ScheduledTaskPrincipal -LogonType Interactive` 로 등록해 그 계정이 로그온 중일 때 그 세션 권한으로 공유 폴더에 접근(비밀번호 저장 없음). 경고 문구도 방법 1~3 안내로 교체. 비밀번호에 `%&^"` 가 있으면 cmd 인자 전달이 깨진다는 점을 문서에 명시(그 경우 backup-cred.txt 사용).
 - 2026-09-16 (39): 백업 확인이 어렵다는 피드백 — `backup-data.cmd` 가 대상별 `[완료]/[실패]/[연결]` 을 **화면에도** 출력, `deploy/backup-now.cmd`(호출 후 pause) 추가. 설치 직후 1회 실행되므로 그 시각이 찍히는 것은 정상(예약은 01:00)임을 문서에 명시.
