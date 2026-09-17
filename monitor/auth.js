@@ -13,8 +13,8 @@ const APPS = [
     pages: [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']],
   },
   {
-    key: 'schedule', name: '일정 관리', desc: '부서 업무 일정 · 메모', icon: '📅', ready: true, home: 'schedule.html',
-    pages: [['schedule.html', '일정']],
+    key: 'schedule', name: '일정 관리', desc: '부서 업무 일정 · 메모 보드', icon: '📅', ready: true, home: 'schedule.html',
+    pages: [['schedule.html', '일정'], ['memo.html', '메모']],
   },
 ];
 const ALL_PAGES = APPS.reduce((a, app) => a.concat(app.pages.map((p) => p[0])), []);

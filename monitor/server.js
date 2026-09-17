@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.20.2';
+const VERSION = '1.21.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +25,9 @@ const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: c
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, 'data', 'users.json');            // 로그인 계정·권한
 const auth = require('./auth').create({ file: USERS_FILE, log: console.log });
 const SCHEDULE_FILE = process.env.SCHEDULE_FILE || path.join(__dirname, 'data', 'schedule.json');   // 일정 관리
-const sched = require('./schedule').create({ file: SCHEDULE_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
+const sched = require('./schedule').create({ file: SCHEDULE_FILE, log: console.log });
+const MEMO_FILE = process.env.MEMO_FILE || path.join(__dirname, 'data', 'memo.json');             // 메모 보드 (사람별)
+const memo = require('./memo').create({ file: MEMO_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
 const store = new Map();
@@ -533,6 +535,18 @@ const server = http.createServer(async (req, res) => {
         auth.remove(id, me.id);
         console.log(`[${new Date().toLocaleTimeString()}] 계정 삭제: ${id}`);
         return json(res, 200, { ok: true, users: auth.list() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
+  // ---- 메모 보드 (사람마다 자기 보드) ----
+  if (url.pathname === '/api/memo') {
+    if (!me || !auth.can(me, 'memo.html')) return json(res, 403, { ok: false, error: '메모 화면 권한이 없습니다' });
+    try {
+      if (req.method === 'GET') return json(res, 200, { ok: true, board: memo.get(me.id), me: me.name || me.id });
+      if (req.method === 'PUT') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        return json(res, 200, { ok: true, board: memo.set(me.id, raw) });
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }

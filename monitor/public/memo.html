@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메모 보드</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; }
+  #board { position:absolute; left:0; right:0; bottom:0; top:44px; overflow:auto; background:
+      radial-gradient(circle at 1px 1px, rgba(148,163,184,.16) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
+  #canvas { position:relative; }
+
+  /* 위쪽 작은 도구 막대 */
+  #tools { position:fixed; bottom:16px; left:14px; z-index:60; display:flex; gap:6px; align-items:center; box-shadow:0 6px 18px rgba(0,0,0,.4);
+    background:rgba(30,41,59,.92); border:1px solid var(--line); border-radius:10px; padding:6px 8px; backdrop-filter:blur(4px); }
+  #tools button { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 11px; font:inherit; font-size:12.5px; cursor:pointer; }
+  #tools button:hover { border-color:var(--accent); }
+  #tools button.go { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  #tools .st { color:var(--muted); font-size:11.5px; margin-left:4px; min-width:58px; }
+
+  /* 구역 */
+  .area { position:absolute; border:2px dashed var(--bd,#64748b); background:var(--tint,rgba(100,116,139,.08)); border-radius:14px; }
+  .area .hd { display:flex; align-items:center; gap:6px; padding:5px 8px; cursor:move; background:rgba(15,23,42,.55); border-radius:12px 12px 0 0; }
+  .area .t { flex:1; background:none; border:0; color:var(--bd,#94a3b8); font:inherit; font-size:14px; font-weight:700; padding:2px 4px; border-radius:5px; min-width:40px; }
+  .area .t::placeholder { color:var(--muted); font-weight:400; font-size:12.5px; }
+  .area .t:focus { outline:none; background:rgba(15,23,42,.45); }
+  .area .dot, .area .x { flex:none; }
+
+  /* 메모지 */
+  .note { position:absolute; background:var(--bg2,#fde68a); border-radius:10px; box-shadow:0 6px 16px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden; }
+  .note.sel { box-shadow:0 0 0 2px var(--accent), 0 10px 22px rgba(0,0,0,.45); }
+  .note .hd { display:flex; align-items:center; gap:6px; padding:4px 6px; cursor:move; background:rgba(0,0,0,.07); }
+  .note textarea { flex:1; width:100%; background:none; border:0; resize:none; padding:6px 9px 9px; font:inherit; font-size:13px; line-height:1.55; color:#1f2937; }
+  .note textarea:focus { outline:none; }
+
+  .dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); }
+  .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
+  .x:hover { color:#dc2626; }
+  .area .x { color:rgba(148,163,184,.6); } .area .x:hover { color:#f87171; }
+  .rz { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; }
+  .rz::after { content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px; border-right:2px solid rgba(0,0,0,.3); border-bottom:2px solid rgba(0,0,0,.3); }
+  .area .rz::after { border-color:rgba(148,163,184,.5); }
+
+  /* 색 고르기 */
+  #pal { position:fixed; z-index:70; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; display:grid; grid-template-columns:repeat(4,24px); gap:6px; }
+  #pal[hidden] { display:none; }
+  #pal b { width:24px; height:24px; border-radius:6px; border:1px solid rgba(0,0,0,.3); cursor:pointer; }
+  #pal b:hover { outline:2px solid var(--accent); }
+  .empty { position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
+</style>
+</head>
+<body>
+<div id="tools">
+  <button class="go" id="addNote">＋ 메모</button>
+  <button id="addArea">＋ 구역</button>
+  <span class="st" id="st"></span>
+</div>
+<div id="board"><div id="canvas"></div></div>
+<div id="pal" hidden></div>
+
+<script src="common.js"></script>
+<script>
+MON.renderNav('memo.html');
+const $ = (s) => document.querySelector(s);
+const esc = MON.esc;
+// 메모지 색 (연한 포스트잇 색)
+const COLORS = {
+  yellow: { bg: '#fde68a', bd: '#d97706' }, green: { bg: '#bbf7d0', bd: '#059669' },
+  blue: { bg: '#bfdbfe', bd: '#2563eb' }, pink: { bg: '#fbcfe8', bd: '#db2777' },
+  orange: { bg: '#fed7aa', bd: '#ea580c' }, purple: { bg: '#ddd6fe', bd: '#7c3aed' },
+  gray: { bg: '#e2e8f0', bd: '#475569' }, white: { bg: '#f8fafc', bd: '#94a3b8' },
+};
+const KEYS = Object.keys(COLORS);
+const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
+
+const EMPTY = '<div class="empty">메모가 없습니다.<br>왼쪽 위 <b>＋ 메모</b> 를 눌러 붙이세요.<br>'
+  + '<span style="font-size:12px">색 동그라미로 색을 바꾸고, 제목 줄을 끌어 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
+  + '<b>＋ 구역</b> 으로 "아이디어", "이번 주 중요" 같은 영역을 만들어 메모를 모아 둘 수 있습니다.</span></div>';
+let board = { notes: [], areas: [] };
+let dirty = false, saving = false, sel = null;
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ---- 그리기 ----
+function render() {
+  const cv = $('#canvas');
+  let maxX = 0, maxY = 0;
+  for (const o of board.areas.concat(board.notes)) { maxX = Math.max(maxX, o.x + o.w); maxY = Math.max(maxY, o.y + o.h); }
+  cv.style.minWidth = Math.max($('#board').clientWidth - 4, maxX + 320) + 'px';
+  cv.style.minHeight = Math.max($('#board').clientHeight - 4, maxY + 320) + 'px';
+  cv.innerHTML = board.areas.map((a) => `
+    <div class="area" data-k="a" data-id="${a.id}" style="left:${a.x}px;top:${a.y}px;width:${a.w}px;height:${a.h}px;--bd:${COLORS[a.color] ? COLORS[a.color].bd : '#64748b'};--tint:${tint(a.color)}">
+      <div class="hd"><span class="dot" data-pal="1" style="--bg2:${COLORS[a.color] ? COLORS[a.color].bd : '#64748b'}"></span>
+        <input class="t" value="${esc(a.title)}" placeholder="구역 이름 (예: 아이디어)" maxlength="40">
+        <button class="x" title="구역 지우기">✕</button></div>
+      <div class="rz"></div>
+    </div>`).join('') +
+    board.notes.map((n) => `
+    <div class="note ${sel === n.id ? 'sel' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'}">
+      <div class="hd"><span class="dot" data-pal="1"></span><button class="x" title="메모 지우기">✕</button></div>
+      <textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>
+      <div class="rz"></div>
+    </div>`).join('') +
+    (board.notes.length + board.areas.length ? '' : EMPTY);
+}
+const find = (k, id) => (k === 'n' ? board.notes : board.areas).find((o) => o.id === id);
+function topZ() { return board.notes.reduce((m, n) => Math.max(m, n.z || 1), 1); }
+
+// ---- 만들기 ----
+function viewCenter() {
+  const b = $('#board');
+  return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) };
+}
+$('#addNote').onclick = () => {
+  const c = viewCenter(), n = { id: uid(), x: Math.max(20, c.x - 110 + (board.notes.length % 5) * 18), y: Math.max(20, c.y - 90 + (board.notes.length % 5) * 18), w: 220, h: 180, text: '', color: KEYS[board.notes.length % KEYS.length], z: topZ() + 1 };
+  board.notes.push(n); sel = n.id; touch(); render();
+  const el = document.querySelector(`.note[data-id="${n.id}"] textarea`); if (el) el.focus();
+};
+$('#addArea').onclick = () => {
+  const c = viewCenter(), a = { id: uid(), x: Math.max(20, c.x - 260), y: Math.max(20, c.y - 190), w: 520, h: 380, title: '', color: 'gray' };
+  board.areas.push(a); touch(); render();
+  const el = document.querySelector(`.area[data-id="${a.id}"] .t`); if (el) el.focus();
+};
+
+// ---- 클릭 (색·삭제·선택) ----
+$('#canvas').addEventListener('click', (e) => {
+  const box = e.target.closest('[data-k]'); if (!box) { sel = null; render(); return; }
+  const k = box.dataset.k, id = box.dataset.id, o = find(k, id);
+  if (e.target.classList.contains('x')) {
+    const has = k === 'n' ? (o.text || '').trim() : (o.title || '').trim();
+    if (has && !confirm(k === 'n' ? '이 메모를 지울까요?' : '이 구역을 지울까요? (안에 있는 메모는 그대로 남습니다)')) return;
+    if (k === 'n') board.notes = board.notes.filter((x) => x.id !== id); else board.areas = board.areas.filter((x) => x.id !== id);
+    sel = null; touch(); render(); return;
+  }
+  if (e.target.dataset.pal) { openPal(e.target, k, id); return; }
+  if (k === 'n' && sel !== id) { sel = id; o.z = topZ() + 1; touch(); render(); }
+});
+// 글자·이름 입력
+$('#canvas').addEventListener('input', (e) => {
+  const box = e.target.closest('[data-k]'); if (!box) return;
+  const o = find(box.dataset.k, box.dataset.id); if (!o) return;
+  if (e.target.tagName === 'TEXTAREA') { o.text = e.target.value; o.updated = Date.now(); }
+  else if (e.target.classList.contains('t')) { o.title = e.target.value; }
+  touch();
+});
+
+// ---- 옮기기 · 크기 바꾸기 ----
+let drag = null;
+$('#canvas').addEventListener('mousedown', (e) => {
+  const box = e.target.closest('[data-k]'); if (!box) return;
+  const o = find(box.dataset.k, box.dataset.id); if (!o) return;
+  const rz = e.target.classList.contains('rz');
+  const hd = e.target.closest('.hd');
+  if (!rz && (!hd || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.dataset.pal)) return;
+  e.preventDefault();
+  drag = { o, box, mode: rz ? 'rz' : 'mv', sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
+  if (box.dataset.k === 'n') { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); }
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (drag.mode === 'mv') {
+    drag.o.x = Math.max(0, drag.x + dx); drag.o.y = Math.max(0, drag.y + dy);
+    drag.box.style.left = drag.o.x + 'px'; drag.box.style.top = drag.o.y + 'px';
+  } else {
+    const min = drag.box.dataset.k === 'n' ? [120, 90] : [160, 120];
+    drag.o.w = Math.max(min[0], drag.w + dx); drag.o.h = Math.max(min[1], drag.h + dy);
+    drag.box.style.width = drag.o.w + 'px'; drag.box.style.height = drag.o.h + 'px';
+  }
+});
+document.addEventListener('mouseup', () => {
+  if (!drag) return;
+  drag = null; document.body.style.userSelect = '';
+  touch(); render();
+});
+
+// ---- 색 고르기 ----
+let palFor = null;
+function openPal(el, k, id) {
+  palFor = { k, id };
+  const r = el.getBoundingClientRect();
+  $('#pal').innerHTML = KEYS.map((c) => `<b data-c="${c}" title="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('');
+  $('#pal').style.left = Math.min(window.innerWidth - 140, r.left) + 'px';
+  $('#pal').style.top = (r.bottom + 6) + 'px';
+  $('#pal').hidden = false;
+}
+$('#pal').onclick = (e) => {
+  const c = e.target.dataset.c; if (!c || !palFor) return;
+  const o = find(palFor.k, palFor.id); if (o) { o.color = c; touch(); render(); }
+  $('#pal').hidden = true; palFor = null;
+};
+document.addEventListener('mousedown', (e) => { if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; } });
+
+// ---- 저장 ----
+let timer = null;
+function touch() { dirty = true; $('#st').textContent = '저장 대기'; clearTimeout(timer); timer = setTimeout(saveNow, 700); }
+async function saveNow() {
+  if (!dirty || saving) return;
+  saving = true; $('#st').textContent = '저장 중';
+  const body = JSON.stringify({ notes: board.notes, areas: board.areas });
+  dirty = false;
+  try {
+    const r = await fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장 실패');
+    $('#st').textContent = '저장됨';
+  } catch (e) { dirty = true; $('#st').textContent = '저장 실패'; }
+  saving = false;
+  if (dirty) setTimeout(saveNow, 1200);
+}
+window.addEventListener('beforeunload', (e) => {
+  if (!dirty) return;
+  try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: board.notes, areas: board.areas }), keepalive: true }); } catch (err) {}
+});
+window.addEventListener('resize', render);
+
+(async () => {
+  const r = await fetch('api/memo');
+  if (r.status === 401) { location.href = 'login.html'; return; }
+  if (r.status === 403) { location.href = 'home.html?denied=memo.html'; return; }
+  const j = await r.json();
+  board = j.board || { notes: [], areas: [] };
+  render();
+})();
+</script>
+</body>
+</html>
