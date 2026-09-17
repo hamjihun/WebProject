@@ -10,7 +10,7 @@
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
   #topnav { flex:none; }
-  #board { position:relative; flex:1; min-height:0; overflow:auto; background:
+  #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
       radial-gradient(circle at 1px 1px, rgba(148,163,184,.16) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
 
@@ -69,7 +69,7 @@
   .area .rz::after { border-color:rgba(148,163,184,.5); }
 
   /* 팝업 (색·글자 크기 / 보드 메뉴) */
-  .pop { position:fixed; z-index:80; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px; box-shadow:0 10px 26px rgba(0,0,0,.5); }
+  .pop { position:fixed; z-index:9000; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px; box-shadow:0 10px 26px rgba(0,0,0,.5); }
   .pop[hidden] { display:none; }
   .pop .sec { color:var(--muted); font-size:11px; margin:0 0 5px; }
   .pop .cols { display:grid; grid-template-columns:repeat(4,24px); gap:6px; margin-bottom:9px; }
@@ -81,6 +81,12 @@
   .pop .mi { display:block; width:100%; text-align:left; background:none; border:0; color:var(--text); font:inherit; font-size:12.5px; padding:7px 9px; border-radius:6px; cursor:pointer; }
   .pop .mi:hover { background:rgba(148,163,184,.14); } .pop .mi.del { color:#f87171; }
   .pop hr { border:0; border-top:1px solid var(--line); margin:6px 0; }
+  .pop .ti { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:6px 8px; font:inherit; font-size:12.5px; }
+  .pop .ti:focus { outline:none; border-color:var(--accent); }
+  #bds .bd input.re { width:90px; background:rgba(255,255,255,.9); border:1px solid var(--accent); color:#0f172a;
+    border-radius:4px; font:inherit; font-size:12.5px; font-weight:700; padding:1px 4px; }
+  #bds .bd input.re:focus { outline:none; }
   .empty { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%); color:var(--muted); text-align:center; line-height:1.9; }
 </style>
 </head>
@@ -115,9 +121,9 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 const EMPTY = '<div class="empty">메모가 없습니다.<br>위쪽 <b>＋ 새 메모</b> 를 눌러 붙이세요. <b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다.<br>'
   + '<span style="font-size:12px">메모는 아무 데나 끌어서 옮기고, 오른쪽 아래 모서리로 크기를 바꿉니다.<br>'
-  + '제목 줄의 <b>✎</b> 로 제목을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
+  + '제목 줄의 <b>✎</b> 나 <b>오른쪽 단추</b>로 제목·색을 정하고, <b>＋</b> 를 누르면 그 옆에 새 메모가 붙습니다.<br>'
   + '제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다.<br>'
-  + '색 동그라미를 누르면 색과 글자 크기를 정할 수 있고, 맨 위 탭에서 메모판을 여러 개 만들 수 있습니다.</span></div>';
+  + '맨 위 탭에서 메모판을 여러 개 만들고, 탭을 <b>두 번 누르면</b> 이름을 바꿉니다.</span></div>';
 
 let boards = [], active = '', sel = null;
 let dirty = false, saving = false;
@@ -222,11 +228,7 @@ $('#canvas').addEventListener('click', (e) => {
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id); else cur().areas = cur().areas.filter((x) => x.id !== id);
     sel = null; touch(); render(); return;
   }
-  if (e.target.classList.contains('ed')) {       // 제목 정하기
-    const v = prompt('메모 제목', o.title || '');
-    if (v != null) { o.title = v.trim().slice(0, 60); o.updated = Date.now(); touch(); render(); }
-    return;
-  }
+  if (e.target.classList.contains('ed')) { openPal(e.target, k, id, true); return; }   // 제목 정하기
   if (e.target.classList.contains('plus')) {     // 이 메모 옆에 새 메모
     const right = o.x + o.w + 10, below = o.y + o.h + 10;
     if (right + 200 < ($('#canvas').clientWidth || 4000)) newNote(right, o.y); else newNote(o.x, below);
@@ -234,6 +236,11 @@ $('#canvas').addEventListener('click', (e) => {
   }
   if (e.target.dataset.pal) { openPal(e.target, k, id); return; }
   if (k === 'n' && sel !== id) { sel = id; o.z = topZ() + 1; touch(); render(); }
+});
+$('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
+  const box = e.target.closest('[data-k]'); if (!box) return;
+  e.preventDefault();
+  openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
 });
 $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 번 누르면 접었다 폈다
   const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.target.dataset.pal) return;
@@ -296,18 +303,33 @@ document.addEventListener('mouseup', () => {
 
 // ---- 색 · 글자 크기 ----
 let palFor = null;
-function openPal(el, k, id) {
+function openPal(el, k, id, focusTitle) {
   palFor = { k, id };
   const o = find(k, id) || {};
-  const r = el.getBoundingClientRect();
+  const r = el.getBoundingClientRect ? el.getBoundingClientRect() : el;
   $('#pal').innerHTML = '<div class="sec">색</div><div class="cols">'
     + KEYS.map((c) => `<b class="sw" data-c="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('') + '</div>'
     + (k === 'n' && !o.img ? '<div class="sec">글자 크기</div><div class="sizes">'
-      + SIZES.map((f) => `<button type="button" data-f="${f}" class="${(o.fs || 13) === f ? 'on' : ''}" style="font-size:${Math.min(17, f)}px">가</button>`).join('') + '</div>' : '');
-  $('#pal').style.left = Math.min(window.innerWidth - 190, r.left) + 'px';
-  $('#pal').style.top = Math.min(window.innerHeight - 190, r.bottom + 6) + 'px';
+      + SIZES.map((f) => `<button type="button" data-f="${f}" class="${(o.fs || 13) === f ? 'on' : ''}" style="font-size:${Math.min(17, f)}px">가</button>`).join('') + '</div>' : '')
+    + `<div class="sec" style="margin-top:9px">제목</div>
+       <input class="ti" placeholder="제목을 입력하세요" maxlength="${k === 'n' ? 60 : 40}" value="${esc(o.title || '')}">`;
+  $('#pal').style.left = Math.min(window.innerWidth - 210, Math.max(8, r.left)) + 'px';
+  $('#pal').style.top = Math.min(window.innerHeight - 250, r.bottom + 6) + 'px';
   $('#pal').hidden = false;
+  if (focusTitle) { const t = $('#pal .ti'); if (t) { t.focus(); t.select(); } }
 }
+$('#pal').oninput = (e) => {                                  // 제목 바로 저장
+  if (!palFor || !e.target.classList.contains('ti')) return;
+  const o = find(palFor.k, palFor.id); if (!o) return;
+  o.title = e.target.value; o.updated = Date.now(); touch();
+  const box = document.querySelector(`[data-id="${palFor.id}"]`); if (!box) return;
+  const nt = box.querySelector('.nt'), ti = box.querySelector('input.t');
+  if (nt) { nt.textContent = o.title || '제목 없음'; nt.classList.toggle('no', !o.title); }
+  if (ti) ti.value = o.title;
+};
+$('#pal').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('ti') && (e.key === 'Enter' || e.key === 'Escape')) { $('#pal').hidden = true; palFor = null; render(); }
+});
 $('#pal').onclick = (e) => {
   if (!palFor) return;
   const o = find(palFor.k, palFor.id); if (!o) return;
@@ -323,11 +345,30 @@ $('#bds').addEventListener('click', (e) => {
     const b = { id: uid(), name: `메모 ${boards.length + 1}`, color: KEYS[boards.length % KEYS.length], notes: [], areas: [] };
     boards.push(b); active = b.id; sel = null; touch(); render(); return;
   }
-  const chip = e.target.closest('.bd'); if (!chip) return;
+  const chip = e.target.closest('.bd'); if (!chip || e.target.tagName === 'INPUT') return;
   const id = chip.dataset.b;
   if (id === active) { openBoardMenu(chip); return; }   // 지금 보고 있는 판을 다시 누르면 메뉴
   active = id; sel = null; $('#board').scrollTo(0, 0); touch(); render();
 });
+$('#bds').addEventListener('dblclick', (e) => {              // 탭 두 번 누르면 이름 바꾸기
+  const chip = e.target.closest('.bd'); if (!chip || chip.querySelector('input')) return;
+  $('#bmenu').hidden = true; startRename(chip);
+});
+function startRename(chip) {
+  const b = chip && boards.find((x) => x.id === chip.dataset.b); if (!b) return;
+  chip.innerHTML = `<i style="background:${COLORS[b.color] ? COLORS[b.color].bg : '#fde68a'}"></i><input class="re" maxlength="20" value="${esc(b.name)}">`;
+  const i = chip.querySelector('input'); i.focus(); i.select();
+  let done = false;
+  const end = (ok) => {
+    if (done) return; done = true;
+    if (ok && i.value.trim()) { b.name = i.value.trim().slice(0, 20); touch(); }
+    renderBoards();
+  };
+  i.onblur = () => end(true);
+  i.onkeydown = (ev) => { if (ev.key === 'Enter') end(true); else if (ev.key === 'Escape') end(false); ev.stopPropagation(); };
+  i.onclick = (ev) => ev.stopPropagation();
+  i.ondblclick = (ev) => ev.stopPropagation();
+}
 function openBoardMenu(chip) {
   const b = boards.find((x) => x.id === active); if (!b) return;
   const i = boards.indexOf(b), r = chip.getBoundingClientRect();
@@ -347,7 +388,7 @@ $('#bmenu').onclick = (e) => {
   if (c) { b.color = c; touch(); renderBoards(); $('#bmenu').hidden = true; return; }
   if (!m) return;
   const i = boards.indexOf(b);
-  if (m === 'rename') { const v = prompt('메모판 이름', b.name); if (v != null && v.trim()) { b.name = v.trim().slice(0, 20); touch(); renderBoards(); } }
+  if (m === 'rename') { $('#bmenu').hidden = true; startRename(document.querySelector(`.bd[data-b="${b.id}"]`)); return; }
   else if (m === 'left' && i > 0) { boards.splice(i, 1); boards.splice(i - 1, 0, b); touch(); renderBoards(); }
   else if (m === 'right' && i < boards.length - 1) { boards.splice(i, 1); boards.splice(i + 1, 0, b); touch(); renderBoards(); }
   else if (m === 'del') {
