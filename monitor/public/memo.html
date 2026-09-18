@@ -21,9 +21,15 @@
   ::-webkit-scrollbar-thumb { background:rgba(20,52,46,.22); border-radius:3px; }
   ::-webkit-scrollbar-thumb:hover { background:rgba(20,52,46,.4); }
   ::-webkit-scrollbar-corner { background:transparent; }
+  /* 메모 안 스크롤바는 평소엔 투명하게 떠 있다가, 마우스를 올리면 살짝 보인다 */
+  .note .tx::-webkit-scrollbar-thumb { background:transparent; }
+  .note .tx:hover::-webkit-scrollbar-thumb { background:rgba(20,52,46,.22); }
+  .note .tx { scrollbar-color:transparent transparent; }
+  .note .tx:hover { scrollbar-color:rgba(20,52,46,.22) transparent; }
   :root[data-theme="dark"] * { scrollbar-color:rgba(227,239,236,.25) transparent; }
   :root[data-theme="dark"] ::-webkit-scrollbar-thumb { background:rgba(227,239,236,.2); }
   :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background:rgba(227,239,236,.38); }
+  :root[data-theme="dark"] .note .tx:hover::-webkit-scrollbar-thumb { background:rgba(31,41,55,.3); }
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
   #topnav { flex:none; }
@@ -125,6 +131,27 @@
 
   /* 바로가기 타일 (바탕화면 아이콘처럼) */
 
+  /* 링크 아이콘 (바탕화면 아이콘처럼) */
+  .lnk { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r); cursor:pointer; overflow:hidden;
+    padding:6px 4px; text-align:center; z-index:6; box-shadow:0 1px 3px var(--shadow); }
+  .lnk:hover { background:var(--soft); border-color:var(--accent); }
+  .lnk.sel { border-color:var(--accent); }
+  .lnk .ic { font-size:26px; line-height:1; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    color:var(--text); font-weight:700; flex:none; }
+  .lnk .ic img { width:28px; height:28px; object-fit:contain; }
+  .lnk .lb { font-size:11.5px; color:var(--text); line-height:1.25; max-height:29px; overflow:hidden; word-break:break-all; }
+  .lnk .x { position:absolute; top:0; right:0; color:var(--muted); display:none; }
+  .lnk:hover .x { display:block; }
+  .lnk.mv { opacity:.85; }
+  #lnkEd { width:270px; }
+  #lnkEd input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:var(--r); padding:6px 8px; font:inherit; font-size:12.5px; }
+  #lnkEd input:focus { outline:none; border-color:var(--accent); }
+  #lnkEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:var(--onacc); border:0; border-radius:var(--r);
+    font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
+  #lnkEd .tip { color:var(--muted); font-size:11px; line-height:1.6; margin-top:9px; }
+
   /* 메모지 (각진 사각형) */
   .note { position:absolute; background:var(--bg2,#fde68a); box-shadow:0 2px 6px rgba(20,52,46,.18); outline:1px solid rgba(0,0,0,.14); outline-offset:-1px; display:flex; flex-direction:column; overflow:hidden; }
   .note.sel { box-shadow:0 6px 16px rgba(20,52,46,.3); outline-color:rgba(0,0,0,.28); }
@@ -144,10 +171,14 @@
     font-size:var(--fs,13px); line-height:1.5; color:#1f2937; white-space:pre-wrap; word-break:break-word; cursor:text; }
   .note .tx:focus { outline:none; }
   .note .tx:empty::before { content:attr(data-ph); color:rgba(31,41,55,.38); }
+  .note .tx a { color:#1d4ed8; text-decoration:underline; cursor:pointer; word-break:break-all; }
+  .note .tx a:hover { color:#1e40af; }
   #fmt { padding:5px; display:flex; gap:3px; }
   #fmt button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     min-width:30px; height:30px; font:inherit; font-size:13px; cursor:pointer; padding:0 7px; }
   #fmt button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
+  #fmt select.fz { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    height:30px; font:inherit; font-size:12px; cursor:pointer; padding:0 2px; }
   #fmt button b { font-weight:800; } #fmt button i { font-style:italic; } #fmt button u { text-decoration:underline; }
   #fmt button s { text-decoration:line-through; }
   .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
@@ -218,6 +249,7 @@
     <div class="tc">
       <button class="go" id="addNote">＋ 새 메모</button>
       <button id="addArea">＋ 새 범위</button>
+      <button id="addEtc">＋ 기타 ▾</button>
     </div>
     <div class="tr">
       <span class="st" id="st"></span>
@@ -242,6 +274,8 @@
 <div class="pop" id="cfg" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
 <div class="pop" id="fmt" hidden></div>
+<div class="pop" id="etc" hidden></div>
+<div class="pop" id="lnkEd" hidden></div>
 
 <script>try { const t = localStorage.getItem('imsMemoTheme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <script src="common.js"></script>
@@ -314,6 +348,12 @@ function render() {
         <button class="x" title="범위 지우기">✕</button></div>
       <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>`).join('') +
+    b.links.map((l) => `
+    <div class="lnk ${sel === l.id ? 'sel' : ''}" data-k="l" data-id="${l.id}" title="${esc(l.url || '')}"
+      style="left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px">
+      ${icoHtml(l)}<span class="lb">${esc(l.name || '이름 없음')}</span>
+      <button class="x" title="링크 지우기">✕</button>
+    </div>`).join('') +
     b.notes.map((n) => `
     <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
       <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><button class="hb plus" title="옆에 새 메모">＋</button>
@@ -326,7 +366,17 @@ function render() {
     </div>`).join('') +
     '';
   renderBoards(); renderPages();
-  $('#binN').textContent = trash.length ? ' ' + trash.filter((t) => t.k !== 'l').length : '';
+  $('#binN').textContent = trash.length ? ' ' + trash.length : '';
+}
+// 링크 아이콘: 이모지를 넣었으면 그것, 아니면 그 사이트 그림, 안 나오면 첫 글자
+function icoHtml(l) {
+  if (l.icon) return `<span class="ic">${esc(l.icon)}</span>`;
+  let org = '';
+  try { org = new URL(l.url).origin; } catch (e) {}
+  const ch = esc(((l.name || '').trim()[0] || '·').toUpperCase());
+  if (!org) return `<span class="ic">🔗</span>`;
+  return `<span class="ic"><img src="${esc(org)}/favicon.ico" alt="" draggable="false"
+    onerror="this.parentNode.textContent='${ch}'"></span>`;
 }
 function renderBoards() {
   $('#bds').innerHTML = boards.map((b) => `<button class="bd ${b.id === active ? 'on' : ''}" data-b="${b.id}">
@@ -414,6 +464,7 @@ const bh = (o, k) => (k === 'n' && o.min ? 26 : o.h);
 const geo = (o, k) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: bh(o, k) });
 function others(id) {
   return cur().notes.filter((n) => n.id !== id).map((n) => geo(n, 'n'))
+    .concat(cur().links.filter((l) => l.id !== id).map((l) => geo(l, 'l')))
     .concat(cur().areas.filter((a) => a.id !== id).map((a) => geo(a, 'a')));
 }
 function magnet(o, k, x, y) {
@@ -433,7 +484,8 @@ function magnet(o, k, x, y) {
 const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 function unstack(o, k) {                         // 겹쳐 있으면 가장 가까운 쪽으로 밀어 딱 붙인다
   if (k === 'a' || !prefs.magnet) return;
-  const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'));
+  const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'))
+    .concat(cur().links.filter((l) => l.id !== o.id).map((l) => geo(l, 'l')));
   for (let i = 0; i < 8; i++) {
     const t = list.find((b) => hits(me, b)); if (!t) break;
     const c = [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]
@@ -444,7 +496,7 @@ function unstack(o, k) {                         // 겹쳐 있으면 가장 가�
   o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
 }
 
-const find = (k, id) => (k === 'n' ? cur().notes : cur().areas).find((o) => o.id === id);
+const find = (k, id) => (k === 'n' ? cur().notes : k === 'l' ? cur().links : cur().areas).find((o) => o.id === id);
 const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
 function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) }; }
 
@@ -458,6 +510,57 @@ $('#addNote').onclick = () => {
   const c = viewCenter(), k = cur().notes.length;
   newNote(c.x - prefs.w / 2 + (k % 5) * 20, c.y - prefs.h / 2 + (k % 5) * 20);
 };
+$('#addEtc').onclick = () => {
+  if (!$('#etc').hidden) { $('#etc').hidden = true; return; }
+  $('#etc').innerHTML = '<button class="mi" data-e="link">🔗 링크 아이콘 만들기</button>';
+  const r = $('#addEtc').getBoundingClientRect();
+  $('#etc').style.left = Math.max(8, Math.min(window.innerWidth - 200, r.left)) + 'px';
+  $('#etc').style.top = (r.bottom + 6) + 'px';
+  $('#etc').hidden = false;
+};
+$('#etc').onclick = (e) => {
+  if (e.target.dataset.e !== 'link') return;
+  $('#etc').hidden = true;
+  const c = viewCenter(); newLink(c.x, c.y);
+};
+function newLink(x, y) {
+  const l = { id: uid(), x: Math.max(0, snap(x - 48)), y: Math.max(0, snap(y - 44)), w: 96, h: 88, name: '', url: '', icon: '', color: 'gray' };
+  cur().links.push(l); unstack(l, 'l'); sel = l.id; touch(); render();
+  const el = document.querySelector(`.lnk[data-id="${l.id}"]`); if (el) openLnkEd(el, l.id);
+}
+let lnkFor = null;
+function openLnkEd(el, id) {
+  const l = find('l', id); if (!l) return;
+  lnkFor = id;
+  const r = el.getBoundingClientRect ? el.getBoundingClientRect() : el;
+  $('#lnkEd').innerHTML = `<div class="sec">이름</div>
+    <input class="nm" maxlength="30" placeholder="예: 그룹웨어" value="${esc(l.name || '')}">
+    <div class="sec" style="margin-top:9px">주소</div>
+    <input class="ur" maxlength="500" placeholder="gw.ilsancorp.co.kr" value="${esc(l.url || '')}">
+    <div class="sec" style="margin-top:9px">아이콘 (이모지, 비우면 자동)</div>
+    <input class="ik" maxlength="4" placeholder="예: 📁 ⭐ 📊" value="${esc(l.icon || '')}">
+    <button class="go2">저장</button>
+    <div class="tip">주소만 적으면 <b>https://</b> 는 자동으로 붙습니다. 아이콘은 그 사이트 그림을 자동으로 가져옵니다.</div>`;
+  $('#lnkEd').style.left = Math.max(8, Math.min(window.innerWidth - 290, r.left)) + 'px';
+  $('#lnkEd').style.top = Math.min(window.innerHeight - 300, r.bottom + 6) + 'px';
+  $('#lnkEd').hidden = false;
+  const n = $('#lnkEd .nm'); if (n) { n.focus(); n.select(); }
+}
+function saveLnk() {
+  const l = find('l', lnkFor); if (!l) return;
+  let u = $('#lnkEd .ur').value.trim();
+  if (u) u = /^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, '');
+  l.url = u; l.icon = $('#lnkEd .ik').value.trim().slice(0, 4);
+  let nm = $('#lnkEd .nm').value.trim();
+  if (!nm && u) { try { nm = new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} }
+  l.name = nm.slice(0, 30);
+  touch(); render(); $('#lnkEd').hidden = true; lnkFor = null;
+}
+$('#lnkEd').onclick = (e) => { if (e.target.classList.contains('go2')) saveLnk(); };
+$('#lnkEd').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') saveLnk();
+  else if (e.key === 'Escape') { $('#lnkEd').hidden = true; lnkFor = null; }
+});
 $('#addArea').onclick = () => {
   const c = viewCenter(), a = { id: uid(), x: Math.max(0, snap(c.x - 260)), y: Math.max(0, snap(c.y - 190)), w: 520, h: 380, title: '', color: prefs.acolor };
   cur().areas.push(a); touch(); render();
@@ -507,11 +610,17 @@ $('#canvas').addEventListener('click', (e) => {
   const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
   if (e.target.classList.contains('x')) {         // 지우면 휴지통으로 (되살릴 수 있음)
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
+    else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
     else cur().areas = cur().areas.filter((x) => x.id !== id);
     const B = curB(), G = cur();
     trash.unshift({ k, del: Date.now(), b: B.id, p: G.id, bn: (boards.length > 1 ? B.name + ' · ' : '') + G.name, o });
     trash.splice(50);
     sel = null; touch(); render(); return;
+  }
+  if (k === 'l') {                                // 링크 아이콘 = 눌러서 열기
+    if (moved) return;
+    if (!o.url) { openLnkEd(box, id); return; }
+    window.open(o.url, '_blank', 'noopener'); return;
   }
   if (e.target.classList.contains('ed')) { openPal(e.target, k, id, true); return; }   // 제목 정하기
   if (e.target.classList.contains('plus')) {     // 이 메모 옆에 새 메모
@@ -528,14 +637,18 @@ $('#canvas').addEventListener('click', (e) => {
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
   const box = e.target.closest('[data-k]'); if (!box) return;
   e.preventDefault();
+  if (box.dataset.k === 'l') { openLnkEd({ left: e.clientX, bottom: e.clientY }, box.dataset.id); return; }
   const tx = e.target.closest('.tx');
   if (tx && String(window.getSelection()).trim()) {      // 글자를 끌어서 고른 뒤 = 글자 모양 바꾸기
     $('#pal').hidden = true; palFor = null;
     fmtFor = tx;
+    const g0 = window.getSelection();
+    fmtRange = g0.rangeCount ? g0.getRangeAt(0).cloneRange() : null;
     $('#fmt').innerHTML = `<button data-f="bold" title="굵게 (Ctrl+B)"><b>가</b></button>
       <button data-f="italic" title="기울임 (Ctrl+I)"><i>가</i></button>
       <button data-f="underline" title="밑줄 (Ctrl+U)"><u>가</u></button>
       <button data-f="strikeThrough" title="취소선"><s>가</s></button>
+      <select class="fz" title="글자 크기"><option value="">크기</option>${SIZES.map((f) => `<option value="${f}">${f}</option>`).join('')}</select>
       <button data-f="removeFormat" title="서식 지우기">지우기</button>`;
     $('#fmt').style.left = Math.max(8, Math.min(window.innerWidth - 210, e.clientX)) + 'px';
     $('#fmt').style.top = Math.min(window.innerHeight - 50, e.clientY + 4) + 'px';
@@ -550,6 +663,41 @@ $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 �
   const o = find('n', box.dataset.id); if (!o) return;
   o.min = !o.min; touch(); render();
 });
+const URL_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,)\]}])/g;
+function linkify(el) {                                 // 글 속의 주소를 눌러서 들어갈 수 있게 만든다
+  let changed = false;
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  const hits = [];
+  while (walk.nextNode()) {
+    const n = walk.currentNode;
+    if (n.parentNode && n.parentNode.closest && n.parentNode.closest('a')) continue;
+    if (URL_RE.test(n.nodeValue)) hits.push(n);
+    URL_RE.lastIndex = 0;
+  }
+  for (const n of hits) {
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    URL_RE.lastIndex = 0;
+    while ((m = URL_RE.exec(n.nodeValue))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(n.nodeValue.slice(last, m.index)));
+      const a = document.createElement('a');
+      a.href = m[1]; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = m[1];
+      frag.appendChild(a); last = m.index + m[1].length;
+    }
+    if (last < n.nodeValue.length) frag.appendChild(document.createTextNode(n.nodeValue.slice(last)));
+    n.parentNode.replaceChild(frag, n); changed = true;
+  }
+  return changed;
+}
+$('#canvas').addEventListener('focusout', (e) => {     // 칸을 벗어날 때 주소를 링크로 바꾼다
+  const el = e.target.closest && e.target.closest('.tx'); if (!el) return;
+  if (linkify(el)) saveTx(el);
+});
+$('#canvas').addEventListener('click', (e) => {        // 링크는 눌러서 새 탭으로
+  const a = e.target.closest('a'); if (!a || !a.closest('.tx')) return;
+  e.preventDefault(); e.stopPropagation();
+  if (/^https?:/i.test(a.href)) window.open(a.href, '_blank', 'noopener');
+}, true);
 function saveTx(el) {                                  // 서식 있는 본문 저장
   const box = el && el.closest('[data-k]'); if (!box) return;
   const o = find(box.dataset.k, box.dataset.id); if (!o) return;
@@ -594,7 +742,7 @@ $('#canvas').addEventListener('mousedown', (e) => {
   const rz = t.classList.contains('rz');
   if (!rz) {
     if (t.tagName === 'INPUT' || t.closest('.tx')) return;           // 글자 칸: 글자 선택이 우선
-    const canMove = t.closest('.hd') || (k === 'n' && t.tagName === 'IMG');
+    const canMove = t.closest('.hd') || k === 'l' || (k === 'n' && t.tagName === 'IMG');
     if (!canMove) return;                                            // 제목 줄로만 옮긴다
   }
   const base = { o, box, k, sx: e.clientX, sy: e.clientY, x: o.x, y: o.y, w: o.w, h: o.h };
@@ -604,6 +752,7 @@ $('#canvas').addEventListener('mousedown', (e) => {
   }
   else pend = { ...base, mode: 'mv' };
   moved = false;
+  if (k === 'l' && sel !== o.id) { sel = o.id; box.classList.add('sel'); }
   if (k === 'n' && sel !== o.id) { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch(); }
 });
 document.addEventListener('mousemove', (e) => {
@@ -646,16 +795,43 @@ document.addEventListener('mouseup', () => {
   drag = null; document.body.style.userSelect = ''; touch(); render();
 });
 
-// ---- 글자 모양 (굵게·기울임·밑줄·취소선) ----
-let fmtFor = null;
+// ---- 글자 모양 (굵게·기울임·밑줄·취소선·크기) ----
+let fmtFor = null, fmtRange = null, fmtBusy = false;
+function closeFmt() { $('#fmt').hidden = true; fmtFor = null; fmtRange = null; }
+function keepSel() {                                   // 창을 눌러도 고른 글자가 풀리지 않게 되살린다
+  if (!fmtFor || !fmtRange) return false;
+  fmtBusy = true;
+  try { fmtFor.focus(); const g = window.getSelection(); g.removeAllRanges(); g.addRange(fmtRange); }
+  catch (err) { fmtBusy = false; return false; }
+  setTimeout(() => { fmtBusy = false; }, 0);
+  return true;
+}
+function fmtSize(px) {                                 // 고른 글자만 크기 바꾸기
+  const g = window.getSelection(); if (!g.rangeCount) return;
+  const r = g.getRangeAt(0); if (r.collapsed) return;
+  const sp = document.createElement('span'); sp.style.fontSize = fsFix(px) + 'px';
+  try { r.surroundContents(sp); } catch (err) { sp.appendChild(r.extractContents()); r.insertNode(sp); }
+  const n = document.createRange(); n.selectNodeContents(sp);
+  g.removeAllRanges(); g.addRange(n); fmtRange = n.cloneRange();
+}
 $('#fmt').addEventListener('mousedown', (e) => e.preventDefault());   // 고른 글자가 풀리지 않게
 $('#fmt').onclick = (e) => {
-  const f = e.target.closest('button') && e.target.closest('button').dataset.f;
-  if (!f || !fmtFor) return;
-  document.execCommand(f, false, null);
+  const btn = e.target.closest('button'); if (!btn || !fmtFor) return;
+  if (!keepSel()) return;
+  document.execCommand(btn.dataset.f, false, null);
   saveTx(fmtFor);
-  $('#fmt').hidden = true; fmtFor = null;
 };
+$('#fmt').onchange = (e) => {
+  if (!e.target.classList.contains('fz') || !fmtFor) return;
+  const v = e.target.value; e.target.selectedIndex = 0;
+  if (!v || !keepSel()) return;
+  fmtSize(v); saveTx(fmtFor);
+};
+document.addEventListener('selectionchange', () => {   // 고른 글자가 없어지면 창도 닫는다
+  if ($('#fmt').hidden || fmtBusy) return;
+  if (!String(window.getSelection()).trim()) closeFmt();
+});
+document.addEventListener('click', (e) => { if (!$('#fmt').hidden && !e.target.closest('#fmt')) closeFmt(); });
 
 // ---- 색 · 글자 크기 ----
 let palFor = null;
@@ -813,12 +989,12 @@ document.addEventListener('keydown', (e) => {
   if (!$('#helpMask').hidden) $('#helpMask').hidden = true;
 });
 function openBin() {
-  const list = trash.map((t, i) => ({ t, i })).filter((x) => x.t.k !== 'l');   // 바로가기 기능은 없앴다
+  const list = trash.map((t, i) => ({ t, i }));
   $('#bin').innerHTML = `<div class="hdr"><b>🗑 휴지통</b><span>지운 메모 · 범위 (최근 50개까지 보관)</span>
       <button class="cl" data-a="close" title="닫기">✕</button></div>
     <div class="list">${list.length ? list.map(({ t, i }) => `<div class="it" data-i="${i}">
         ${binPv(t)}
-        <div class="mt"><div class="tt"><span class="kd">${t.k === 'a' ? '범위' : '메모'}</span>${esc(binName(t))}</div>
+        <div class="mt"><div class="tt"><span class="kd">${t.k === 'a' ? '범위' : t.k === 'l' ? '링크' : '메모'}</span>${esc(binName(t))}</div>
           <div class="sub">${binSub(t)}</div></div>
         <button data-a="back">되살리기</button><button class="rm" data-a="rm" title="완전히 지우기">✕</button></div>`).join('')
       : '<div style="color:var(--muted);font-size:13px;padding:26px 4px;text-align:center">비어 있습니다.<br>메모의 ✕ 로 지우면 여기로 들어옵니다.</div>'}</div>
@@ -844,6 +1020,7 @@ $('#binMask').onclick = (e) => {
     if (t.p && (home.pages || []).some((g) => g.id === t.p)) home.ap = t.p;
   }
   if (t.k === 'a') cur().areas.push(o);
+  else if (t.k === 'l') { cur().links.push(o); unstack(o, 'l'); sel = o.id; }
   else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
   touch(); render(); $('#binMask').hidden = true;
   const el = document.querySelector(`[data-id="${o.id}"]`); if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -864,6 +1041,10 @@ const HELP = `
     <li>내용 글자를 끌어서 고른 뒤 <b>오른쪽 단추</b>를 누르면 <b>굵게·기울임·밑줄·취소선</b>을 줄 수 있습니다
       (<b>Ctrl+B</b> 굵게, <b>Ctrl+I</b> 기울임, <b>Ctrl+U</b> 밑줄).</li>
     <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
+  <h4>링크 아이콘</h4>
+  <ul><li><b>＋ 기타 → 🔗 링크 아이콘 만들기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둡니다.</li>
+    <li>한 번 누르면 새 탭으로 열리고, <b>오른쪽 단추</b>로 이름·주소·아이콘을 고칩니다.</li>
+    <li>메모 안에 적은 <b>주소(http…)</b>는 칸을 벗어나면 저절로 링크가 되어 눌러서 들어갈 수 있습니다.</li></ul>
   <h4>범위</h4>
   <ul><li><b>＋ 새 범위</b> 는 메모를 묶어 두는 점선 칸입니다. 제목 줄로 옮기고 이름을 적습니다.</li>
     <li>범위를 지워도 <b>안에 있던 메모는 그대로</b> 남습니다.</li></ul>
@@ -930,11 +1111,13 @@ $('#cfg').onclick = (e) => {
 };
 
 document.addEventListener('mousedown', (e) => {
-  if (!e.target.closest('#fmt')) { $('#fmt').hidden = true; fmtFor = null; }
+  if (!e.target.closest('#fmt')) closeFmt();
   if (!e.target.closest('#cfg') && !e.target.closest('#cfgBtn')) $('#cfg').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
   if (!e.target.closest('#pmenu') && !e.target.closest('.pg')) $('#pmenu').hidden = true;
+  if (!e.target.closest('#etc') && !e.target.closest('#addEtc')) $('#etc').hidden = true;
+  if (!e.target.closest('#lnkEd') && !e.target.closest('.lnk')) { $('#lnkEd').hidden = true; lnkFor = null; }
 });
 
 // ---- 저장 ----

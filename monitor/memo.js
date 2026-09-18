@@ -11,23 +11,37 @@ const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 �
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
-// 메모 본문 서식: 굵게·기울임·밑줄·취소선·줄바꿈만 남기고 전부 걷어낸다 (붙여넣기·저장된 값 모두)
+// 메모 본문 서식: 굵게·기울임·밑줄·취소선·줄바꿈·글자 크기·링크만 남기고 전부 걷어낸다
 const TAG_OK = { b: 1, strong: 1, i: 1, em: 1, u: 1, s: 1, strike: 1, br: 1, div: 1, p: 1 };
 function safeHtml(v, max) {
   let t = String(v == null ? '' : v);
   t = t.replace(/<!--[\s\S]*?-->/g, '');
   t = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
-  t = t.replace(/<\/?([a-z0-9]+)[^>]*>/gi, (m, tag) => {
+  t = t.replace(/<\/?([a-z0-9]+)([^>]*)>/gi, (m, tag, attr) => {
     tag = tag.toLowerCase();
+    const close = m[1] === '/';
+    if (tag === 'span') {                                  // 글자 크기만 허용
+      if (close) return '</span>';
+      const f = /font-size\s*:\s*(\d{1,3})px/i.exec(attr || '');
+      const px = f ? Math.min(72, Math.max(8, Number(f[1]))) : 0;
+      return px ? `<span style="font-size:${px}px">` : '<span>';
+    }
+    if (tag === 'a') {                                     // 웹 주소만 허용
+      if (close) return '</a>';
+      const h = /href\s*=\s*["']?(https?:\/\/[^"'\s>]+)/i.exec(attr || '');
+      if (!h) return '';
+      const url = h[1].replace(/"/g, '%22').slice(0, 500);
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer">`;
+    }
     if (!TAG_OK[tag]) return '';
-    return m[1] === '/' ? `</${tag}>` : (tag === 'br' ? '<br>' : `<${tag}>`);
+    return close ? `</${tag}>` : (tag === 'br' ? '<br>' : `<${tag}>`);
   });
   return t.slice(0, max);
 }
 const color = (v, d) => /^[a-z0-9-]{1,20}$/i.test(String(v || '')) ? String(v) : d;
 const rid = () => Math.random().toString(36).slice(2, 10);
-// 바로가기 주소: 웹(http/https)과 원격데스크톱(mstsc:)만 허용한다 (javascript: 같은 건 버린다)
-const href = (v) => { const t = String(v == null ? '' : v).trim().slice(0, 500); return /^(https?:\/\/|mstsc:)/i.test(t) ? t : ''; };
+// 바로가기 주소: 웹(http/https)만 허용한다 (javascript: 같은 건 버린다)
+const href = (v) => { const t = String(v == null ? '' : v).trim().slice(0, 500); return /^https?:\/\//i.test(t) ? t : ''; };
 
 function create(opts) {
   const FILE = opts.file;
