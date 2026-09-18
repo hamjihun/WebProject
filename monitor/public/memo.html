@@ -177,8 +177,9 @@
   #fmt button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     min-width:30px; height:30px; font:inherit; font-size:13px; cursor:pointer; padding:0 7px; }
   #fmt button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
-  #fmt select.fz { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
-    height:30px; font:inherit; font-size:12px; cursor:pointer; padding:0 2px; }
+  #fmt .gp { display:flex; align-items:center; gap:2px; border:1px solid var(--line); border-radius:var(--r); padding:0 4px; }
+  #fmt .gp button { border:0; min-width:20px; padding:0 2px; }
+  #fmt .fv { min-width:22px; text-align:center; font-size:12px; color:var(--muted); }
   #fmt button b { font-weight:800; } #fmt button i { font-style:italic; } #fmt button u { text-decoration:underline; }
   #fmt button s { text-decoration:line-through; }
   .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
@@ -654,17 +655,16 @@ $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추
   if (tx && String(window.getSelection()).trim()) {      // 글자를 끌어서 고른 뒤 = 글자 모양 바꾸기
     $('#pal').hidden = true; palFor = null;
     fmtFor = tx;
-    const g0 = window.getSelection();
-    fmtRange = g0.rangeCount ? g0.getRangeAt(0).cloneRange() : null;
     $('#fmt').innerHTML = `<button data-f="bold" title="굵게 (Ctrl+B)"><b>가</b></button>
       <button data-f="italic" title="기울임 (Ctrl+I)"><i>가</i></button>
       <button data-f="underline" title="밑줄 (Ctrl+U)"><u>가</u></button>
       <button data-f="strikeThrough" title="취소선"><s>가</s></button>
-      <select class="fz" title="글자 크기"><option value="">크기</option>${SIZES.map((f) => `<option value="${f}">${f}</option>`).join('')}</select>
+      <span class="gp"><button data-fz="-" title="글자 작게">－</button><b class="fv">13</b><button data-fz="+" title="글자 크게">＋</button></span>
       <button data-f="removeFormat" title="서식 지우기">지우기</button>`;
     $('#fmt').style.left = Math.max(8, Math.min(window.innerWidth - 210, e.clientX)) + 'px';
     $('#fmt').style.top = Math.min(window.innerHeight - 50, e.clientY + 4) + 'px';
     $('#fmt').hidden = false;
+    showFs(curFs());
     return;
   }
   openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
@@ -826,39 +826,54 @@ document.addEventListener('mouseup', () => {
 });
 
 // ---- 글자 모양 (굵게·기울임·밑줄·취소선·크기) ----
-let fmtFor = null, fmtRange = null, fmtBusy = false;
-function closeFmt() { $('#fmt').hidden = true; fmtFor = null; fmtRange = null; }
-function keepSel() {                                   // 창을 눌러도 고른 글자가 풀리지 않게 되살린다
-  if (!fmtFor || !fmtRange) return false;
-  fmtBusy = true;
-  try { fmtFor.focus(); const g = window.getSelection(); g.removeAllRanges(); g.addRange(fmtRange); }
-  catch (err) { fmtBusy = false; return false; }
-  setTimeout(() => { fmtBusy = false; }, 0);
-  return true;
+// 창 위에서 mousedown 을 막아 두면 고른 글자와 커서가 그대로 살아 있으므로,
+// execCommand 가 켜기/끄기(토글)까지 정상으로 동작한다. (되살리는 처리를 따로 하면 오히려 깨진다)
+let fmtFor = null;
+function closeFmt() { $('#fmt').hidden = true; fmtFor = null; }
+function selEl() {                                     // 고른 글자가 걸쳐 있는 요소
+  const g = window.getSelection(); if (!g.rangeCount) return null;
+  let n = g.anchorNode; if (!n) return null;
+  if (n.nodeType === 3) n = n.parentNode;
+  return n && n.closest ? n : null;
 }
-function fmtSize(px) {                                 // 고른 글자만 크기 바꾸기
+function curFs() {
+  const el = selEl();
+  if (!el || !fmtFor || !fmtFor.contains(el)) return prefs.fs || 13;
+  return fsFix(parseFloat(getComputedStyle(el).fontSize) || 13);
+}
+function showFs(v) { const b = $('#fmt .fv'); if (b) b.textContent = fsFix(v); }
+function fmtSize(px) {                                 // 고른 글자만 크기 바꾸기 (겹쳐 쌓이지 않게)
   const g = window.getSelection(); if (!g.rangeCount) return;
   const r = g.getRangeAt(0); if (r.collapsed) return;
-  const sp = document.createElement('span'); sp.style.fontSize = fsFix(px) + 'px';
-  try { r.surroundContents(sp); } catch (err) { sp.appendChild(r.extractContents()); r.insertNode(sp); }
-  const n = document.createRange(); n.selectNodeContents(sp);
-  g.removeAllRanges(); g.addRange(n); fmtRange = n.cloneRange();
+  let box = r.commonAncestorContainer;
+  if (box && box.nodeType === 3) box = box.parentNode;
+  if (box && box.tagName === 'SPAN' && box.style.fontSize && r.toString() === box.textContent) {
+    box.style.fontSize = fsFix(px) + 'px';              // 이미 크기를 준 덩어리를 그대로 고름 → 값만 바꾼다
+  } else {
+    const sp = document.createElement('span'); sp.style.fontSize = fsFix(px) + 'px';
+    try { r.surroundContents(sp); } catch (err) { sp.appendChild(r.extractContents()); r.insertNode(sp); }
+    sp.querySelectorAll('span[style*="font-size"]').forEach((x) => {   // 안쪽에 남은 크기 지정은 걷어낸다
+      x.style.fontSize = '';
+      if (!x.getAttribute('style')) x.replaceWith(...x.childNodes);
+    });
+    box = sp;
+  }
+  const n = document.createRange(); n.selectNodeContents(box);
+  g.removeAllRanges(); g.addRange(n);
 }
 $('#fmt').addEventListener('mousedown', (e) => e.preventDefault());   // 고른 글자가 풀리지 않게
 $('#fmt').onclick = (e) => {
   const btn = e.target.closest('button'); if (!btn || !fmtFor) return;
-  if (!keepSel()) return;
-  document.execCommand(btn.dataset.f, false, null);
-  saveTx(fmtFor);
-};
-$('#fmt').onchange = (e) => {
-  if (!e.target.classList.contains('fz') || !fmtFor) return;
-  const v = e.target.value; e.target.selectedIndex = 0;
-  if (!v || !keepSel()) return;
-  fmtSize(v); saveTx(fmtFor);
+  if (btn.dataset.fz) {                                // 크기 − / ＋
+    const v = fsStep(curFs(), btn.dataset.fz === '+' ? 1 : -1);
+    fmtSize(v); showFs(v); saveTx(fmtFor); return;
+  }
+  if (!btn.dataset.f) return;
+  document.execCommand(btn.dataset.f, false, null);    // 한 번 더 누르면 해제된다
+  saveTx(fmtFor); showFs(curFs());
 };
 document.addEventListener('selectionchange', () => {   // 고른 글자가 없어지면 창도 닫는다
-  if ($('#fmt').hidden || fmtBusy) return;
+  if ($('#fmt').hidden) return;
   if (!String(window.getSelection()).trim()) closeFmt();
 });
 document.addEventListener('click', (e) => { if (!$('#fmt').hidden && !e.target.closest('#fmt')) closeFmt(); });
