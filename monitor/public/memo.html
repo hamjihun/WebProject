@@ -271,6 +271,7 @@
 <div class="pop" id="bmenu" hidden></div>
 <div class="mask" id="binMask" hidden><div class="pop" id="bin"></div></div>
 <div class="mask" id="helpMask" hidden><div class="pop" id="help"></div></div>
+<input type="file" id="upfile" accept=".json,application/json" hidden>
 <div class="pop" id="cfg" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
 <div class="pop" id="fmt" hidden></div>
@@ -606,7 +607,12 @@ document.addEventListener('paste', async (e) => {
 
 // ---- 클릭 ----
 $('#canvas').addEventListener('click', (e) => {
-  const box = e.target.closest('[data-k]'); if (!box) { sel = null; render(); return; }
+  if (String(window.getSelection()).trim()) return;   // 글자를 끌어서 고르는 중이면 건드리지 않는다
+  const box = e.target.closest('[data-k]');
+  if (!box) {                                         // 빈 바탕: 고른 메모만 풀고 다시 그리지 않는다
+    if (sel) { const prev = document.querySelector('[data-k].sel'); if (prev) prev.classList.remove('sel'); sel = null; }
+    return;
+  }
   const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
   if (e.target.classList.contains('x')) {         // 지우면 휴지통으로 (되살릴 수 있음)
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
@@ -1027,6 +1033,38 @@ $('#binMask').onclick = (e) => {
 };
 
 
+// ---- 백업 · 복원 ----
+function backupDown() {
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards, trash, prefs };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `IMS-memo-backup-${stamp}.json`;   // 한글 이름은 브라우저가 버리는 경우가 있어 영문으로
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  const n = boards.reduce((m, b) => m + (b.pages || []).reduce((q, g) => q + g.notes.length + g.areas.length + (g.links || []).length, 0), 0);
+  $('#st').textContent = `백업 ${n}개`;
+}
+$('#upfile').onchange = async (e) => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    if (!j || j.app !== 'ims-memo' || !Array.isArray(j.boards) || !j.boards.length) throw new Error('메모 백업 파일이 아닙니다');
+    const n = j.boards.reduce((m, b) => m + (b.pages || []).reduce((q, g) => q + (g.notes || []).length + (g.areas || []).length + (g.links || []).length, 0), 0);
+    const when = j.saved ? new Date(j.saved).toLocaleString('ko-KR') : '시각 모름';
+    if (!confirm(`${when} 에 받은 백업입니다.\n메모판 ${j.boards.length}개 · 내용 ${n}개.\n\n지금 메모는 모두 이 백업으로 바뀝니다. 되돌릴 수 없습니다. 계속할까요?`)) return;
+    boards = j.boards;
+    active = j.boards.some((b) => b.id === j.active) ? j.active : j.boards[0].id;
+    trash = Array.isArray(j.trash) ? j.trash : [];
+    if (j.prefs) prefs = { ...prefs, ...j.prefs };
+    sel = null; touch(); render(); await saveNow();
+    alert('복원했습니다.');
+  } catch (err) { alert('복원하지 못했습니다: ' + err.message); }
+};
+
 // ---- 도움말 ----
 const HELP = `
   <h4>메모 만들기</h4>
@@ -1053,6 +1091,9 @@ const HELP = `
       탭을 다시 누르거나 <b>오른쪽 단추</b>를 누르면 메뉴(이름·색·순서·지우기)가 나옵니다.</li>
     <li>왼쪽 = 그 메모판 안의 <b>탭</b> (예: 회의록 → 9월 17일 회의록). <b>＋ 새 탭</b> 으로 만들고
       <b>‹ ›</b> 로 접었다 폅니다.</li></ul>
+  <h4>백업</h4>
+  <ul><li><b>⚙ → 💾 백업 받기</b> 를 누르면 메모 전체(사진 포함)가 <b>파일 하나</b>로 내려받아집니다.</li>
+    <li><b>⚙ → 📂 복원</b> 에서 그 파일을 고르면 그때 상태로 되돌아갑니다 (지금 메모는 지워지니 주의).</li></ul>
   <h4>휴지통과 설정</h4>
   <ul><li>메모의 <b>✕</b> 로 지우면 <b>🗑 휴지통</b> 으로 들어가고, 거기서 내용을 확인하고 되살립니다 (최근 50개).</li>
     <li><b>⚙</b> 에서 새 메모의 색·글자 크기·크기, 새 범위 색, 자석, <b>화면 테마(밝게/어둡게)</b> 를 정합니다.</li>
@@ -1087,6 +1128,8 @@ function openCfg() {
     <div class="row"><button data-p="magnet" data-v="1" class="${prefs.magnet ? 'on' : ''}">켜기</button>
       <button data-p="magnet" data-v="0" class="${prefs.magnet ? '' : 'on'}">끄기</button></div>
     <div style="color:var(--muted);font-size:11px;margin-top:11px;line-height:1.6">여기서 정한 색·크기는 <b>앞으로 새로 만드는</b> 메모에 적용됩니다. 이미 붙여 둔 메모는 그대로입니다.</div>
+    <div class="sec" style="margin-top:12px">백업</div>
+    <div class="row"><button data-p="dl">💾 백업 받기</button><button data-p="up">📂 복원</button></div>
     <button class="hlp" data-p="help">❓ 도움말 (사용법 보기)</button>`;
   const r = $('#cfgBtn').getBoundingClientRect();
   $('#cfg').style.left = Math.max(8, Math.min(window.innerWidth - 270, r.right - 250)) + 'px';
@@ -1106,6 +1149,8 @@ $('#cfg').onclick = (e) => {
   else if (k === 'fs') prefs.fs = Number(v);
   else if (k === 'theme') { prefs.theme = v; applyTheme(); }
   else if (k === 'help') { $('#cfg').hidden = true; openHelp(); return; }
+  else if (k === 'dl') { $('#cfg').hidden = true; backupDown(); return; }
+  else if (k === 'up') { $('#cfg').hidden = true; $('#upfile').value = ''; $('#upfile').click(); return; }
   else prefs[k] = v;
   touch(); openCfg();
 };
