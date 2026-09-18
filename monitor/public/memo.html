@@ -675,6 +675,24 @@ $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 �
   const o = find('n', box.dataset.id); if (!o) return;
   o.min = !o.min; touch(); render();
 });
+// 글자를 끌어서 고를 때: 커서가 메모 밖으로 나가도 선택이 풀리지 않게 그 방향 끝까지 이어 준다
+let selHost = null;
+document.addEventListener('mousedown', (e) => {
+  selHost = (e.button === 0 && e.target.closest) ? e.target.closest('.tx') : null;
+}, true);
+document.addEventListener('mousemove', (e) => {
+  if (!selHost) return;
+  if (!(e.buttons & 1)) { selHost = null; return; }              // 단추를 뗐으면 끝
+  const r = selHost.getBoundingClientRect();
+  if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return;
+  const g = window.getSelection();
+  if (!g.rangeCount || !g.anchorNode || !selHost.contains(g.anchorNode)) return;
+  const toEnd = e.clientY > r.bottom || (e.clientY >= r.top && e.clientX > r.right);
+  const all = document.createRange(); all.selectNodeContents(selHost);
+  try { g.extend(toEnd ? all.endContainer : all.startContainer, toEnd ? all.endOffset : all.startOffset); } catch (err) {}
+});
+document.addEventListener('mouseup', () => { selHost = null; });
+
 const URL_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,)\]}])/g;
 function linkify(el) {                                 // 글 속의 주소를 눌러서 들어갈 수 있게 만든다
   let changed = false;
