@@ -36,6 +36,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 - 에이전트 업그레이드: 새 Setup.exe 를 다음만 눌러 재설치 (설정 유지). 제거 시 `/api/unregister` 호출로 화면에서 자동 삭제.
 
 ## 코드 규약
+- 팝업을 숨길 때 `hidden` 속성만 믿지 말 것. 같은 요소에 `#id { display:… }` 를 주면 `[hidden]` 규칙(`display:none`)을 이겨서 안 사라진다 → `#id:not([hidden])` 로 쓰고, 검증도 `getComputedStyle(el).display` 로 한다 (2026-09-18 글자 모양 창 사례).
 - 버전 올릴 때 `server.js` VERSION, `index.html` UI_VERSION 동시 수정. 에이전트는 `installer.nsi` VERSION.
 - Windows 파일 인코딩: `.ps1`/`.nsi` UTF-8 **BOM** + CRLF, `.cmd`/`.vbs` **CP949** + CRLF (`.gitattributes` 에 `-text`). 수정 후 `sed -i 's/\r$//; s/$/\r/'` 로 CRLF 유지.
 - Windows PowerShell 5.1 호환 유지 (PS7 전용 문법 금지). `Get-Counter` 사용 금지 (부팅 직후 멈춤 이슈로 WMI 원시값 사용).
@@ -46,6 +47,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-18 (31): **글자 모양 창이 닫히지 않던 진짜 원인** (1.29.5). `#fmt { display:flex }` 가 `.pop[hidden] { display:none }` 보다 **선택자 우선순위가 높아**, `hidden` 을 켜도 화면에서 사라지지 않았다(닫는 코드는 정상 동작 중이었음). `#fmt:not([hidden]) { display:flex }` 로 바꿔 해결. 그동안 테스트가 `el.hidden` 속성만 확인해 놓쳤으므로, **앞으로 팝업 검증은 `getComputedStyle(el).display` 로** 한다. (다른 팝업 `#cfg`·`#lnkEd`·`#pal` 등은 display 를 따로 주지 않아 문제 없음)
 - 2026-09-18 (30): 글자 모양 창이 실사용 환경에서 안 닫힌다는 보고 → **닫는 길을 여러 개로** (1.29.4). 창 안에 **✕ 닫기 단추** 추가, `pointerdown/mousedown/click/touchstart/wheel` 을 **잡아채기(capture) 단계**에서 확인해 중간에 이벤트가 막혀도 닫히게, **Esc**(capture)·창 포커스 잃음에도 닫는다. 화면 파일이 실제로 갱신됐는지 눈으로 확인할 수 있도록 ⚙ 설정 아래에 **`메모 화면 v1.29.4`** 표시(정적 파일은 `Cache-Control: no-store` 로 나가고 매 요청 디스크에서 읽으므로 `git pull` 만으로 반영된다).
 - 2026-09-18 (29): 글자 모양 창 3가지 수정 (1.29.3). 원인은 고른 글자를 되살리려던 `keepSel()/fmtRange` — 첫 실행 뒤 Range 가 낡아 두 번째부터 아무 것도 안 먹었다. 그 처리를 전부 걷어내고 **창 위 mousedown 만 막아** 선택·커서를 살려 두니 `execCommand` 가 토글(굵게 해제)까지 정상 동작. 글자 크기는 포커스를 뺏는 `<select>` 대신 **`－ [숫자] ＋` 단추**로 바꾸고(현재 크기 표시), `fmtSize()` 가 같은 덩어리면 span 값만 바꿔 **중첩 span 이 쌓이지 않게** 했다. 창은 바깥 클릭·선택 해제 시 닫힌다.
 - 2026-09-18 (28): 글자를 끌어 고를 때 **커서가 메모 밖으로 나가도 선택이 이어지도록** 보강 (1.29.2). `.tx` 에서 시작한 드래그를 기억해 두고(`selHost`), 포인터가 메모 밖으로 나가면 `Selection.extend()` 로 아래·오른쪽이면 글 끝까지, 위·왼쪽이면 글 처음까지 이어 준다. (1.29.0 의 "빈 바탕 클릭 시 다시 그리지 않기" 와 함께 동작)

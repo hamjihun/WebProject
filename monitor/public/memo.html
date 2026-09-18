@@ -173,7 +173,8 @@
   .note .tx:empty::before { content:attr(data-ph); color:rgba(31,41,55,.38); }
   .note .tx a { color:#1d4ed8; text-decoration:underline; cursor:pointer; word-break:break-all; }
   .note .tx a:hover { color:#1e40af; }
-  #fmt { padding:5px; display:flex; gap:3px; }
+  #fmt:not([hidden]) { display:flex; }                 /* [hidden] 보다 우선순위가 높아지지 않게 :not() 으로 */
+  #fmt { padding:5px; gap:3px; }
   #fmt button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
     min-width:30px; height:30px; font:inherit; font-size:13px; cursor:pointer; padding:0 7px; }
   #fmt button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
@@ -1164,7 +1165,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.29.4';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.29.5';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
