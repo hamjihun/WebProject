@@ -11,6 +11,19 @@ const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 �
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+// 메모 본문 서식: 굵게·기울임·밑줄·취소선·줄바꿈만 남기고 전부 걷어낸다 (붙여넣기·저장된 값 모두)
+const TAG_OK = { b: 1, strong: 1, i: 1, em: 1, u: 1, s: 1, strike: 1, br: 1, div: 1, p: 1 };
+function safeHtml(v, max) {
+  let t = String(v == null ? '' : v);
+  t = t.replace(/<!--[\s\S]*?-->/g, '');
+  t = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+  t = t.replace(/<\/?([a-z0-9]+)[^>]*>/gi, (m, tag) => {
+    tag = tag.toLowerCase();
+    if (!TAG_OK[tag]) return '';
+    return m[1] === '/' ? `</${tag}>` : (tag === 'br' ? '<br>' : `<${tag}>`);
+  });
+  return t.slice(0, max);
+}
 const color = (v, d) => /^[a-z0-9-]{1,20}$/i.test(String(v || '')) ? String(v) : d;
 const rid = () => Math.random().toString(36).slice(2, 10);
 // 바로가기 주소: 웹(http/https)과 원격데스크톱(mstsc:)만 허용한다 (javascript: 같은 건 버린다)
@@ -37,6 +50,7 @@ function create(opts) {
       x: clamp(num(n.x), 0, 20000), y: clamp(num(n.y), 0, 20000),
       w: clamp(num(n.w, 200), 80, 1600), h: clamp(num(n.h, 200), 60, 1600),
       title: str(n.title, 60), text: str(n.text, MAX_TEXT), color: color(n.color, 'yellow'), z: num(n.z, 1),
+      html: safeHtml(n.html, MAX_TEXT * 3),
       fs: clamp(num(n.fs, 13), 8, 72), min: !!n.min, updated: num(n.updated, Date.now()),
     };
     if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {

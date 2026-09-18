@@ -15,7 +15,15 @@
   :root[data-theme="dark"] .note .hd { background:rgba(0,0,0,.12); }
   :root[data-theme="dark"] #bin .ft button.rm:hover { background:rgba(251,113,133,.14); }
   #topnav a.alt { border-radius:var(--r) !important; }
-  * { box-sizing:border-box; }
+  * { box-sizing:border-box; scrollbar-width:thin; scrollbar-color:rgba(20,52,46,.28) transparent; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(20,52,46,.22); border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:rgba(20,52,46,.4); }
+  ::-webkit-scrollbar-corner { background:transparent; }
+  :root[data-theme="dark"] * { scrollbar-color:rgba(227,239,236,.25) transparent; }
+  :root[data-theme="dark"] ::-webkit-scrollbar-thumb { background:rgba(227,239,236,.2); }
+  :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background:rgba(227,239,236,.38); }
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; overflow:hidden; display:flex; flex-direction:column; }
   #topnav { flex:none; }
@@ -129,11 +137,19 @@
   .note .hb.plus { font-size:15px; margin-right:1px; }
   /* 제목 줄 두 번 누르면 접힘 (제목만 보임) */
   .note.min { height:auto !important; }
-  .note.min textarea, .note.min img, .note.min .rz { display:none; }
+  .note.min .tx, .note.min img, .note.min .rz { display:none; }
   .note img { cursor:move; }
   .note.mv, .area.mv { cursor:grabbing; opacity:.92; }
-  .note textarea { flex:1; width:100%; background:none; border:0; resize:none; padding:5px 7px 7px; font-family:inherit; font-size:var(--fs,13px); line-height:1.5; color:#1f2937; }
-  .note textarea:focus { outline:none; }
+  .note .tx { flex:1; width:100%; overflow:auto; background:none; border:0; padding:5px 7px 7px; font-family:inherit;
+    font-size:var(--fs,13px); line-height:1.5; color:#1f2937; white-space:pre-wrap; word-break:break-word; cursor:text; }
+  .note .tx:focus { outline:none; }
+  .note .tx:empty::before { content:attr(data-ph); color:rgba(31,41,55,.38); }
+  #fmt { padding:5px; display:flex; gap:3px; }
+  #fmt button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    min-width:30px; height:30px; font:inherit; font-size:13px; cursor:pointer; padding:0 7px; }
+  #fmt button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
+  #fmt button b { font-weight:800; } #fmt button i { font-style:italic; } #fmt button u { text-decoration:underline; }
+  #fmt button s { text-decoration:line-through; }
   .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
 
   .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); flex:none; }
@@ -225,6 +241,7 @@
 <div class="mask" id="helpMask" hidden><div class="pop" id="help"></div></div>
 <div class="pop" id="cfg" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
+<div class="pop" id="fmt" hidden></div>
 
 <script>try { const t = localStorage.getItem('imsMemoTheme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <script src="common.js"></script>
@@ -281,6 +298,8 @@ const cur = () => {                                                             
   return g;
 };
 
+const body = (n) => (n.html ? n.html : esc(n.text || '').replace(/\n/g, '<br>'));   // 예전 메모(글자만)도 그대로 보인다
+
 // ---- 그리기 ----
 function render() {
   const b = cur(), cv = $('#canvas');
@@ -301,7 +320,8 @@ function render() {
         <span class="nt ${n.title ? '' : 'no'}">${esc(n.title || '제목 없음')}</span>
         <button class="hb ed" title="제목 정하기 (오른쪽 단추 = 색·글자 크기)">✎</button>
         <button class="x" title="메모 지우기">✕</button></div>
-      ${n.img ? `<img src="${n.img}" draggable="false" alt="">` : `<textarea placeholder="메모를 적으세요">${esc(n.text)}</textarea>`}
+      ${n.img ? `<img src="${n.img}" draggable="false" alt="">`
+        : `<div class="tx" contenteditable="true" spellcheck="false" data-ph="메모를 적으세요">${body(n)}</div>`}
       <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>`).join('') +
     '';
@@ -432,7 +452,7 @@ function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLe
 function newNote(x, y) {
   const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: prefs.w, h: prefs.h, title: '', text: '', color: prefs.color, z: topZ() + 1, fs: prefs.fs };
   cur().notes.push(n); unstack(n, 'n'); sel = n.id; touch(); render();
-  const el = document.querySelector(`.note[data-id="${n.id}"] textarea`); if (el) el.focus();
+  const el = document.querySelector(`.note[data-id="${n.id}"] .tx`); if (el) el.focus();
 }
 $('#addNote').onclick = () => {
   const c = viewCenter(), k = cur().notes.length;
@@ -508,6 +528,20 @@ $('#canvas').addEventListener('click', (e) => {
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
   const box = e.target.closest('[data-k]'); if (!box) return;
   e.preventDefault();
+  const tx = e.target.closest('.tx');
+  if (tx && String(window.getSelection()).trim()) {      // 글자를 끌어서 고른 뒤 = 글자 모양 바꾸기
+    $('#pal').hidden = true; palFor = null;
+    fmtFor = tx;
+    $('#fmt').innerHTML = `<button data-f="bold" title="굵게 (Ctrl+B)"><b>가</b></button>
+      <button data-f="italic" title="기울임 (Ctrl+I)"><i>가</i></button>
+      <button data-f="underline" title="밑줄 (Ctrl+U)"><u>가</u></button>
+      <button data-f="strikeThrough" title="취소선"><s>가</s></button>
+      <button data-f="removeFormat" title="서식 지우기">지우기</button>`;
+    $('#fmt').style.left = Math.max(8, Math.min(window.innerWidth - 210, e.clientX)) + 'px';
+    $('#fmt').style.top = Math.min(window.innerHeight - 50, e.clientY + 4) + 'px';
+    $('#fmt').hidden = false;
+    return;
+  }
   openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
 });
 $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 번 누르면 접었다 폈다
@@ -516,12 +550,35 @@ $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 �
   const o = find('n', box.dataset.id); if (!o) return;
   o.min = !o.min; touch(); render();
 });
+function saveTx(el) {                                  // 서식 있는 본문 저장
+  const box = el && el.closest('[data-k]'); if (!box) return;
+  const o = find(box.dataset.k, box.dataset.id); if (!o) return;
+  o.html = el.innerHTML; o.text = el.innerText; o.updated = Date.now(); touch();
+}
 $('#canvas').addEventListener('input', (e) => {
   const box = e.target.closest('[data-k]'); if (!box) return;
   const o = find(box.dataset.k, box.dataset.id); if (!o) return;
-  if (e.target.tagName === 'TEXTAREA') { o.text = e.target.value; o.updated = Date.now(); }
-  else if (e.target.classList.contains('t')) { o.title = e.target.value; }
+  if (e.target.classList.contains('tx')) { saveTx(e.target); return; }
+  if (e.target.classList.contains('t')) { o.title = e.target.value; }
   touch();
+});
+// 붙여넣기는 글자만 (남의 서식이 따라오지 않게)
+$('#canvas').addEventListener('paste', (e) => {
+  const el = e.target.closest && e.target.closest('.tx'); if (!el) return;
+  const items = e.clipboardData && e.clipboardData.items ? [...e.clipboardData.items] : [];
+  if (items.some((x) => x.type && x.type.startsWith('image/'))) return;    // 사진은 아래 사진 붙여넣기가 맡는다
+  e.preventDefault();
+  const t = (e.clipboardData.getData('text/plain') || '').slice(0, 5000);
+  document.execCommand('insertText', false, t);
+  saveTx(el);
+});
+// Ctrl+B / Ctrl+I / Ctrl+U
+$('#canvas').addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const el = e.target.closest && e.target.closest('.tx'); if (!el) return;
+  const cmd = { b: 'bold', i: 'italic', u: 'underline' }[e.key.toLowerCase()];
+  if (!cmd) return;
+  e.preventDefault(); document.execCommand(cmd, false, null); saveTx(el);
 });
 
 // ---- 옮기기 · 크기 ----
@@ -536,7 +593,7 @@ $('#canvas').addEventListener('mousedown', (e) => {
   if (t.tagName === 'BUTTON' || t.dataset.pal) return;               // 지우기·＋·제목·색 단추
   const rz = t.classList.contains('rz');
   if (!rz) {
-    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;    // 글자 칸: 글자 선택이 우선
+    if (t.tagName === 'INPUT' || t.closest('.tx')) return;           // 글자 칸: 글자 선택이 우선
     const canMove = t.closest('.hd') || (k === 'n' && t.tagName === 'IMG');
     if (!canMove) return;                                            // 제목 줄로만 옮긴다
   }
@@ -588,6 +645,17 @@ document.addEventListener('mouseup', () => {
   if (drag.mode === 'mv') unstack(drag.o, drag.k);
   drag = null; document.body.style.userSelect = ''; touch(); render();
 });
+
+// ---- 글자 모양 (굵게·기울임·밑줄·취소선) ----
+let fmtFor = null;
+$('#fmt').addEventListener('mousedown', (e) => e.preventDefault());   // 고른 글자가 풀리지 않게
+$('#fmt').onclick = (e) => {
+  const f = e.target.closest('button') && e.target.closest('button').dataset.f;
+  if (!f || !fmtFor) return;
+  document.execCommand(f, false, null);
+  saveTx(fmtFor);
+  $('#fmt').hidden = true; fmtFor = null;
+};
 
 // ---- 색 · 글자 크기 ----
 let palFor = null;
@@ -793,6 +861,8 @@ const HELP = `
     <li><b>아래 두 모서리</b>나 <b>좌·우·아래 가장자리</b>를 끌어 크기를 바꿉니다.</li>
     <li>제목 줄의 <b>✎</b> 로 제목을 정하고, 메모 위에서 <b>오른쪽 단추</b>를 누르면 <b>색·글자 크기</b>도 함께 정합니다.</li>
     <li>제목 줄을 <b>두 번 누르면</b> 접혀서 제목만 보입니다. 다시 두 번 누르면 펴집니다.</li>
+    <li>내용 글자를 끌어서 고른 뒤 <b>오른쪽 단추</b>를 누르면 <b>굵게·기울임·밑줄·취소선</b>을 줄 수 있습니다
+      (<b>Ctrl+B</b> 굵게, <b>Ctrl+I</b> 기울임, <b>Ctrl+U</b> 밑줄).</li>
     <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
   <h4>범위</h4>
   <ul><li><b>＋ 새 범위</b> 는 메모를 묶어 두는 점선 칸입니다. 제목 줄로 옮기고 이름을 적습니다.</li>
@@ -860,6 +930,7 @@ $('#cfg').onclick = (e) => {
 };
 
 document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#fmt')) { $('#fmt').hidden = true; fmtFor = null; }
   if (!e.target.closest('#cfg') && !e.target.closest('#cfgBtn')) $('#cfg').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
