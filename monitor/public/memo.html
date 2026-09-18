@@ -615,6 +615,12 @@ $('#canvas').addEventListener('click', (e) => {
   }
   const k = box.dataset.k, id = box.dataset.id, o = find(k, id); if (!o) return;
   if (e.target.classList.contains('x')) {         // 지우면 휴지통으로 (되살릴 수 있음)
+    const kind = k === 'n' ? '메모' : k === 'l' ? '링크' : '범위';
+    const nm = k === 'n' ? ((o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 20) || (o.img ? '사진 메모' : '빈 메모'))
+      : k === 'l' ? ((o.name || '').trim() || o.url || '이름 없는 링크')
+      : ((o.title || '').trim() || '이름 없는 범위');
+    const more = k === 'a' ? '\n(안에 있는 메모는 그대로 남습니다)' : '';
+    if (!confirm(`"${nm}" ${kind}를 지울까요?${more}\n\n휴지통에서 다시 살릴 수 있습니다.`)) return;
     if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
     else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
     else cur().areas = cur().areas.filter((x) => x.id !== id);
