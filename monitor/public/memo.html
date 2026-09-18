@@ -180,6 +180,8 @@
   #fmt .gp { display:flex; align-items:center; gap:2px; border:1px solid var(--line); border-radius:var(--r); padding:0 4px; }
   #fmt .gp button { border:0; min-width:20px; padding:0 2px; }
   #fmt .fv { min-width:22px; text-align:center; font-size:12px; color:var(--muted); }
+  #fmt button.cx { color:var(--muted); }
+  #fmt button.cx:hover { border-color:var(--bad); color:var(--bad); background:rgba(225,29,72,.08); }
   #fmt button b { font-weight:800; } #fmt button i { font-style:italic; } #fmt button u { text-decoration:underline; }
   #fmt button s { text-decoration:line-through; }
   .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
@@ -660,7 +662,8 @@ $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추
       <button data-f="underline" title="밑줄 (Ctrl+U)"><u>가</u></button>
       <button data-f="strikeThrough" title="취소선"><s>가</s></button>
       <span class="gp"><button data-fz="-" title="글자 작게">－</button><b class="fv">13</b><button data-fz="+" title="글자 크게">＋</button></span>
-      <button data-f="removeFormat" title="서식 지우기">지우기</button>`;
+      <button data-f="removeFormat" title="서식 지우기">지우기</button>
+      <button class="cx" data-f="close" title="닫기 (Esc)">✕</button>`;
     $('#fmt').style.left = Math.max(8, Math.min(window.innerWidth - 210, e.clientX)) + 'px';
     $('#fmt').style.top = Math.min(window.innerHeight - 50, e.clientY + 4) + 'px';
     $('#fmt').hidden = false;
@@ -863,7 +866,9 @@ function fmtSize(px) {                                 // 고른 글자만 크�
 }
 $('#fmt').addEventListener('mousedown', (e) => e.preventDefault());   // 고른 글자가 풀리지 않게
 $('#fmt').onclick = (e) => {
-  const btn = e.target.closest('button'); if (!btn || !fmtFor) return;
+  const btn = e.target.closest('button'); if (!btn) return;
+  if (btn.dataset.f === 'close') { closeFmt(); return; }
+  if (!fmtFor) { closeFmt(); return; }
   if (btn.dataset.fz) {                                // 크기 − / ＋
     const v = fsStep(curFs(), btn.dataset.fz === '+' ? 1 : -1);
     fmtSize(v); showFs(v); saveTx(fmtFor); return;
@@ -876,7 +881,18 @@ document.addEventListener('selectionchange', () => {   // 고른 글자가 없�
   if ($('#fmt').hidden) return;
   if (!String(window.getSelection()).trim()) closeFmt();
 });
-document.addEventListener('click', (e) => { if (!$('#fmt').hidden && !e.target.closest('#fmt')) closeFmt(); });
+// 어떤 처리가 중간에 이벤트를 막더라도 닫히도록 잡아채기 단계에서도 확인한다
+const fmtOutside = (e) => {
+  if ($('#fmt').hidden) return;
+  const t = e.target;
+  if (t && t.closest && t.closest('#fmt')) return;
+  closeFmt();
+};
+for (const ev of ['pointerdown', 'mousedown', 'click', 'touchstart', 'wheel']) {
+  document.addEventListener(ev, fmtOutside, true);
+}
+window.addEventListener('blur', () => closeFmt());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFmt(); }, true);
 
 // ---- 색 · 글자 크기 ----
 let palFor = null;
@@ -1148,6 +1164,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
+const UIV = '1.29.4';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1169,7 +1186,8 @@ function openCfg() {
     <div style="color:var(--muted);font-size:11px;margin-top:11px;line-height:1.6">여기서 정한 색·크기는 <b>앞으로 새로 만드는</b> 메모에 적용됩니다. 이미 붙여 둔 메모는 그대로입니다.</div>
     <div class="sec" style="margin-top:12px">백업</div>
     <div class="row"><button data-p="dl">💾 백업 받기</button><button data-p="up">📂 복원</button></div>
-    <button class="hlp" data-p="help">❓ 도움말 (사용법 보기)</button>`;
+    <button class="hlp" data-p="help">❓ 도움말 (사용법 보기)</button>
+    <div style="color:var(--muted);font-size:10.5px;margin-top:8px;text-align:right">메모 화면 v${UIV}</div>`;
   const r = $('#cfgBtn').getBoundingClientRect();
   $('#cfg').style.left = Math.max(8, Math.min(window.innerWidth - 270, r.right - 250)) + 'px';
   $('#cfg').style.top = (r.bottom + 6) + 'px';
