@@ -26,9 +26,7 @@
   #envbar:empty { display:none; }
   .envbox { display:flex; align-items:center; gap:14px; padding:7px 16px 7px 14px; border-radius:10px;
     background:rgba(56,189,248,.08); border:1px solid rgba(56,189,248,.35); }
-  .envbox .ttl { display:flex; flex-direction:column; line-height:1.15; }
-  .envbox .ttl b { font-size:12px; color:var(--text); white-space:nowrap; }
-  .envbox .ttl span { font-size:10.5px; color:var(--muted); white-space:nowrap; }
+  .envbox .ttl b { font-size:12.5px; color:var(--text); white-space:nowrap; }
   .envbox .v { display:flex; align-items:baseline; gap:4px; }
   .envbox .v i { font-style:normal; font-size:15px; opacity:.85; }
   .envbox .v em { font-style:normal; font-size:21px; font-weight:800; letter-spacing:-.5px; }
@@ -268,7 +266,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.30.2';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.30.3';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -366,7 +364,7 @@ function renderEnvBar() {
     const bad = tCls === 't-bad' || hCls === 'h-bad';
     return `<div class="envbox ${tCls} ${hCls} ${bad ? 'alarm' : ''}"
       title="${esc(s.name || s.host)} 에 연결된 센서 · 기준 온도 ${tl}~${th}℃, 습도 ${hl}~${hh}%">
-      <div class="ttl"><b>서버실 온습도</b><span>${esc(s.name || s.host)}</span></div>
+      <div class="ttl"><b>서버실 온습도</b></div>
       <div class="v t"><i>🌡</i><em>${t.toFixed(1)}</em><u>℃</u></div>
       <div class="v h"><i>💧</i><em>${h.toFixed(1)}</em><u>%</u></div>
     </div>`;
