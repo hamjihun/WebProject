@@ -164,7 +164,7 @@
   .note .hb.plus { font-size:15px; margin-right:1px; }
   /* 제목 줄 두 번 누르면 접힘 (제목만 보임) */
   .note.min { height:auto !important; }
-  .note.min .tx, .note.min img, .note.min .rz { display:none; }
+  .note.min .tx, .note.min img, .note.min canvas.dw, .note.min .rz { display:none; }
   .note img { cursor:move; }
   .note.mv, .area.mv { cursor:grabbing; opacity:.92; }
   .note .tx { flex:1; width:100%; overflow:auto; background:none; border:0; padding:5px 7px 7px; font-family:inherit;
@@ -186,6 +186,21 @@
   #fmt button b { font-weight:800; } #fmt button i { font-style:italic; } #fmt button u { text-decoration:underline; }
   #fmt button s { text-decoration:line-through; }
   .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
+  /* 그림 메모 (그림판) */
+  .note canvas.dw { flex:1; min-height:0; width:100%; display:block; background:#fff; cursor:crosshair; touch-action:none; user-select:none; }
+  #pen:not([hidden]) { display:flex; }                 /* [hidden] 이 이기도록 :not() 으로 */
+  #pen { align-items:center; padding:5px; gap:4px; }
+  #pen .pc { display:grid; grid-template-columns:repeat(8,18px); gap:3px; }
+  #pen b.sw { width:18px; height:18px; border-radius:3px; border:1px solid rgba(0,0,0,.25); cursor:pointer; display:block; }
+  #pen b.sw.on { outline:2px solid var(--accent); outline-offset:1px; }
+  #pen .gp { display:flex; align-items:center; gap:3px; border-left:1px solid var(--line); padding-left:5px; margin-left:2px; }
+  #pen button { background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    min-width:28px; height:28px; font:inherit; font-size:12.5px; cursor:pointer; padding:0 6px; }
+  #pen button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
+  #pen button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
+  #pen button.cx { color:var(--muted); }
+  #pen button.cx:hover { border-color:var(--bad); color:var(--bad); background:rgba(225,29,72,.08); }
+  #pen .tt { color:var(--muted); font-size:11px; margin-right:2px; }
 
   .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); flex:none; }
   .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
@@ -252,6 +267,7 @@
     <div class="tl"></div>
     <div class="tc">
       <button class="go" id="addNote">＋ 새 메모</button>
+      <button id="addDraw">＋ 그림판</button>
       <button id="addArea">＋ 새 범위</button>
       <button id="addEtc">＋ 기타 ▾</button>
     </div>
@@ -279,6 +295,7 @@
 <div class="pop" id="cfg" hidden></div>
 <div class="pop" id="pmenu" hidden></div>
 <div class="pop" id="fmt" hidden></div>
+<div class="pop" id="pen" hidden></div>
 <div class="pop" id="etc" hidden></div>
 <div class="pop" id="lnkEd" hidden></div>
 
@@ -314,7 +331,11 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
-let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light' };
+let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4 };
+// 그림판 펜 (색·굵기는 설정에 저장, 지우개는 그때그때)
+const PENS = ['#1f2937', '#dc2626', '#ea580c', '#eab308', '#16a34a', '#2563eb', '#7c3aed', '#94a3b8'];
+const PW = [2, 4, 8, 16];
+let eraser = false;
 function applyTheme() {                                        // 밝게 / 어둡게
   const d = prefs.theme === 'dark';
   document.documentElement.dataset.theme = d ? 'dark' : 'light';
@@ -366,11 +387,16 @@ function render() {
         <button class="hb ed" title="제목 정하기 (오른쪽 단추 = 색·글자 크기)">✎</button>
         <button class="x" title="메모 지우기">✕</button></div>
       ${n.img ? `<img src="${n.img}" draggable="false" alt="">`
+        : n.draw ? `<canvas class="dw"></canvas>`
         : `<div class="tx" contenteditable="true" spellcheck="false" data-ph="메모를 적으세요">${body(n)}</div>`}
       <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>`).join('') +
     '';
-  renderBoards(); renderPages();
+  for (const el of cv.querySelectorAll('canvas.dw')) {          // 그림 메모 다시 그리기
+    const o = find('n', el.closest('[data-id]').dataset.id);
+    if (o && o.draw) paint(el, o.draw);
+  }
+  renderBoards(); renderPages(); posPen();
   $('#binN').textContent = trash.length ? ' ' + trash.length : '';
 }
 // 링크 아이콘: 이모지를 넣었으면 그것, 아니면 그 사이트 그림, 안 나오면 첫 글자
@@ -572,6 +598,131 @@ $('#addArea').onclick = () => {
   const el = document.querySelector(`.area[data-id="${a.id}"] .t`); if (el) el.focus();
 };
 
+
+// ---- 그림판 (그림 메모) ----
+// 메모 안이 도화지다. 선은 기준 크기(draw.w × draw.h) 좌표로 저장하고, 메모 크기에 맞춰 늘여서 그린다.
+const DW = 320, DH = 232;                                   // 새 그림 메모의 기준 도화지 크기
+function penOf(st) { return { c: st.e ? '#ffffff' : st.c, w: st.w }; }
+function path(x, st) {                                      // 선 하나 그리기
+  const q = penOf(st);
+  x.strokeStyle = q.c; x.lineWidth = q.w;
+  x.beginPath(); x.moveTo(st.p[0], st.p[1]);
+  if (st.p.length <= 2) x.lineTo(st.p[0] + 0.01, st.p[1]);  // 점 하나 = 동그라미
+  else for (let i = 2; i + 1 < st.p.length; i += 2) x.lineTo(st.p[i], st.p[i + 1]);
+  x.stroke();
+}
+function setup(x, d, bw, bh) {
+  x.setTransform(bw / d.w, 0, 0, bh / d.h, 0, 0);
+  x.lineCap = 'round'; x.lineJoin = 'round';
+}
+function paint(el, d) {                                     // 도화지 전체 다시 그리기
+  const W = Math.max(1, el.clientWidth), H = Math.max(1, el.clientHeight), r = Math.min(2, window.devicePixelRatio || 1);
+  el.width = Math.round(W * r); el.height = Math.round(H * r);
+  const x = el.getContext('2d');
+  setup(x, d, el.width, el.height);
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, d.w, d.h);
+  for (const st of d.s) path(x, st);
+}
+function drawPng(d, W, H) {                                 // 휴지통 미리보기용 그림
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  setup(x, d, W, H);
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, d.w, d.h);
+  for (const st of d.s) path(x, st);
+  return c.toDataURL('image/png');
+}
+function newDraw(x, y) {
+  const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: DW, h: DH + 26,
+    title: '', text: '', color: 'white', z: topZ() + 1, fs: prefs.fs, draw: { w: DW, h: DH, s: [] } };
+  cur().notes.push(n); unstack(n, 'n'); sel = n.id; eraser = false; touch(); render();
+  const el = document.querySelector(`.note[data-id="${n.id}"]`); if (el) openPen(el, n.id);
+}
+$('#addDraw').onclick = () => {
+  const c = viewCenter(), k = cur().notes.length;
+  newDraw(c.x - DW / 2 + (k % 5) * 20, c.y - DH / 2 + (k % 5) * 20);
+};
+// 그리기 (마우스 · 터치 · 펜 모두 같은 처리)
+let stroke = null;
+$('#canvas').addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const el = e.target.closest && e.target.closest('canvas.dw'); if (!el) return;
+  const box = el.closest('[data-k]'), n = find('n', box.dataset.id); if (!n || !n.draw) return;
+  e.preventDefault();
+  if (sel !== n.id) {                                       // 첫 번째 누름은 고르기만 (점이 찍히지 않게)
+    const prev = document.querySelector('[data-k].sel'); if (prev) prev.classList.remove('sel');
+    sel = n.id; n.z = topZ() + 1; box.style.zIndex = 10 + n.z; box.classList.add('sel');
+    openPen(box, n.id); touch(); return;
+  }
+  const r = el.getBoundingClientRect();
+  const at = (ev) => [Math.round((ev.clientX - r.left) * n.draw.w / r.width), Math.round((ev.clientY - r.top) * n.draw.h / r.height)];
+  const wd = eraser ? Math.max(6, prefs.pw * 4) : prefs.pw;
+  stroke = { c: prefs.pc, w: wd, e: eraser ? 1 : 0, p: at(e) };
+  if (n.draw.s.length >= 600) n.draw.s.shift();
+  n.draw.s.push(stroke);
+  const x = el.getContext('2d');
+  setup(x, n.draw, el.width, el.height);
+  path(x, stroke);
+  try { el.setPointerCapture(e.pointerId); } catch (err) {}
+  const move = (ev) => {
+    if (!stroke) return;
+    const [px, py] = at(ev), k = stroke.p.length;
+    if (Math.abs(px - stroke.p[k - 2]) < 1 && Math.abs(py - stroke.p[k - 1]) < 1) return;
+    if (stroke.p.length >= 2000) return;
+    const q = penOf(stroke);
+    x.strokeStyle = q.c; x.lineWidth = q.w;
+    x.beginPath(); x.moveTo(stroke.p[k - 2], stroke.p[k - 1]); x.lineTo(px, py); x.stroke();
+    stroke.p.push(px, py);
+  };
+  const up = () => {
+    el.removeEventListener('pointermove', move);
+    el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+    if (stroke) { stroke = null; n.updated = Date.now(); touch(); }
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+});
+// 펜 고르는 창
+let penFor = null;
+function closePen() { $('#pen').hidden = true; penFor = null; }
+function posPen() {                                          // 메모 아래에 붙여 둔다 (가리지 않게)
+  if (!penFor || $('#pen').hidden) return;
+  const el = document.querySelector(`.note[data-id="${penFor}"]`);
+  if (!el) { closePen(); return; }
+  const r = el.getBoundingClientRect(), h = $('#pen').offsetHeight || 40;
+  $('#pen').style.left = Math.max(8, Math.min(window.innerWidth - 330, r.left)) + 'px';
+  $('#pen').style.top = (r.bottom + 6 + h < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
+}
+function openPen(el, id) {
+  const n = find('n', id); if (!n || !n.draw) return;
+  penFor = id;
+  $('#pen').innerHTML = `<span class="tt">펜</span>
+    <span class="pc">${PENS.map((c) => `<b class="sw ${!eraser && prefs.pc === c ? 'on' : ''}" data-c="${c}" style="background:${c}"></b>`).join('')}</span>
+    <span class="gp">${PW.map((w, i) => `<button data-w="${w}" class="${prefs.pw === w ? 'on' : ''}" title="${['가늘게', '보통', '굵게', '아주 굵게'][i]}" style="font-size:${8 + i * 4}px;line-height:1">●</button>`).join('')}</span>
+    <span class="gp"><button data-a="er" class="${eraser ? 'on' : ''}" title="지우개">🧽</button>
+      <button data-a="undo" title="한 번 되돌리기">↶</button>
+      <button data-a="clr" title="전부 지우기">🗑</button>
+      <button class="cx" data-a="close" title="닫기">✕</button></span>`;
+  $('#pen').hidden = false;
+  posPen();
+}
+$('#pen').addEventListener('mousedown', (e) => e.stopPropagation());
+$('#pen').onclick = (e) => {
+  const n = find('n', penFor); if (!n || !n.draw) { closePen(); return; }
+  const el = document.querySelector(`.note[data-id="${n.id}"] canvas.dw`);
+  const c = e.target.dataset.c, w = e.target.closest('button') && e.target.closest('button').dataset.w;
+  const a = e.target.closest('button') && e.target.closest('button').dataset.a;
+  if (c) { prefs.pc = c; eraser = false; touch(); openPen(document.querySelector(`.note[data-id="${n.id}"]`), n.id); return; }
+  if (w) { prefs.pw = Number(w); touch(); openPen(document.querySelector(`.note[data-id="${n.id}"]`), n.id); return; }
+  if (a === 'er') { eraser = !eraser; openPen(document.querySelector(`.note[data-id="${n.id}"]`), n.id); return; }
+  if (a === 'undo') { n.draw.s.pop(); if (el) paint(el, n.draw); touch(); return; }
+  if (a === 'clr') {
+    if (!n.draw.s.length) return;
+    if (!confirm('이 그림을 전부 지울까요? (되돌릴 수 없습니다)')) return;
+    n.draw.s = []; if (el) paint(el, n.draw); touch(); return;
+  }
+  if (a === 'close') closePen();
+};
+
 // ---- 사진 붙여넣기 (Ctrl+V) ----
 function shrink(file, max, q) {
   return new Promise((ok, no) => {
@@ -649,6 +800,7 @@ $('#canvas').addEventListener('click', (e) => {
     const prev = document.querySelector('.note.sel'); if (prev) prev.classList.remove('sel');
     sel = id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch();
   }
+  if (k === 'n' && o.draw) openPen(box, id);      // 그림 메모를 고르면 펜 창
 });
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
   const box = e.target.closest('[data-k]'); if (!box) return;
@@ -903,7 +1055,7 @@ function openPal(el, k, id, focusTitle) {
   const r = el.getBoundingClientRect ? el.getBoundingClientRect() : el;
   $('#pal').innerHTML = '<div class="sec">색</div><div class="cols">'
     + KEYS.map((c) => `<b class="sw" data-c="${c}" style="background:${k === 'n' ? COLORS[c].bg : COLORS[c].bd}"></b>`).join('') + '</div>'
-    + (k === 'n' && !o.img ? '<div class="sec">글자 크기 (8~72)</div>' + fsBox(o.fs || 13) : '')
+    + (k === 'n' && !o.img && !o.draw ? '<div class="sec">글자 크기 (8~72)</div>' + fsBox(o.fs || 13) : '')
     + `<div class="sec" style="margin-top:9px">제목</div>
        <input class="ti" placeholder="제목을 입력하세요" maxlength="${k === 'n' ? 60 : 40}" value="${esc(o.title || '')}">`;
   $('#pal').style.left = Math.min(window.innerWidth - 210, Math.max(8, r.left)) + 'px';
@@ -1024,6 +1176,7 @@ function binPv(t) {                                  // 어떤 내용이었는�
   if (t.k === 'n') {
     const bg = COLORS[o.color] ? COLORS[o.color].bg : '#fde68a';
     if (o.img) return `<div class="pv" style="--pv:${bg}"><img src="${o.img}" alt=""></div>`;
+    if (o.draw) return `<div class="pv" style="--pv:#fff"><img src="${drawPng(o.draw, 264, 156)}" alt=""></div>`;
     const txt = (o.text || '').slice(0, 160);
     return `<div class="pv" style="--pv:${bg}">${txt ? esc(txt) : '<span style="opacity:.45">(빈 메모)</span>'}</div>`;
   }
@@ -1042,7 +1195,8 @@ function binName(t) {
   const o = t.o || {};
   if (t.k === 'a') return (o.title || '').trim() || '이름 없는 범위';
   if (t.k === 'l') return (o.name || '').trim() || o.url || '이름 없는 바로가기';
-  return (o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 30) || (o.img ? '사진 메모' : '빈 메모');
+  return (o.title || '').trim() || (o.text || '').trim().split('\n')[0].slice(0, 30)
+    || (o.img ? '사진 메모' : o.draw ? '그림 메모' : '빈 메모');
 }
 $('#binBtn').onclick = () => { if ($('#binMask').hidden) openBin(); else $('#binMask').hidden = true; };
 document.addEventListener('keydown', (e) => {
@@ -1135,6 +1289,11 @@ const HELP = `
     <li>내용 글자를 끌어서 고른 뒤 <b>오른쪽 단추</b>를 누르면 <b>굵게·기울임·밑줄·취소선</b>을 줄 수 있습니다
       (<b>Ctrl+B</b> 굵게, <b>Ctrl+I</b> 기울임, <b>Ctrl+U</b> 밑줄).</li>
     <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
+  <h4>그림판</h4>
+  <ul><li>위쪽 <b>＋ 그림판</b> 을 누르면 그림을 그릴 수 있는 메모가 붙습니다. 그 위에서 <b>끌면 바로 그려집니다</b>.</li>
+    <li>고르면 <b>펜 창</b>이 뜹니다 — 색 8가지, 굵기 4단계, <b>🧽 지우개</b>, <b>↶ 되돌리기</b>, <b>🗑 전부 지우기</b>.</li>
+    <li>메모 크기를 바꾸면 그림도 함께 늘어납니다. 제목·색은 다른 메모와 똑같이 씁니다.</li>
+    <li>태블릿·터치 화면에서는 손가락이나 펜으로도 그려집니다.</li></ul>
   <h4>링크 아이콘</h4>
   <ul><li><b>＋ 기타 → 🔗 링크 아이콘 만들기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둡니다.</li>
     <li>한 번 누르면 새 탭으로 열리고, <b>오른쪽 단추</b>로 이름·주소·아이콘을 고칩니다.</li>
@@ -1165,7 +1324,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.29.5';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.32.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1215,6 +1374,10 @@ $('#cfg').onclick = (e) => {
 
 document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#fmt')) closeFmt();
+  if (!e.target.closest('#pen')) {                      // 그림 메모 밖을 누르면 펜 창을 닫는다
+    const b = e.target.closest('.note'), o = b && find('n', b.dataset.id);
+    if (!o || !o.draw) closePen();
+  }
   if (!e.target.closest('#cfg') && !e.target.closest('#cfgBtn')) $('#cfg').hidden = true;
   if (!e.target.closest('#pal') && !e.target.dataset.pal) { $('#pal').hidden = true; palFor = null; }
   if (!e.target.closest('#bmenu') && !e.target.closest('.bd')) $('#bmenu').hidden = true;
@@ -1245,6 +1408,7 @@ window.addEventListener('beforeunload', () => {
   try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boards, active, trash, prefs }), keepalive: true }); } catch (e) {}
 });
 window.addEventListener('resize', render);
+$('#board').addEventListener('scroll', posPen);
 
 // ---- 메모판 탭·도구를 맨 위 탭줄 안으로 (공통 상단바가 그려진 뒤) ----
 // 상단바의 "메모" 탭 자리를 메모판 탭(메모 1, 메모 2 …)이 대신한다. 별도 줄을 쓰지 않는다.

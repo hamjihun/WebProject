@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_BOARDS = 20, MAX_PAGES = 50, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
+const MAX_STROKES = 600, MAX_PTS = 2000;   // 그림 메모: 선 개수 · 선 하나의 점 개수
 const MAX_IMG = 3 * 1024 * 1024;          // 사진 한 장 (data URL 글자 수)
 const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 용량
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
@@ -42,6 +43,18 @@ const color = (v, d) => /^[a-z0-9-]{1,20}$/i.test(String(v || '')) ? String(v) :
 const rid = () => Math.random().toString(36).slice(2, 10);
 // 바로가기 주소: 웹(http/https)만 허용한다 (javascript: 같은 건 버린다)
 const href = (v) => { const t = String(v == null ? '' : v).trim().slice(0, 500); return /^https?:\/\//i.test(t) ? t : ''; };
+// 그림 메모(그림판): 선 목록만 저장한다. { w, h(기준 크기), s:[ { c:색, w:굵기, e:지우개, p:[x,y,x,y…] } ] }
+const hex = (v, d) => (/^#[0-9a-f]{6}$/i.test(String(v || '')) ? String(v) : d);
+function drawing(d) {
+  if (!d || typeof d !== 'object' || !Array.isArray(d.s)) return undefined;
+  const s = d.s.slice(0, MAX_STROKES).map((k) => ({
+    c: hex(k && k.c, '#1f2937'),
+    w: clamp(num(k && k.w, 4), 1, 200),
+    e: (k && k.e) ? 1 : 0,
+    p: (Array.isArray(k && k.p) ? k.p : []).slice(0, MAX_PTS).map((v) => clamp(num(v), -8000, 8000)),
+  })).filter((k) => k.p.length >= 2);
+  return { w: clamp(num(d.w, 320), 40, 4000), h: clamp(num(d.h, 232), 40, 4000), s };
+}
 
 function create(opts) {
   const FILE = opts.file;
@@ -67,6 +80,8 @@ function create(opts) {
       html: safeHtml(n.html, MAX_TEXT * 3),
       fs: clamp(num(n.fs, 13), 8, 72), min: !!n.min, updated: num(n.updated, Date.now()),
     };
+    const dr = drawing(n.draw);
+    if (dr) o.draw = dr;
     if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {
       if (n.img.length > MAX_IMG) throw new Error('사진 한 장이 너무 큽니다 (3MB 넘음)');
       o.img = n.img;
@@ -105,6 +120,8 @@ function create(opts) {
     magnet: !(p && p.magnet === false),
     side: !(p && p.side === false),        // 왼쪽 탭 보이기
     theme: (p && p.theme) === 'dark' ? 'dark' : 'light',   // 화면 테마 (기본: 밝게)
+    pc: hex(p && p.pc, '#1f2937'),                         // 그림판 펜 색
+    pw: clamp(num(p && p.pw, 4), 1, 60),                   // 그림판 펜 굵기
   });
   // 바로가기 타일 (바탕화면 아이콘처럼 눌러서 여는 것)
   const link = (l) => ({
