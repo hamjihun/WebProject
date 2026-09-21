@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.29.5';
+const VERSION = '1.30.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -235,6 +235,14 @@ function json(res, code, obj) {
 function num(v, d = 0) { const n = Number(v); return Number.isFinite(n) ? n : d; }
 
 // 에이전트가 보낸 원본을 화면에서 쓰기 좋은 형태로 정규화
+// 온습도 센서 값 (에이전트 1.7.0+ 가 보냄). 말이 안 되는 값은 버린다.
+function normalizeEnv(e) {
+  if (!e || typeof e !== 'object') return undefined;
+  const t = Number(e.t), h = Number(e.h);
+  if (!Number.isFinite(t) || !Number.isFinite(h)) return undefined;
+  if (t < -50 || t > 100 || h < 0 || h > 100) return undefined;
+  return { t: Math.round(t * 10) / 10, h: Math.round(h * 10) / 10 };
+}
 function normalize(raw, remoteIp) {
   const host = String(raw.host || raw.hostname || remoteIp || 'unknown').trim();
   const memTotal = num(raw.mem_total);
@@ -261,7 +269,8 @@ function normalize(raw, remoteIp) {
     net_tx: num(raw.net_tx),
     disks,
     backups: normalizeBackups(raw.backups),               // Veeam 백업 서버만 보냄 (없으면 undefined → JSON 에서 빠짐)
-    agent: raw.agent && typeof raw.agent === 'object' ? { version: String(raw.agent.version || '').slice(0, 20), veeam: !!raw.agent.veeam, backup: !!raw.agent.backup, paths: (Array.isArray(raw.agent.paths) ? raw.agent.paths : []).slice(0, 10).map((p) => String(p).slice(0, 200)) } : undefined,   // 에이전트 자기 정보 (1.5.4+)
+    env: normalizeEnv(raw.env),                           // 서버실 온습도 (센서 꽂힌 서버만)
+    agent: raw.agent && typeof raw.agent === 'object' ? { version: String(raw.agent.version || '').slice(0, 20), veeam: !!raw.agent.veeam, backup: !!raw.agent.backup, env: !!raw.agent.env, paths: (Array.isArray(raw.agent.paths) ? raw.agent.paths : []).slice(0, 10).map((p) => String(p).slice(0, 200)) } : undefined,   // 에이전트 자기 정보 (1.5.4+)
   };
 }
 // Veeam 에이전트가 보낸 백업 작업/저장소 상태
@@ -347,7 +356,9 @@ function ingest(raw, remoteIp) {
   recordDaily(entry, m);
   if (m.backups) recordBackupDays(m.host, visibleBackups(m.backups));
   recordHourly(m); hourlyDirty = true;
-  entry.history.push({ ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx });
+  entry.history.push(m.env
+    ? { ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx, t: m.env.t, h: m.env.h }
+    : { ts: m.ts, cpu: m.cpu, mem_pct: m.mem_pct, net_rx: m.net_rx, net_tx: m.net_tx });
   if (entry.history.length > HISTORY) entry.history.splice(0, entry.history.length - HISTORY);
   dirty = true;
   if (LOG_FILE) fs.appendFile(LOG_FILE, JSON.stringify(m) + '\n', () => {});

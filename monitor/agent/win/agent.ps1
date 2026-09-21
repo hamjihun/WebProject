@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.6.4"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.7.0"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -82,6 +82,40 @@ $VeeamOut = Join-Path $DataDir "veeam.json"
 $HasVeeam = (Test-Path $VeeamScript) -and ((Test-Path "$env:ProgramFiles\Veeam\Backup and Replication\Backup") -or (Test-Path "$env:ProgramFiles\Veeam\Backup and Replication\Console"))
 $veeamLast = (Get-Date).AddHours(-1); $veeamProc = $null
 if ($HasVeeam) { Log "Veeam 감지: 백업 작업 상태를 10분마다 수집합니다" }
+# 온습도 센서 (라디오노드 UA10 계열: 시리얼 포트로 ATCD 를 보내면 "온도,습도" 로 답한다)
+# agent.conf 에 ENV_PORT=COM3 (필요하면 ENV_BAUD=115200) 을 적으면 켜진다.
+$EnvPort = $conf['ENV_PORT']
+$EnvBaud = 0; if ($conf['ENV_BAUD']) { $EnvBaud = [int]$conf['ENV_BAUD'] }
+if ($EnvBaud -le 0) { $EnvBaud = 115200 }
+$envSp = $null; $envWarned = $false
+if ($EnvPort) { Log "온습도 센서 사용: $EnvPort @ $EnvBaud" }
+function Get-EnvReading {
+  if (-not $EnvPort) { return $null }
+  try {
+    if ((-not $script:envSp) -or (-not $script:envSp.IsOpen)) {
+      $script:envSp = New-Object System.IO.Ports.SerialPort $EnvPort, $EnvBaud, 'None', 8, 'One'
+      $script:envSp.ReadTimeout = 1000
+      $script:envSp.NewLine = "`r`n"
+      $script:envSp.Open()
+      Start-Sleep -Milliseconds 200
+    }
+    $script:envSp.DiscardInBuffer()
+    $script:envSp.WriteLine('ATCD')
+    Start-Sleep -Milliseconds 350
+    $r = $script:envSp.ReadExisting()
+    if ($r -match '(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)') {
+      $script:envWarned = $false
+      return @{ t = [math]::Round([double]$matches[1], 2); h = [math]::Round([double]$matches[2], 2) }
+    }
+    return $null
+  } catch {
+    try { if ($script:envSp) { $script:envSp.Close() } } catch {}
+    $script:envSp = $null
+    if (-not $script:envWarned) { Log "온습도 센서 읽기 실패($EnvPort): $($_.Exception.Message)"; $script:envWarned = $true }
+    return $null
+  }
+}
+
 # SQL 백업 폴더 / USB 복사 감시 (backup.ps1): 백업 폴더가 있거나 agent.conf 에 BACKUP_PATH/USB/SQL 이 있으면 5분마다
 $BackupScript = Join-Path $Dir "backup.ps1"
 $BackupOut = Join-Path $DataDir "backup.json"
@@ -190,9 +224,11 @@ while ($true) {
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
-      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; paths = @($BackupPaths) }
+      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; paths = @($BackupPaths) }
     }
     if ($backups) { $payload.backups = $backups }
+    $envNow = Get-EnvReading
+    if ($envNow) { $payload.env = $envNow }
     $body = $payload | ConvertTo-Json -Depth 8 -Compress
 
     $resp = Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `

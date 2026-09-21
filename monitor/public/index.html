@@ -188,6 +188,16 @@
       <label>재알림 간격 (분, 0=한 번만)<input type="number" id="rRemind" min="0" max="1440"></label>
     </div>
 
+    <h3>서버실 온습도 <span class="dim" style="font-weight:400;font-size:12px">(온습도 센서를 꽂은 서버만 판단합니다)</span></h3>
+    <div class="form">
+      <label class="chk"><input type="checkbox" id="rEnvOn"> 온습도 알림 사용</label>
+      <label>온도 상한 (℃)<input type="number" id="rTempHi" min="-40" max="80" step="0.5"></label>
+      <label>온도 하한 (℃)<input type="number" id="rTempLo" min="-40" max="80" step="0.5"></label>
+      <label>습도 상한 (%)<input type="number" id="rHumHi" min="0" max="100"></label>
+      <label>습도 하한 (%)<input type="number" id="rHumLo" min="0" max="100"></label>
+      <label>지속 시간 (분, 0=즉시)<input type="number" id="rEnvMin" min="0" max="120"></label>
+    </div>
+
     <h3>방해 금지 시간</h3>
     <div class="form">
       <label class="chk"><input type="checkbox" id="qEnabled"> 방해 금지 시간 사용 <span class="dim">(이 시간엔 텔레그램을 보내지 않고 이력만 남김. 서버 응답 없음은 예외로 항상 보냄)</span></label>
@@ -240,7 +250,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.29.5';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.30.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -252,6 +262,7 @@ const $overlay = document.getElementById('overlay');
 let selected = null;
 let servers = [];
 let activeAlerts = [];
+let alertConf = null;                 // 알림 설정 (온습도 기준 색 표시에 사용)
 let lastEventId = null;   // 브라우저 알림용: 마지막으로 본 이벤트
 
 // ---------- 포맷 ----------
@@ -292,6 +303,17 @@ function shortOs(os) {
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---------- 카드 ----------
+// 서버실 온습도 줄 (센서가 꽂힌 서버만). 기준을 넘으면 색으로 표시
+function envLine(s) {
+  if (!s.env) return '';
+  const r = (alertConf && alertConf.rules) || {};
+  const th = r.temp_high == null ? 30 : r.temp_high, tl = r.temp_low == null ? 5 : r.temp_low;
+  const hh = r.hum_high == null ? 80 : r.hum_high, hl = r.hum_low == null ? 20 : r.hum_low;
+  const tBad = s.env.t >= th || s.env.t <= tl, hBad = s.env.h >= hh || s.env.h <= hl;
+  const cls = tBad ? 'bad' : hBad ? 'warn' : 'ok';
+  return `<div class="bk ${cls}" title="서버실 온습도 (기준 온도 ${tl}~${th}℃, 습도 ${hl}~${hh}%)">
+    <span>🌡 서버실</span><span>${s.env.t}℃ · 💧 ${s.env.h}%${tBad || hBad ? ' ⚠' : ''}</span></div>`;
+}
 function cardHtml(s) {
   const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
   const disks = (s.disks || []).map(d => {
@@ -302,12 +324,13 @@ function cardHtml(s) {
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
   return `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
-    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인',backup:'백업'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
+    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인',backup:'백업',temp:'온도',hum:'습도',env:'온습도'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
     <div class="hostline">${s.name ? esc(s.host) : '&nbsp;'}</div>
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
     ${s.backups ? bkStages(s.backups).map(st => `<div class="bk ${st.cls}" title="카드를 클릭하면 상세"><span>💾 ${st.label}</span><span>${esc(st.txt)}${st.cls === 'bad' ? ' ⚠' : ''}</span></div>`).join('') : ''}
+    ${envLine(s)}
     <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="uptm">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
@@ -581,6 +604,7 @@ function renderAlertLists(j) {
 const F = (id) => document.getElementById(id);
 async function loadSettings() {
   const r = await fetch('api/settings'); const c = await r.json();
+  alertConf = c;
   F('tgEnabled').checked = !!c.telegram.enabled; F('tgToken').value = ''; F('tgToken').placeholder = c.telegram.token ? `저장됨 (${c.telegram.token}) - 변경할 때만 입력` : '봇 토큰 입력';
   F('tgChat').value = c.telegram.chatId || ''; F('aTitle').value = c.title || '';
   F('rCpu').value = c.rules.cpu; F('rCpuMin').value = c.rules.cpu_minutes; F('rMem').value = c.rules.mem; F('rMemMin').value = c.rules.mem_minutes;
@@ -589,6 +613,9 @@ async function loadSettings() {
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
+  F('rEnvOn').checked = c.rules.env_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 30 : c.rules.temp_high;
+  F('rTempLo').value = c.rules.temp_low == null ? 5 : c.rules.temp_low; F('rHumHi').value = c.rules.hum_high == null ? 80 : c.rules.hum_high;
+  F('rHumLo').value = c.rules.hum_low == null ? 20 : c.rules.hum_low; F('rEnvMin').value = c.rules.env_minutes == null ? 3 : c.rules.env_minutes;
   F('qEnabled').checked = !!c.quiet.enabled; F('qFrom').value = c.quiet.from; F('qTo').value = c.quiet.to;
 }
 function validChatId(v) { return /^-?\d{5,}$/.test(v); }
@@ -599,7 +626,8 @@ function collectSettings() {
     title: F('aTitle').value.trim() || 'IMS 모니터',
     enabled: F('aEnabled').checked,
     rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), usb_window: (F('rUsbFrom').value && F('rUsbTo').value) ? F('rUsbFrom').value + '-' + F('rUsbTo').value : '', backup_skip_weekend: F('rSkipWeekend').checked, backup_hide: F('rBackupHide').value.trim(),
-             cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '' },
+             cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '',
+             env_on: F('rEnvOn').checked, temp_high: num('rTempHi', 30), temp_low: num('rTempLo', 5), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
   };

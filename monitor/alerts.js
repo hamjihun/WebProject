@@ -24,6 +24,10 @@ const DEFAULTS = {
     backup_skip_weekend: true,                  // 주말(토·일)은 백업 안 도는 것으로 보고 경과 시간에서 제외                 // 백업 판단 시각 (하루 1회, 새벽 백업이 끝난 뒤). 비우면 항상
     offline_grace: 0,                           // 오프라인 유예(분): 이 시간 안에 복구되면 텔레그램 생략, 이력만 기록 (0=즉시 전송)
     disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
+    env_on: true,                               // 서버실 온습도 알림 (센서 꽂힌 서버만)
+    temp_high: 30, temp_low: 5,                 // 온도 상한 / 하한 (℃)
+    hum_high: 80, hum_low: 20,                  // 습도 상한 / 하한 (%)
+    env_minutes: 3,                             // 이 시간 이상 지속되면 알림 (순간 튀는 값 무시)
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
@@ -278,6 +282,24 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (memOn) check(`${H}|mem`, H, N, s.mem_pct >= r.mem,
         () => `메모리 ${s.mem_pct}% 가 ${r.mem_minutes}분 이상 지속 (${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}, 기준 ${r.mem}%)`,
         { rule: 'mem', minutes: r.mem_minutes, threshold: r.mem, hold: s.mem_pct >= r.mem - 5, recoverMsg: () => `메모리 정상 복귀 (${s.mem_pct}%)` });
+      // 서버실 온습도 (센서가 꽂힌 서버만 s.env 가 있다)
+      const envOn = r.env_on !== false && hr.env !== false;
+      if (!envOn || !s.env) { clearRule(H, 'temp'); clearRule(H, 'hum'); }
+      if (envOn && s.env) {
+        const em = Math.max(0, Number(r.env_minutes) || 0), T = s.env.t, Hm = s.env.h;
+        check(`${H}|temp|hi`, H, N, T >= r.temp_high,
+          () => `서버실 온도 ${T}℃ (기준 ${r.temp_high}℃ 이상)`,
+          { rule: 'temp', minutes: em, threshold: r.temp_high, critical: true, hold: T >= r.temp_high - 1, recoverMsg: () => `서버실 온도 정상 (${T}℃)` });
+        check(`${H}|temp|lo`, H, N, r.temp_low != null && T <= r.temp_low,
+          () => `서버실 온도 ${T}℃ (기준 ${r.temp_low}℃ 이하)`,
+          { rule: 'temp', minutes: em, threshold: r.temp_low, hold: T <= r.temp_low + 1, recoverMsg: () => `서버실 온도 정상 (${T}℃)` });
+        check(`${H}|hum|hi`, H, N, Hm >= r.hum_high,
+          () => `서버실 습도 ${Hm}% (기준 ${r.hum_high}% 이상)`,
+          { rule: 'hum', minutes: em, threshold: r.hum_high, hold: Hm >= r.hum_high - 3, recoverMsg: () => `서버실 습도 정상 (${Hm}%)` });
+        check(`${H}|hum|lo`, H, N, r.hum_low != null && Hm <= r.hum_low,
+          () => `서버실 습도 ${Hm}% (기준 ${r.hum_low}% 이하)`,
+          { rule: 'hum', minutes: em, threshold: r.hum_low, hold: Hm <= r.hum_low + 3, recoverMsg: () => `서버실 습도 정상 (${Hm}%)` });
+      }
       // 디스크
       const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
       for (const d of ((diskOn && diskNow) ? (s.disks || []) : [])) {   // 디스크는 지정 시각에 하루 한 번
