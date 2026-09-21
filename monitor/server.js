@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.30.4';
+const VERSION = '1.31.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -39,19 +39,33 @@ let hourlyDirty = false;
 function hourOf(ts) { const d = new Date(ts); d.setMinutes(0, 0, 0); return d.getTime(); }
 function closeHour(host) {
   const b = hourCur[host]; if (!b) return;
-  (hourly[host] = hourly[host] || []).push({ h: b.h, n: b.n, ca: b.n ? Math.round(b.cs / b.n * 10) / 10 : null, cx: b.cx, ma: b.n ? Math.round(b.ms / b.n * 10) / 10 : null, mx: b.mx, off: b.off });
+  const row = { h: b.h, n: b.n, ca: b.n ? Math.round(b.cs / b.n * 10) / 10 : null, cx: b.cx, ma: b.n ? Math.round(b.ms / b.n * 10) / 10 : null, mx: b.mx, off: b.off };
+  if (b.en) {                                     // 온습도 평균·최고·최저 (한 시간에 한 줄)
+    row.en = b.en;
+    row.ta = Math.round(b.ets / b.en * 10) / 10; row.tx = b.etx; row.tn = b.etn;
+    row.ha = Math.round(b.ehs / b.en * 10) / 10; row.hx = b.ehx; row.hn = b.ehn;
+  }
+  (hourly[host] = hourly[host] || []).push(row);
   if (hourly[host].length > HOURLY_KEEP) hourly[host].splice(0, hourly[host].length - HOURLY_KEEP);
   delete hourCur[host]; hourlyDirty = true;
 }
 function hourBucket(host, ts) {
   const h = hourOf(ts);
   if (hourCur[host] && hourCur[host].h !== h) closeHour(host);
-  if (!hourCur[host]) hourCur[host] = { h, n: 0, cs: 0, cx: 0, ms: 0, mx: 0, off: 0 };
+  if (!hourCur[host]) hourCur[host] = { h, n: 0, cs: 0, cx: 0, ms: 0, mx: 0, off: 0, en: 0, ets: 0, etx: null, etn: null, ehs: 0, ehx: null, ehn: null };
   return hourCur[host];
 }
 function recordHourly(m) {
   const b = hourBucket(m.host, m.ts);
   b.n++; b.cs += m.cpu; b.cx = Math.max(b.cx, m.cpu); b.ms += m.mem_pct; b.mx = Math.max(b.mx, m.mem_pct);
+  if (m.env) {                                    // 온습도 (센서 꽂힌 서버만)
+    b.en = (b.en || 0) + 1;
+    b.ets = (b.ets || 0) + m.env.t; b.ehs = (b.ehs || 0) + m.env.h;
+    b.etx = b.etx == null ? m.env.t : Math.max(b.etx, m.env.t);
+    b.etn = b.etn == null ? m.env.t : Math.min(b.etn, m.env.t);
+    b.ehx = b.ehx == null ? m.env.h : Math.max(b.ehx, m.env.h);
+    b.ehn = b.ehn == null ? m.env.h : Math.min(b.ehn, m.env.h);
+  }
 }
 function loadHourly() {
   if (!HOURLY_FILE) return;
@@ -69,7 +83,12 @@ function saveHourly(sync) {
 function hourlyView(host, days) {
   const from = Date.now() - days * 86400000;
   const rows = (hourly[host] || []).filter((r) => r.h >= from);
-  const c = hourCur[host]; if (c) rows.push({ h: c.h, n: c.n, ca: c.n ? Math.round(c.cs / c.n * 10) / 10 : null, cx: c.cx, ma: c.n ? Math.round(c.ms / c.n * 10) / 10 : null, mx: c.mx, off: c.off, open: true });
+  const c = hourCur[host];
+  if (c) {
+    const r = { h: c.h, n: c.n, ca: c.n ? Math.round(c.cs / c.n * 10) / 10 : null, cx: c.cx, ma: c.n ? Math.round(c.ms / c.n * 10) / 10 : null, mx: c.mx, off: c.off, open: true };
+    if (c.en) { r.en = c.en; r.ta = Math.round(c.ets / c.en * 10) / 10; r.tx = c.etx; r.tn = c.etn; r.ha = Math.round(c.ehs / c.en * 10) / 10; r.hx = c.ehx; r.hn = c.ehn; }
+    rows.push(r);
+  }
   return rows;
 }
 
@@ -83,20 +102,35 @@ function statsView(from, to, gran) {
     const rows = hourlyView(host, 400).filter((r) => r.h >= from && r.h <= to);
     const buckets = new Map();
     let cs = 0, cn = 0, cx = 0, ms = 0, mn = 0, mx = 0, off = 0, tracked = 0;
+    let ets = 0, en = 0, etx = null, etn = null, ehs = 0, ehx = null, ehn = null;   // 온습도
     for (const r of rows) {
       const sec = r.open ? Math.max(0, Math.min(3600, (now - r.h) / 1000)) : 3600;
       const o = Math.min(sec, r.off || 0);
       off += o; tracked += sec;
       if (r.ca != null) { cs += r.ca * r.n; cn += r.n; cx = Math.max(cx, r.cx || 0); }
       if (r.ma != null) { ms += r.ma * r.n; mn += r.n; mx = Math.max(mx, r.mx || 0); }
+      if (r.en) {
+        en += r.en; ets += r.ta * r.en; ehs += r.ha * r.en;
+        etx = etx == null ? r.tx : Math.max(etx, r.tx); etn = etn == null ? r.tn : Math.min(etn, r.tn);
+        ehx = ehx == null ? r.hx : Math.max(ehx, r.hx); ehn = ehn == null ? r.hn : Math.min(ehn, r.hn);
+      }
       const key = gran === 'hour' ? r.h : new Date(new Date(r.h).setHours(0, 0, 0, 0)).getTime();
-      const b = buckets.get(key) || { t: key, cs: 0, cn: 0, cx: 0, ms: 0, mn: 0, mx: 0, off: 0, sec: 0 };
+      const b = buckets.get(key) || { t: key, cs: 0, cn: 0, cx: 0, ms: 0, mn: 0, mx: 0, off: 0, sec: 0, en: 0, ets: 0, etx: null, etn: null, ehs: 0, ehx: null, ehn: null };
       b.sec += sec; b.off += o;
       if (r.ca != null) { b.cs += r.ca * r.n; b.cn += r.n; b.cx = Math.max(b.cx, r.cx || 0); }
       if (r.ma != null) { b.ms += r.ma * r.n; b.mn += r.n; b.mx = Math.max(b.mx, r.mx || 0); }
+      if (r.en) {
+        b.en += r.en; b.ets += r.ta * r.en; b.ehs += r.ha * r.en;
+        b.etx = b.etx == null ? r.tx : Math.max(b.etx, r.tx); b.etn = b.etn == null ? r.tn : Math.min(b.etn, r.tn);
+        b.ehx = b.ehx == null ? r.hx : Math.max(b.ehx, r.hx); b.ehn = b.ehn == null ? r.hn : Math.min(b.ehn, r.hn);
+      }
       buckets.set(key, b);
     }
-    const series = [...buckets.values()].sort((a, b) => a.t - b.t).map((b) => ({ t: b.t, ca: b.cn ? Math.round(b.cs / b.cn * 10) / 10 : null, cx: b.cn ? b.cx : null, ma: b.mn ? Math.round(b.ms / b.mn * 10) / 10 : null, mx: b.mn ? b.mx : null, off: Math.round(b.off), sec: Math.round(b.sec) }));
+    const series = [...buckets.values()].sort((a, b) => a.t - b.t).map((b) => {
+      const o = { t: b.t, ca: b.cn ? Math.round(b.cs / b.cn * 10) / 10 : null, cx: b.cn ? b.cx : null, ma: b.mn ? Math.round(b.ms / b.mn * 10) / 10 : null, mx: b.mn ? b.mx : null, off: Math.round(b.off), sec: Math.round(b.sec) };
+      if (b.en) { o.ta = Math.round(b.ets / b.en * 10) / 10; o.tx = b.etx; o.tn = b.etn; o.ha = Math.round(b.ehs / b.en * 10) / 10; o.hx = b.ehx; o.hn = b.ehn; }
+      return o;
+    });
     // 디스크: 기간 시작 시점 스냅샷 vs 최신
     const daily = e.daily || {}; const keys = Object.keys(daily).sort();
     let startKey = null; for (const k of keys) { if (k <= fromKey) startKey = k; else break; }
@@ -115,6 +149,8 @@ function statsView(from, to, gran) {
       host, name: e.latest ? e.latest.name || '' : '', os: e.latest ? e.latest.os || '' : '', online: e.latest ? now - e.latest.ts < OFFLINE_AFTER : false,
       cpu_avg: cn ? Math.round(cs / cn * 10) / 10 : null, cpu_max: cn ? cx : null, mem_avg: mn ? Math.round(ms / mn * 10) / 10 : null, mem_max: mn ? mx : null,
       off_sec: Math.round(off), tracked_sec: Math.round(tracked), uptime: tracked ? Math.round((1 - off / tracked) * 10000) / 100 : null,
+      temp_avg: en ? Math.round(ets / en * 10) / 10 : null, temp_max: etx, temp_min: etn,
+      hum_avg: en ? Math.round(ehs / en * 10) / 10 : null, hum_max: ehx, hum_min: ehn, env_n: en,
       series, disks, disk_series: diskSeries,
     };
   }

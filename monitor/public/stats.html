@@ -91,6 +91,10 @@
     <div class="p"><h2>CPU 사용률 추이 <small id="cpuSub"></small></h2><div class="chart" id="cpuC"></div><div class="legend" id="cpuL"></div></div>
     <div class="p"><h2>메모리 사용률 추이 <small id="memSub"></small></h2><div class="chart" id="memC"></div><div class="legend" id="memL"></div></div>
   </div>
+  <div class="g2" id="envWrap" hidden>
+    <div class="p"><h2>서버실 온도 <small id="tpSub"></small></h2><div class="chart" id="tpC"></div><div class="legend" id="tpL"></div></div>
+    <div class="p"><h2>서버실 습도 <small id="hmSub"></small></h2><div class="chart" id="hmC"></div><div class="legend" id="hmL"></div></div>
+  </div>
   <div class="g2">
     <div class="p"><h2>경고 발생 건수 <small>일별 · 텔레그램 경고 기준 (계속/복귀 제외)</small></h2><div class="chart" id="alC"></div></div>
     <div class="p"><h2>서버별 가동률 <small>오프라인 시간 기준</small></h2><div class="ub" id="upB"></div></div>
@@ -160,6 +164,17 @@ function render() {
     ['가동률', upr == null ? '-' : upr.toFixed(2), '%', '오프라인 누적 ' + hrs(off), upr == null ? '' : upr >= 99.5 ? 'ok' : upr >= 95 ? 'warn' : 'bad'],
     ['경고 발생', alerts, '건', `CPU ${br.cpu} · 메모리 ${br.mem} · 디스크 ${br.disk + br.full} · 오프라인 ${br.offline} · 백업 ${br.backup || 0}`, alerts ? (alerts >= 10 ? 'bad' : 'warn') : 'ok'],
     ['디스크 증감 합계', (dsum >= 0 ? '+' : '-') + MON.fmtBytes(Math.abs(dsum)), '', '기간 시작 대비', dsum > 50 * 1024 ** 3 ? 'warn' : ''],
+    ...(() => {
+      const e = list.filter((h) => h.env_n);
+      if (!e.length) return [];
+      const tAvg = e.reduce((a, h) => a + h.temp_avg * h.env_n, 0) / e.reduce((a, h) => a + h.env_n, 0);
+      const tMax = Math.max(...e.map((h) => h.temp_max)), tMin = Math.min(...e.map((h) => h.temp_min));
+      const hAvg = e.reduce((a, h) => a + h.hum_avg * h.env_n, 0) / e.reduce((a, h) => a + h.env_n, 0);
+      return [
+        ['서버실 평균 온도', tAvg.toFixed(1), '℃', `최고 ${tMax.toFixed(1)}℃ · 최저 ${tMin.toFixed(1)}℃`, tMax >= 28 ? 'bad' : tMax >= 26 ? 'warn' : 'ok'],
+        ['서버실 평균 습도', hAvg.toFixed(1), '%', `최고 ${Math.max(...e.map((h) => h.hum_max)).toFixed(1)}% · 최저 ${Math.min(...e.map((h) => h.hum_min)).toFixed(1)}%`, ''],
+      ];
+    })(),
   ].map(([l, v, u, s, c]) => `<div class="kpi ${c}"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div><div class="s">${esc(s)}</div></div>`).join('');
 
   // 추이 그래프
@@ -170,6 +185,24 @@ function render() {
   $('#cpuSub').textContent = $('#memSub').textContent = single ? '평균 · 최대 (%)' : '서버별 평균 (%)';
   lineChart($('#cpuC'), $('#cpuL'), mk('ca', 'cx'), { ymax: 100, unit: '%' });
   lineChart($('#memC'), $('#memL'), mk('ma', 'mx'), { ymax: 100, unit: '%' });
+
+  // 서버실 온습도 (센서가 달린 서버만)
+  const envHosts = all.filter((h) => h.env_n);
+  const envList = envHosts.filter((h) => !state.host || h.host === state.host);
+  $('#envWrap').hidden = !envList.length;
+  if (envList.length) {
+    const one = envList.length === 1;
+    const mkEnv = (ka, kx, kn) => one
+      ? [{ name: '평균', color: PAL[0], area: true, pts: envList[0].series.filter((r) => r[ka] != null).map((r) => [r.t, r[ka]]) },
+         { name: '최고', color: PAL[1], dash: '5 4', pts: envList[0].series.filter((r) => r[kx] != null).map((r) => [r.t, r[kx]]) },
+         { name: '최저', color: PAL[2], dash: '2 3', pts: envList[0].series.filter((r) => r[kn] != null).map((r) => [r.t, r[kn]]) }]
+      : envList.map((h, i) => ({ name: h.name || h.host, color: colorOf(i), dash: dashOf(i), pts: h.series.filter((r) => r[ka] != null).map((r) => [r.t, r[ka]]) }));
+    const sub = (u, h) => one ? `${h.name || h.host} · 평균 · 최고 · 최저 (${u})` : `서버별 평균 (${u})`;
+    $('#tpSub').textContent = sub('℃', envList[0]);
+    $('#hmSub').textContent = sub('%', envList[0]);
+    lineChart($('#tpC'), $('#tpL'), mkEnv('ta', 'tx', 'tn'), { unit: '℃', ymax: null });
+    lineChart($('#hmC'), $('#hmL'), mkEnv('ha', 'hx', 'hn'), { unit: '%', ymax: 100 });
+  }
 
   // 경고 일별 막대 (선택 서버가 있으면 이벤트 목록에서 다시 집계)
   const byDay = {};

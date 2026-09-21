@@ -18,6 +18,16 @@
   .head .chips { display:flex; gap:8px; margin-left:8px; }
   .chip { font-size:14px; padding:4px 12px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
   .chip b { margin-left:4px; } .chip.ok b { color:var(--ok); } .chip.warn b { color:var(--warn); } .chip.bad b { color:var(--bad); }
+  /* 서버실 온습도 */
+  .chip.env { display:flex; align-items:center; gap:8px; padding:3px 14px; background:rgba(56,189,248,.08); border-color:rgba(56,189,248,.35); }
+  .chip.env .lb { font-size:12px; color:var(--muted); }
+  .chip.env em { font-style:normal; font-size:19px; font-weight:800; letter-spacing:-.5px; }
+  .chip.env u { text-decoration:none; font-size:11px; color:var(--muted); margin-left:1px; }
+  .chip.env .t em { color:var(--ok); } .chip.env .h em { color:#38bdf8; }
+  .chip.env .t.w em, .chip.env .h.w em { color:var(--warn); }
+  .chip.env .t.b em, .chip.env .h.b em { color:var(--bad); }
+  .chip.env.alarm { background:rgba(239,68,68,.14); border-color:rgba(239,68,68,.6); animation:envbl 1.6s ease-in-out infinite; }
+  @keyframes envbl { 0%,100% { opacity:1 } 50% { opacity:.6 } }
   .head .clock { margin-left:auto; font-size:26px; font-variant-numeric:tabular-nums; color:var(--muted); }
   .head .date { font-size:14px; color:var(--muted); }
   .p { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
@@ -127,6 +137,8 @@ function donut(counts) {
   document.getElementById('dLegend').innerHTML = Object.entries(counts).map(([k, v], i) => `<div class="li"><span class="sw" style="background:var(${SERIES[i % 6]})"></span><span class="nm">${esc(k)}</span><span class="ct">${v}대</span></div>`).join('');
 }
 
+let settings = null;                                   // 알림 기준 (온습도 색 표시에 사용)
+async function loadSettings() { try { settings = await (await fetch('api/settings')).json(); } catch (e) {} }
 async function refresh() {
   try {
     const [sr, ar] = await Promise.all([fetch('api/servers'), fetch('api/alerts?n=12')]);
@@ -138,7 +150,23 @@ async function refresh() {
     const g = {}; for (const s of servers) g[s.host] = grade(s, active);
     const cnt = { ok: 0, warn: 0, bad: 0, off: 0 }; for (const s of servers) cnt[g[s.host]]++;
     document.body.classList.toggle('alarm', cnt.off > 0 || cnt.bad > 0);
-    document.getElementById('chips').innerHTML = `<span class="chip">전체<b>${servers.length}</b></span><span class="chip ok">정상<b>${cnt.ok}</b></span><span class="chip warn">주의<b>${cnt.warn}</b></span><span class="chip bad">위험<b>${cnt.bad}</b></span><span class="chip bad">오프라인<b>${cnt.off}</b></span>`;
+    document.getElementById('chips').innerHTML = `<span class="chip">전체<b>${servers.length}</b></span><span class="chip ok">정상<b>${cnt.ok}</b></span><span class="chip warn">주의<b>${cnt.warn}</b></span><span class="chip bad">위험<b>${cnt.bad}</b></span><span class="chip bad">오프라인<b>${cnt.off}</b></span>` + envChips();
+
+    // 서버실 온습도 (센서 달린 서버만)
+    function envChips() {
+      const r = (settings && settings.rules) || {};
+      const th = r.temp_high == null ? 28 : r.temp_high, tl = r.temp_low == null ? 15 : r.temp_low;
+      const hh = r.hum_high == null ? 80 : r.hum_high, hl = r.hum_low == null ? 20 : r.hum_low;
+      return servers.filter(s => s.env && s.online).map(s => {
+        const t = s.env.t, h = s.env.h;
+        const tc = (t >= th || t <= tl) ? 'b' : (t >= th - 2 || t <= tl + 2) ? 'w' : '';
+        const hc = (h >= hh || h <= hl) ? 'b' : (h >= hh - 5 || h <= hl + 5) ? 'w' : '';
+        return `<span class="chip env ${tc === 'b' || hc === 'b' ? 'alarm' : ''}" title="${esc(label(s))} · 기준 온도 ${tl}~${th}℃, 습도 ${hl}~${hh}%">
+          <span class="lb">서버실</span>
+          <span class="t ${tc}">🌡 <em>${t.toFixed(1)}</em><u>℃</u></span>
+          <span class="h ${hc}">💧 <em>${h.toFixed(1)}</em><u>%</u></span></span>`;
+      }).join('');
+    }
 
     // OS 도넛
     const oc = {}; for (const s of servers) { const t = osType(s); oc[t] = (oc[t] || 0) + 1; }
@@ -214,7 +242,7 @@ async function refresh() {
       : '<div class="empty">최근 알림 없음</div>';
   } catch (e) { document.getElementById('evsub').textContent = '수집 서버 연결 실패: ' + e.message; }
 }
-refresh(); setInterval(refresh, 5000);
+loadSettings(); refresh(); setInterval(refresh, 5000); setInterval(loadSettings, 5 * 60000);
 </script>
 </body>
 </html>
