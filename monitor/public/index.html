@@ -20,7 +20,24 @@
   body:not(.embed) header h1 { display:none; }
   header .sum { color:var(--muted); font-size:13px; }
   header .sum b { color:var(--text); }
-  header .ver { margin-left:auto; color:var(--muted); font-size:11px; }
+  header .ver { color:var(--muted); font-size:11px; }
+  /* 서버실 온습도 (맨 위 가운데) */
+  #envbar { margin-left:auto; display:flex; gap:10px; }
+  #envbar:empty { display:none; }
+  .envbox { display:flex; align-items:center; gap:14px; padding:7px 16px 7px 14px; border-radius:10px;
+    background:rgba(56,189,248,.08); border:1px solid rgba(56,189,248,.35); }
+  .envbox .ttl { display:flex; flex-direction:column; line-height:1.15; }
+  .envbox .ttl b { font-size:12px; color:var(--text); white-space:nowrap; }
+  .envbox .ttl span { font-size:10.5px; color:var(--muted); white-space:nowrap; }
+  .envbox .v { display:flex; align-items:baseline; gap:4px; }
+  .envbox .v i { font-style:normal; font-size:15px; opacity:.85; }
+  .envbox .v em { font-style:normal; font-size:21px; font-weight:800; letter-spacing:-.5px; }
+  .envbox .v u { text-decoration:none; font-size:12px; color:var(--muted); }
+  .envbox.t-ok .v.t em { color:#22c55e; } .envbox.t-warn .v.t em { color:var(--warn); } .envbox.t-bad .v.t em { color:var(--bad); }
+  .envbox.h-ok .v.h em { color:#38bdf8; } .envbox.h-warn .v.h em { color:var(--warn); } .envbox.h-bad .v.h em { color:var(--bad); }
+  .envbox.alarm { background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.55); animation:envblink 1.6s ease-in-out infinite; }
+  @keyframes envblink { 0%,100% { opacity:1 } 50% { opacity:.62 } }
+  @media (max-width:900px) { .envbox .ttl { display:none; } }
   #vermismatch { background:#7c2d12; color:#fff; padding:8px 20px; font-size:13px; }
   #vermismatch[hidden] { display:none; }
   header .bell { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:13px; position:relative; }
@@ -121,6 +138,7 @@
 <header>
   <h1>서버 모니터</h1>
   <div class="sum" id="sum">연결 중…</div>
+  <div id="envbar"></div>
   <div class="ver" id="ver"></div>
   <button class="bell" id="bell" title="알림 설정과 이력">🔔 알림<b id="bellcnt" hidden>0</b></button>
 </header>
@@ -250,7 +268,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.30.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.30.2';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -335,8 +353,28 @@ function cardHtml(s) {
   </div>`;
 }
 
+// 맨 위 서버실 온습도 상자 (센서 꽂힌 서버마다 하나)
+function renderEnvBar() {
+  const r = (alertConf && alertConf.rules) || {};
+  const th = r.temp_high == null ? 28 : r.temp_high, tl = r.temp_low == null ? 15 : r.temp_low;
+  const hh = r.hum_high == null ? 80 : r.hum_high, hl = r.hum_low == null ? 20 : r.hum_low;
+  const list = servers.filter(s => s.env && s.online);
+  document.getElementById('envbar').innerHTML = list.map(s => {
+    const t = s.env.t, h = s.env.h;
+    const tCls = (t >= th || t <= tl) ? 't-bad' : (t >= th - 2 || t <= tl + 2) ? 't-warn' : 't-ok';
+    const hCls = (h >= hh || h <= hl) ? 'h-bad' : (h >= hh - 5 || h <= hl + 5) ? 'h-warn' : 'h-ok';
+    const bad = tCls === 't-bad' || hCls === 'h-bad';
+    return `<div class="envbox ${tCls} ${hCls} ${bad ? 'alarm' : ''}"
+      title="${esc(s.name || s.host)} 에 연결된 센서 · 기준 온도 ${tl}~${th}℃, 습도 ${hl}~${hh}%">
+      <div class="ttl"><b>서버실 온습도</b><span>${esc(s.name || s.host)}</span></div>
+      <div class="v t"><i>🌡</i><em>${t.toFixed(1)}</em><u>℃</u></div>
+      <div class="v h"><i>💧</i><em>${h.toFixed(1)}</em><u>%</u></div>
+    </div>`;
+  }).join('');
+}
 function render() {
   const online = servers.filter(s => s.online).length;
+  renderEnvBar();
   $sum.innerHTML = `총 <b>${servers.length}</b>대 · 온라인 <b>${online}</b> · 오프라인 <b>${servers.length - online}</b> · ${new Date().toLocaleTimeString('ko-KR')}`;
   if (!servers.length) {
     $main.innerHTML = `<div class="empty">아직 수신된 데이터가 없습니다.<br>서버에서 에이전트를 실행하면 여기에 카드가 나타납니다.<br>테스트: <code>node agent/simulate.js</code></div>`;
