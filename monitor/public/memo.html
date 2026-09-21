@@ -201,6 +201,13 @@
   #pen button.cx { color:var(--muted); }
   #pen button.cx:hover { border-color:var(--bad); color:var(--bad); background:rgba(225,29,72,.08); }
   #pen .tt { color:var(--muted); font-size:11px; margin-right:2px; }
+  #pen .pi { width:46px; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    padding:4px 2px; font:inherit; font-size:12.5px; text-align:center; -moz-appearance:textfield; }
+  #pen .pi:focus { outline:none; border-color:var(--accent); }
+  #pen .pi::-webkit-outer-spin-button, #pen .pi::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  #pen .u { color:var(--muted); font-size:11px; }
+  #pen .pv { width:30px; height:28px; display:flex; align-items:center; justify-content:center; }
+  #pen .pv i { display:block; border-radius:50%; background:var(--text); }
 
   .dot { width:13px; height:13px; border-radius:50%; border:1px solid rgba(0,0,0,.25); cursor:pointer; background:var(--bg2,#fde68a); flex:none; }
   .x { margin-left:auto; background:none; border:0; color:rgba(31,41,55,.45); font:inherit; font-size:14px; line-height:1; cursor:pointer; padding:0 3px; }
@@ -334,7 +341,6 @@ let trash = [];                                                   // 휴지통 (
 let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4 };
 // 그림판 펜 (색·굵기는 설정에 저장, 지우개는 그때그때)
 const PENS = ['#1f2937', '#dc2626', '#ea580c', '#eab308', '#16a34a', '#2563eb', '#7c3aed', '#94a3b8'];
-const PW = [2, 4, 8, 16];
 let eraser = false;
 function applyTheme() {                                        // 밝게 / 어둡게
   const d = prefs.theme === 'dark';
@@ -601,7 +607,15 @@ $('#addArea').onclick = () => {
 
 // ---- 그림판 (그림 메모) ----
 // 메모 안이 도화지다. 선은 기준 크기(draw.w × draw.h) 좌표로 저장하고, 메모 크기에 맞춰 늘여서 그린다.
-const DW = 320, DH = 232;                                   // 새 그림 메모의 기준 도화지 크기
+const PWS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 60];     // 펜 굵기 − ＋ 눈금 (직접 적을 수도 있다)
+const PW_MIN = 1, PW_MAX = 60;
+const pwFix = (v) => Math.min(PW_MAX, Math.max(PW_MIN, Math.round(Number(v) || 4)));
+function pwStep(v, dir) {
+  v = pwFix(v);
+  if (dir > 0) return pwFix(PWS.find((x) => x > v) || PW_MAX);
+  const lo = PWS.filter((x) => x < v);
+  return pwFix(lo.length ? lo[lo.length - 1] : PW_MIN);
+}
 function penOf(st) { return { c: st.e ? '#ffffff' : st.c, w: st.w }; }
 function path(x, st) {                                      // 선 하나 그리기
   const q = penOf(st);
@@ -631,15 +645,22 @@ function drawPng(d, W, H) {                                 // 휴지통 미리�
   for (const st of d.s) path(x, st);
   return c.toDataURL('image/png');
 }
+function drawSize() {                                       // 새 그림판 크기 (화면에 맞춰 크게)
+  const b = $('#board');
+  const w = Math.max(480, Math.min(1200, snap((b.clientWidth || 900) * 0.72)));
+  const h = Math.max(340, Math.min(900, snap((b.clientHeight || 620) * 0.72)));
+  return { w, h };
+}
 function newDraw(x, y) {
-  const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: DW, h: DH + 26,
-    title: '', text: '', color: 'white', z: topZ() + 1, fs: prefs.fs, draw: { w: DW, h: DH, s: [] } };
+  const z = drawSize();
+  const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: z.w, h: z.h,
+    title: '', text: '', color: 'white', z: topZ() + 1, fs: prefs.fs, draw: { w: z.w, h: z.h - 26, s: [] } };
   cur().notes.push(n); unstack(n, 'n'); sel = n.id; eraser = false; touch(); render();
   const el = document.querySelector(`.note[data-id="${n.id}"]`); if (el) openPen(el, n.id);
 }
 $('#addDraw').onclick = () => {
-  const c = viewCenter(), k = cur().notes.length;
-  newDraw(c.x - DW / 2 + (k % 5) * 20, c.y - DH / 2 + (k % 5) * 20);
+  const c = viewCenter(), z = drawSize(), k = cur().notes.length;
+  newDraw(c.x - z.w / 2 + (k % 4) * 20, c.y - z.h / 2 + (k % 4) * 20);
 };
 // 그리기 (마우스 · 터치 · 펜 모두 같은 처리)
 let stroke = null;
@@ -697,7 +718,11 @@ function openPen(el, id) {
   penFor = id;
   $('#pen').innerHTML = `<span class="tt">펜</span>
     <span class="pc">${PENS.map((c) => `<b class="sw ${!eraser && prefs.pc === c ? 'on' : ''}" data-c="${c}" style="background:${c}"></b>`).join('')}</span>
-    <span class="gp">${PW.map((w, i) => `<button data-w="${w}" class="${prefs.pw === w ? 'on' : ''}" title="${['가늘게', '보통', '굵게', '아주 굵게'][i]}" style="font-size:${8 + i * 4}px;line-height:1">●</button>`).join('')}</span>
+    <span class="gp"><span class="tt">굵기</span>
+      <button data-pw="-" title="가늘게">－</button>
+      <input class="pi" type="number" min="${PW_MIN}" max="${PW_MAX}" step="1" value="${pwFix(prefs.pw)}" title="펜 굵기 (1~60)">
+      <span class="u">px</span><button data-pw="+" title="굵게">＋</button>
+      <span class="pv" title="지금 굵기"><i style="width:${Math.min(22, pwFix(prefs.pw))}px;height:${Math.min(22, pwFix(prefs.pw))}px;background:${eraser ? '#ffffff' : prefs.pc};box-shadow:0 0 0 1px rgba(128,128,128,.5) inset"></i></span></span>
     <span class="gp"><button data-a="er" class="${eraser ? 'on' : ''}" title="지우개">🧽</button>
       <button data-a="undo" title="한 번 되돌리기">↶</button>
       <button data-a="clr" title="전부 지우기">🗑</button>
@@ -705,14 +730,28 @@ function openPen(el, id) {
   $('#pen').hidden = false;
   posPen();
 }
-$('#pen').addEventListener('mousedown', (e) => e.stopPropagation());
+function setPw(v) {                                          // 굵기 적용 (창을 다시 그리지 않는다)
+  prefs.pw = pwFix(v);
+  const i = $('#pen .pi'), d = $('#pen .pv i');
+  if (i && Number(i.value) !== prefs.pw) i.value = prefs.pw;
+  if (d) { const z = Math.min(22, prefs.pw); d.style.width = z + 'px'; d.style.height = z + 'px'; }
+  touch();
+}
+$('#pen').oninput = (e) => { if (e.target.classList.contains('pi')) setPw(e.target.value); };
+$('#pen').addEventListener('change', (e) => { if (e.target.classList.contains('pi')) e.target.value = pwFix(e.target.value); });
+$('#pen').addEventListener('keydown', (e) => {
+  if (!e.target.classList.contains('pi')) return;
+  e.stopPropagation();
+  if (e.key === 'Enter' || e.key === 'Escape') e.target.blur();
+});
+$('#pen').addEventListener('mousedown', (e) => { if (!e.target.classList.contains('pi')) e.preventDefault(); e.stopPropagation(); });
 $('#pen').onclick = (e) => {
   const n = find('n', penFor); if (!n || !n.draw) { closePen(); return; }
   const el = document.querySelector(`.note[data-id="${n.id}"] canvas.dw`);
-  const c = e.target.dataset.c, w = e.target.closest('button') && e.target.closest('button').dataset.w;
-  const a = e.target.closest('button') && e.target.closest('button').dataset.a;
+  const btn = e.target.closest('button');
+  const c = e.target.dataset.c, w = btn && btn.dataset.pw, a = btn && btn.dataset.a;
   if (c) { prefs.pc = c; eraser = false; touch(); openPen(document.querySelector(`.note[data-id="${n.id}"]`), n.id); return; }
-  if (w) { prefs.pw = Number(w); touch(); openPen(document.querySelector(`.note[data-id="${n.id}"]`), n.id); return; }
+  if (w) { setPw(pwStep($('#pen .pi').value, w === '+' ? 1 : -1)); return; }
   if (a === 'er') { eraser = !eraser; openPen(document.querySelector(`.note[data-id="${n.id}"]`), n.id); return; }
   if (a === 'undo') { n.draw.s.pop(); if (el) paint(el, n.draw); touch(); return; }
   if (a === 'clr') {
@@ -1291,7 +1330,7 @@ const HELP = `
     <li>옮길 때 다른 메모에 <b>자석처럼 딱 붙습니다</b> (⚙ 에서 끌 수 있습니다).</li></ul>
   <h4>그림판</h4>
   <ul><li>위쪽 <b>＋ 그림판</b> 을 누르면 그림을 그릴 수 있는 메모가 붙습니다. 그 위에서 <b>끌면 바로 그려집니다</b>.</li>
-    <li>고르면 <b>펜 창</b>이 뜹니다 — 색 8가지, 굵기 4단계, <b>🧽 지우개</b>, <b>↶ 되돌리기</b>, <b>🗑 전부 지우기</b>.</li>
+    <li>고르면 <b>펜 창</b>이 뜹니다 — 색 8가지, <b>굵기는 숫자(1~60px)</b>로 적거나 －/＋ 로 조절, <b>🧽 지우개</b>, <b>↶ 되돌리기</b>, <b>🗑 전부 지우기</b>.</li>
     <li>메모 크기를 바꾸면 그림도 함께 늘어납니다. 제목·색은 다른 메모와 똑같이 씁니다.</li>
     <li>태블릿·터치 화면에서는 손가락이나 펜으로도 그려집니다.</li></ul>
   <h4>링크 아이콘</h4>
@@ -1324,7 +1363,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.32.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.32.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
