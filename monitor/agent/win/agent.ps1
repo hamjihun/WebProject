@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.7.0"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.7.1"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -83,17 +83,48 @@ $HasVeeam = (Test-Path $VeeamScript) -and ((Test-Path "$env:ProgramFiles\Veeam\B
 $veeamLast = (Get-Date).AddHours(-1); $veeamProc = $null
 if ($HasVeeam) { Log "Veeam 감지: 백업 작업 상태를 10분마다 수집합니다" }
 # 온습도 센서 (라디오노드 UA10 계열: 시리얼 포트로 ATCD 를 보내면 "온도,습도" 로 답한다)
-# agent.conf 에 ENV_PORT=COM3 (필요하면 ENV_BAUD=115200) 을 적으면 켜진다.
+# agent.conf 에 ENV_PORT=AUTO (또는 COM3 처럼 직접) 를 적으면 켜진다. AUTO 면 USB 를 다른 자리에 꽂아
+# 포트 번호가 바뀌어도 알아서 다시 찾는다. 속도는 아무 값이나 되며 기본 115200.
 $EnvPort = $conf['ENV_PORT']
 $EnvBaud = 0; if ($conf['ENV_BAUD']) { $EnvBaud = [int]$conf['ENV_BAUD'] }
 if ($EnvBaud -le 0) { $EnvBaud = 115200 }
-$envSp = $null; $envWarned = $false
-if ($EnvPort) { Log "온습도 센서 사용: $EnvPort @ $EnvBaud" }
+$EnvAuto = $EnvPort -and ($EnvPort -match '^(auto|자동)$')
+$envSp = $null; $envPortCur = $(if ($EnvAuto) { '' } else { $EnvPort }); $envFail = 0; $envScan = [datetime]::MinValue; $envWarned = $false
+if ($EnvPort) { Log "온습도 센서 사용: $(if ($EnvAuto) { '자동 찾기' } else { $EnvPort }) @ $EnvBaud" }
+
+function Test-EnvPort([string]$port) {          # 그 포트가 센서인지 물어본다 (맞으면 "온도,습도" 반환)
+  $sp = $null
+  try {
+    $sp = New-Object System.IO.Ports.SerialPort $port, $EnvBaud, 'None', 8, 'One'
+    $sp.ReadTimeout = 800; $sp.NewLine = "`r`n"
+    $sp.Open(); Start-Sleep -Milliseconds 200
+    $sp.DiscardInBuffer(); $sp.WriteLine('ATCD'); Start-Sleep -Milliseconds 350
+    $r = $sp.ReadExisting(); $sp.Close()
+    if ($r -match '(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)') { return $true }
+  } catch { try { if ($sp -and $sp.IsOpen) { $sp.Close() } } catch {} }
+  return $false
+}
+function Find-EnvPort {                          # 꽂혀 있는 COM 포트를 훑어 센서를 찾는다
+  $script:envScan = Get-Date
+  try {
+    foreach ($p in [System.IO.Ports.SerialPort]::GetPortNames()) {
+      if (Test-EnvPort $p) { Log "온습도 센서 찾음: $p"; return $p }
+    }
+  } catch { if (-not $script:envWarned) { Log "온습도 포트 찾기 실패: $($_.Exception.Message)"; $script:envWarned = $true } }
+  return ''
+}
 function Get-EnvReading {
   if (-not $EnvPort) { return $null }
+  if (-not $script:envPortCur) {                 # 아직 못 찾았으면 (자동일 때만) 1분에 한 번 훑는다
+    if (-not $EnvAuto) { return $null }
+    if (((Get-Date) - $script:envScan).TotalSeconds -lt 60) { return $null }
+    $script:envPortCur = Find-EnvPort
+    if (-not $script:envPortCur) { return $null }
+    $script:envFail = 0
+  }
   try {
     if ((-not $script:envSp) -or (-not $script:envSp.IsOpen)) {
-      $script:envSp = New-Object System.IO.Ports.SerialPort $EnvPort, $EnvBaud, 'None', 8, 'One'
+      $script:envSp = New-Object System.IO.Ports.SerialPort $script:envPortCur, $EnvBaud, 'None', 8, 'One'
       $script:envSp.ReadTimeout = 1000
       $script:envSp.NewLine = "`r`n"
       $script:envSp.Open()
@@ -104,16 +135,23 @@ function Get-EnvReading {
     Start-Sleep -Milliseconds 350
     $r = $script:envSp.ReadExisting()
     if ($r -match '(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)') {
-      $script:envWarned = $false
+      $script:envFail = 0; $script:envWarned = $false
       return @{ t = [math]::Round([double]$matches[1], 2); h = [math]::Round([double]$matches[2], 2) }
     }
-    return $null
+    $script:envFail++
   } catch {
     try { if ($script:envSp) { $script:envSp.Close() } } catch {}
     $script:envSp = $null
-    if (-not $script:envWarned) { Log "온습도 센서 읽기 실패($EnvPort): $($_.Exception.Message)"; $script:envWarned = $true }
-    return $null
+    $script:envFail++
+    if (-not $script:envWarned) { Log "온습도 센서 읽기 실패($script:envPortCur): $($_.Exception.Message)"; $script:envWarned = $true }
   }
+  if ($script:envFail -ge 3) {                   # 세 번 연속 실패 = 빠졌거나 포트가 바뀜 → 다시 찾는다
+    try { if ($script:envSp) { $script:envSp.Close() } } catch {}
+    $script:envSp = $null
+    if ($EnvAuto) { $script:envPortCur = ''; $script:envScan = [datetime]::MinValue }
+    $script:envFail = 0
+  }
+  return $null
 }
 
 # SQL 백업 폴더 / USB 복사 감시 (backup.ps1): 백업 폴더가 있거나 agent.conf 에 BACKUP_PATH/USB/SQL 이 있으면 5분마다
