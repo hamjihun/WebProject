@@ -25,7 +25,7 @@ const DEFAULTS = {
     offline_grace: 0,                           // 오프라인 유예(분): 이 시간 안에 복구되면 텔레그램 생략, 이력만 기록 (0=즉시 전송)
     disk_check_time: '11:30',                   // 디스크 규칙을 하루 한 번 이 시각에만 판단 (빈 값 = 계속 감시)
     env_on: true,                               // 서버실 온습도 알림 (센서 꽂힌 서버만)
-    temp_high: 30, temp_low: 5,                 // 온도 상한 / 하한 (℃)
+    temp_high: 28, temp_low: 15,                // 온도 상한 / 하한 (℃)
     hum_high: 80, hum_low: 20,                  // 습도 상한 / 하한 (%)
     env_minutes: 3,                             // 이 시간 이상 지속되면 알림 (순간 튀는 값 무시)
   },

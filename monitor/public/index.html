@@ -250,7 +250,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.30.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.30.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -307,7 +307,7 @@ function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;'
 function envLine(s) {
   if (!s.env) return '';
   const r = (alertConf && alertConf.rules) || {};
-  const th = r.temp_high == null ? 30 : r.temp_high, tl = r.temp_low == null ? 5 : r.temp_low;
+  const th = r.temp_high == null ? 28 : r.temp_high, tl = r.temp_low == null ? 15 : r.temp_low;
   const hh = r.hum_high == null ? 80 : r.hum_high, hl = r.hum_low == null ? 20 : r.hum_low;
   const tBad = s.env.t >= th || s.env.t <= tl, hBad = s.env.h >= hh || s.env.h <= hl;
   const cls = tBad ? 'bad' : hBad ? 'warn' : 'ok';
@@ -613,8 +613,8 @@ async function loadSettings() {
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
-  F('rEnvOn').checked = c.rules.env_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 30 : c.rules.temp_high;
-  F('rTempLo').value = c.rules.temp_low == null ? 5 : c.rules.temp_low; F('rHumHi').value = c.rules.hum_high == null ? 80 : c.rules.hum_high;
+  F('rEnvOn').checked = c.rules.env_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 28 : c.rules.temp_high;
+  F('rTempLo').value = c.rules.temp_low == null ? 15 : c.rules.temp_low; F('rHumHi').value = c.rules.hum_high == null ? 80 : c.rules.hum_high;
   F('rHumLo').value = c.rules.hum_low == null ? 20 : c.rules.hum_low; F('rEnvMin').value = c.rules.env_minutes == null ? 3 : c.rules.env_minutes;
   F('qEnabled').checked = !!c.quiet.enabled; F('qFrom').value = c.quiet.from; F('qTo').value = c.quiet.to;
 }
@@ -627,7 +627,7 @@ function collectSettings() {
     enabled: F('aEnabled').checked,
     rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), usb_window: (F('rUsbFrom').value && F('rUsbTo').value) ? F('rUsbFrom').value + '-' + F('rUsbTo').value : '', backup_skip_weekend: F('rSkipWeekend').checked, backup_hide: F('rBackupHide').value.trim(),
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '',
-             env_on: F('rEnvOn').checked, temp_high: num('rTempHi', 30), temp_low: num('rTempLo', 5), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
+             env_on: F('rEnvOn').checked, temp_high: num('rTempHi', 28), temp_low: num('rTempLo', 15), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
   };
