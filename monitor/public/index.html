@@ -266,7 +266,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.30.3';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.30.4';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -319,17 +319,6 @@ function shortOs(os) {
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---------- 카드 ----------
-// 서버실 온습도 줄 (센서가 꽂힌 서버만). 기준을 넘으면 색으로 표시
-function envLine(s) {
-  if (!s.env) return '';
-  const r = (alertConf && alertConf.rules) || {};
-  const th = r.temp_high == null ? 28 : r.temp_high, tl = r.temp_low == null ? 15 : r.temp_low;
-  const hh = r.hum_high == null ? 80 : r.hum_high, hl = r.hum_low == null ? 20 : r.hum_low;
-  const tBad = s.env.t >= th || s.env.t <= tl, hBad = s.env.h >= hh || s.env.h <= hl;
-  const cls = tBad ? 'bad' : hBad ? 'warn' : 'ok';
-  return `<div class="bk ${cls}" title="서버실 온습도 (기준 온도 ${tl}~${th}℃, 습도 ${hl}~${hh}%)">
-    <span>🌡 서버실</span><span>${s.env.t}℃ · 💧 ${s.env.h}%${tBad || hBad ? ' ⚠' : ''}</span></div>`;
-}
 function cardHtml(s) {
   const gmap = {}; for (const g of (s.growth || [])) gmap[g.mount] = g;
   const disks = (s.disks || []).map(d => {
@@ -346,7 +335,6 @@ function cardHtml(s) {
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
     ${s.backups ? bkStages(s.backups).map(st => `<div class="bk ${st.cls}" title="카드를 클릭하면 상세"><span>💾 ${st.label}</span><span>${esc(st.txt)}${st.cls === 'bad' ? ' ⚠' : ''}</span></div>`).join('') : ''}
-    ${envLine(s)}
     <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="uptm">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
