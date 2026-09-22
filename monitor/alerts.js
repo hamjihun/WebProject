@@ -31,6 +31,7 @@ const DEFAULTS = {
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
+  hideDisks: {},                   // 서버별로 화면·알림에서 뺄 디스크 { 호스트명: ['VeeamBackup'] }
   hostConf: {},                    // 서버별 에이전트 설정 { 호스트명: { usb_paths: 'DB=E:\\DBBackup; DATA=F:\\GWData' } } (전송 응답으로 에이전트에 전달)
   remind_min: 60,                  // 계속 경고 상태면 이 간격으로 다시 알림 (0 = 처음 한 번만)
   recovery: true,                  // 정상 복귀 알림
@@ -377,11 +378,22 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (settings.muted && settings.muted[host]) { delete settings.muted[host]; changed = true; }
       if (settings.hostRules && settings.hostRules[host]) { delete settings.hostRules[host]; changed = true; }
       if (settings.hostConf && settings.hostConf[host]) { delete settings.hostConf[host]; changed = true; }
+      if (settings.hideDisks && settings.hideDisks[host]) { delete settings.hideDisks[host]; changed = true; }
       if (changed) saveSettings();
     },
     isMuted(host) { return !!(settings.muted && settings.muted[host]); },
     getHostRules(host) { return (settings.hostRules && settings.hostRules[host]) || {}; },
     getHostConf(host) { return (settings.hostConf && settings.hostConf[host]) || {}; },
+    // 서버별로 화면·알림에서 뺄 디스크 (예: 가상화 호스트에 보이는 백업용 데이터스토어)
+    getHideDisks(host) { return (settings.hideDisks && settings.hideDisks[host]) || []; },
+    setHideDisks(host, list) {
+      if (!settings.hideDisks) settings.hideDisks = {};
+      const cur = (Array.isArray(list) ? list : []).map((x) => String(x == null ? '' : x).trim().slice(0, 120)).filter(Boolean).slice(0, 40);
+      if (cur.length) settings.hideDisks[host] = cur; else delete settings.hideDisks[host];
+      clearRule(host, 'disk'); clearRule(host, 'full');      // 숨긴 디스크의 예전 경고 상태는 버린다
+      saveSettings();
+      return this.getHideDisks(host);
+    },
     setHostConf(host, conf) {
       if (!settings.hostConf) settings.hostConf = {};
       const cur = { ...(settings.hostConf[host] || {}) };

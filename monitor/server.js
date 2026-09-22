@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.32.1';
+const VERSION = '1.33.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -416,7 +416,13 @@ function serversView() {
   const now = Date.now();
   const list = [];
   for (const [host, e] of store) {
-    list.push({ ...e.latest, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth: diskGrowth(e), days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host) });
+    // 숨긴 디스크(서버별 설정)는 화면에서도 알림 판단에서도 뺀다. 기록(일별·시간별)은 그대로 남는다.
+    const hideList = alerter.getHideDisks(host);
+    const hide = new Set(hideList.map((x) => String(x).toLowerCase()));
+    const all = Array.isArray(e.latest.disks) ? e.latest.disks : [];
+    const disks = hide.size ? all.filter((d) => !hide.has(String(d.mount || '').toLowerCase())) : all;
+    const growth = diskGrowth(e).filter((g) => !hide.has(String(g.mount || '').toLowerCase()));
+    list.push({ ...e.latest, disks, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth, days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host), all_disks: all.map((d) => d.mount), hide_disks: hideList });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));
@@ -710,7 +716,9 @@ const server = http.createServer(async (req, res) => {
       if (typeof raw.muted === 'boolean') { muted = alerter.setMuted(host, raw.muted); console.log(`[${new Date().toLocaleTimeString()}] 알림 ${muted ? '끔' : '켬'}: ${host}`); }
       let rules = alerter.getHostRules(host);
       if (raw.rules && typeof raw.rules === 'object') { rules = alerter.setHostRules(host, raw.rules); console.log(`[${new Date().toLocaleTimeString()}] 서버별 규칙: ${host} ${JSON.stringify(rules)}`); }
-      return json(res, 200, { ok: true, host, muted, rules });
+      let hide = alerter.getHideDisks(host);
+      if (Array.isArray(raw.hide_disks)) { hide = alerter.setHideDisks(host, raw.hide_disks); console.log(`[${new Date().toLocaleTimeString()}] 숨긴 디스크: ${host} ${JSON.stringify(hide)}`); }
+      return json(res, 200, { ok: true, host, muted, rules, hide_disks: hide });
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 

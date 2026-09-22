@@ -86,6 +86,10 @@
   .hostrules { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:12px; font-size:13px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; }
   .hostrules b { color:var(--muted); font-weight:600; font-size:12px; }
   .hostrules label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+  .hostrules[hidden] { display:none; }          /* display:flex 가 [hidden] 을 이기지 않게 */
+  .hdlist { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .hdlist label { display:flex; align-items:center; gap:5px; cursor:pointer; max-width:220px; }
+  .hdlist label span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .card.off { border-color:var(--bad); background:rgba(239,68,68,.12); }
   .card.off .bar > i { background:#7f1d1d; }
   .top { display:flex; align-items:center; gap:8px; }
@@ -254,6 +258,10 @@
       <label><input type="checkbox" data-rule="backup"> 백업</label>
       <span class="dim" style="font-size:12px">체크를 끄면 이 서버의 해당 알림만 꺼집니다</span>
     </div>
+    <div class="hostrules" id="hostdisks" hidden>
+      <b>화면에 보일 디스크</b><span id="hdList" class="hdlist"></span>
+      <span class="dim" style="font-size:12px">체크를 끄면 카드와 디스크 알림에서 빠집니다 (기록은 그대로 쌓입니다)</span>
+    </div>
     <div class="actions">
       <button id="bPrev">◀ 앞으로</button><button id="bNext">뒤로 ▶</button>
       <button id="bMute">🔕 이 서버 알림 끄기</button>
@@ -266,7 +274,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.32.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.33.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -401,9 +409,28 @@ function updateActionButtons() {
   document.getElementById('bMute').textContent = s && s.muted ? '🔔 이 서버 알림 켜기' : '🔕 이 서버 알림 끄기';
   const hr = (s && s.host_rules) || {};
   for (const cb of document.querySelectorAll('#hostrules input')) { cb.checked = hr[cb.dataset.rule] !== false; cb.disabled = !!(s && s.muted); }
+  renderHostDisks(s);
   document.getElementById('bPrev').disabled = i <= 0;
   document.getElementById('bNext').disabled = i < 0 || i >= servers.length - 1;
 }
+// 이 서버에서 화면·알림에 보일 디스크 고르기 (예: 가상화 호스트에 보이는 백업용 데이터스토어 빼기)
+function renderHostDisks(s) {
+  const box = document.getElementById('hostdisks'), list = document.getElementById('hdList');
+  const all = (s && s.all_disks) || [];
+  if (!all.length) { box.hidden = true; return; }
+  const hide = new Set(((s && s.hide_disks) || []).map(x => String(x).toLowerCase()));
+  list.innerHTML = all.map(m => `<label title="${esc(m)}"><input type="checkbox" data-disk="${esc(m)}"${hide.has(String(m).toLowerCase()) ? '' : ' checked'}><span>${esc(m)}</span></label>`).join('');
+  box.hidden = false;
+}
+document.getElementById('hdList').onchange = async () => {
+  const s = servers.find(x => x.host === selected); if (!s) return;
+  const off = [...document.querySelectorAll('#hdList input')].filter(c => !c.checked).map(c => c.dataset.disk);
+  try {
+    const r = await fetch('api/mute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: selected, hide_disks: off }) });
+    const j = await r.json(); if (j.ok) s.hide_disks = j.hide_disks;
+  } catch (e) {}
+  await refresh(); loadDetail(); loadAlerts();
+};
 document.getElementById('bPrev').onclick = () => shiftHost(selected, -1);
 document.getElementById('bNext').onclick = () => shiftHost(selected, 1);
 for (const cb of document.querySelectorAll('#hostrules input')) cb.onchange = async () => {
