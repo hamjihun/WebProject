@@ -1389,7 +1389,10 @@ const HELP = `
     <li>알림판은 머리의 <b>›</b> 로 숨기고, 숨기면 오른쪽 가장자리의 <b>‹</b> 로 다시 폅니다.</li>
     <li>알림은 <b>서버 현황·대시보드·일정 등 어느 화면을 보고 있어도</b> 뜹니다. 한 곳에서 확인하면 나머지 화면의 팝업도 닫힙니다.</li>
     <li><b>다른 탭을 보고 있을 때</b>는 소리와 함께 탭 제목이 <b>🔔 알림!</b> 으로 깜빡입니다.</li>
-    <li><b>⚙ → 🔔 윈도우 알림 켜기</b> 를 한 번 눌러 허용하면 <b>창을 최소화해 두어도</b> 바탕화면에 뜹니다.</li>
+    <li><b>브라우저를 안 켜도</b> 알림을 받으려면 <b>⚙ → 💻 윈도우 팝업 프로그램 받기</b> 로 내 PC에 한 번 설치하세요.
+      받은 파일을 두 번 누르고 아이디·비밀번호를 한 번만 넣으면, 컴퓨터를 켤 때마다 알아서 실행되어(시계 옆 종 모양)
+      시간이 되면 바탕화면에 팝업이 뜹니다. 지울 때는 같은 폴더의 <b>ims-alarm-remove.cmd</b> 를 쓰거나 시작프로그램의 IMS-Alarm.vbs 를 지우면 됩니다.</li>
+    <li>브라우저만 쓸 때는 <b>⚙ → 🔔 브라우저 알림 켜기</b> 로 허용하면 창을 최소화해도 뜹니다(주소가 http 라 막힐 수 있습니다).</li>
     <li>브라우저를 모두 닫아 두었다면 다시 열었을 때 지난 알림이 바로 뜹니다.</li></ul>
   <h4>링크 아이콘</h4>
   <ul><li><b>＋ 기타 → 🔗 링크 아이콘 만들기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둡니다.</li>
@@ -1421,7 +1424,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.35.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.36.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1442,8 +1445,10 @@ function openCfg() {
       <button data-p="magnet" data-v="0" class="${prefs.magnet ? '' : 'on'}">끄기</button></div>
     <div style="color:var(--muted);font-size:11px;margin-top:11px;line-height:1.6">여기서 정한 색·크기는 <b>앞으로 새로 만드는</b> 메모에 적용됩니다. 이미 붙여 둔 메모는 그대로입니다.</div>
     <div class="sec" style="margin-top:12px">알림</div>
-    <div class="row"><button data-p="note">🔔 윈도우 알림 켜기</button></div>
-    <div style="color:var(--muted);font-size:10.5px;margin-top:5px;line-height:1.6">켜 두면 창을 최소화하거나 다른 탭을 봐도 바탕화면에 알림이 뜹니다. (브라우저가 막으면 팝업·소리·탭 제목으로 알려 줍니다)</div>
+    <div class="row"><button data-p="win">💻 윈도우 팝업 프로그램 받기</button></div>
+    <div style="color:var(--muted);font-size:10.5px;margin-top:5px;line-height:1.6">내 PC에 한 번 설치하면 <b>브라우저를 안 켜도</b> 시간이 됐을 때 바탕화면에 팝업이 뜹니다. 받은 파일을 두 번 누르고 아이디·비밀번호를 한 번만 넣으면 끝입니다.</div>
+    <div class="row" style="margin-top:6px"><button data-p="note">🔔 브라우저 알림 켜기</button></div>
+    <div style="color:var(--muted);font-size:10.5px;margin-top:5px;line-height:1.6">브라우저를 켜 두고 쓸 때만 필요합니다. (막히면 팝업·소리·탭 제목으로 알려 줍니다)</div>
     <div class="sec" style="margin-top:12px">백업</div>
     <div class="row"><button data-p="dl">💾 백업 받기</button><button data-p="up">📂 복원</button></div>
     <button class="hlp" data-p="help">❓ 도움말 (사용법 보기)</button>
@@ -1465,6 +1470,14 @@ $('#cfg').onclick = (e) => {
   else if (k === 'magnet') prefs.magnet = v === '1';
   else if (k === 'fs') prefs.fs = Number(v);
   else if (k === 'theme') { prefs.theme = v; applyTheme(); }
+  else if (k === 'win') {
+    $('#cfg').hidden = true;
+    const a = document.createElement('a');
+    a.href = 'tools/ims-alarm-setup.cmd'; a.download = 'IMS-alarm-setup.cmd';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => alert('받은 IMS-alarm-setup.cmd 파일을 두 번 누르세요.\n\n· 브라우저가 "위험할 수 있음" 이라고 물으면 [유지] 를 누릅니다.\n· 검은 창이 뜨면 아이디와 비밀번호를 한 번만 넣습니다.\n· 그 뒤로는 컴퓨터를 켤 때마다 알아서 실행되고, 시계 옆에 종 모양이 생깁니다.'), 400);
+    return;
+  }
   else if (k === 'note') {
     $('#cfg').hidden = true;
     MON.alarms.ask().then((r) => {

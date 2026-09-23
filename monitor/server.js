@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.35.1';
+const VERSION = '1.36.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -594,10 +594,10 @@ const server = http.createServer(async (req, res) => {
 
   // ---- 메모 알림 (모든 화면에서 씀. 메모 본문 없이 알림만 주고받는다) ----
   if (url.pathname === '/api/alarms') {
-    if (!me) return json(res, 200, { ok: true, alarms: [], now: Date.now() });        // 로그인 전이면 조용히 빈 목록
-    if (!auth.can(me, 'memo.html')) return json(res, 200, { ok: true, alarms: [], now: Date.now() });
+    if (!me) return json(res, 200, { ok: true, login: false, alarms: [], now: Date.now() });   // 로그인 전이면 조용히 빈 목록 (윈도우 알림 프로그램은 login 을 보고 다시 로그인한다)
+    if (!auth.can(me, 'memo.html')) return json(res, 200, { ok: true, login: true, alarms: [], now: Date.now() });
     try {
-      if (req.method === 'GET') return json(res, 200, { ok: true, alarms: memo.getAlarms(me.id), now: Date.now() });
+      if (req.method === 'GET') return json(res, 200, { ok: true, login: true, alarms: memo.getAlarms(me.id), now: Date.now() });
       if (req.method === 'POST') {
         const raw = JSON.parse((await readBody(req)) || '{}');
         const act = raw.action === 'snooze' ? 'snooze' : 'ok';
