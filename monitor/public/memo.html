@@ -95,8 +95,6 @@
     font:inherit; font-size:11.5px; padding:5px 0; cursor:pointer; }
   #alEd .reps button:hover { border-color:var(--accent); }
   #alEd .reps button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
-  #alEd .tgl { display:flex; align-items:center; gap:5px; margin-top:10px; font-size:11.5px; color:var(--muted); cursor:pointer; }
-  #alEd .tgl b { color:var(--text); font-weight:400; }
   #alEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:var(--onacc); border:0; border-radius:var(--r);
     font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
   #alEd .rm2 { width:100%; margin-top:5px; background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
@@ -1392,8 +1390,7 @@ const HELP = `
     <li>알림은 <b>서버 현황·대시보드·일정 등 어느 화면을 보고 있어도</b> 뜹니다. 한 곳에서 확인하면 나머지 화면의 팝업도 닫힙니다.</li>
     <li><b>다른 탭을 보고 있을 때</b>는 소리와 함께 탭 제목이 <b>🔔 알림!</b> 으로 깜빡입니다.</li>
     <li><b>⚙ → 🔔 윈도우 알림 켜기</b> 를 한 번 눌러 허용하면 <b>창을 최소화해 두어도</b> 바탕화면에 뜹니다.</li>
-    <li>등록할 때 <b>텔레그램으로도 보내기</b> 를 체크하면 <b>브라우저를 닫아 두어도</b> 시간이 됐을 때 텔레그램으로 옵니다.</li>
-    <li>브라우저를 모두 닫아 두었다면(텔레그램 없이) 다시 열었을 때 지난 알림이 바로 뜹니다.</li></ul>
+    <li>브라우저를 모두 닫아 두었다면 다시 열었을 때 지난 알림이 바로 뜹니다.</li></ul>
   <h4>링크 아이콘</h4>
   <ul><li><b>＋ 기타 → 🔗 링크 아이콘 만들기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둡니다.</li>
     <li>한 번 누르면 새 탭으로 열리고, <b>오른쪽 단추</b>로 이름·주소·아이콘을 고칩니다.</li>
@@ -1424,7 +1421,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.35.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.35.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1528,7 +1525,7 @@ function renderAlarms() {
   const now = Date.now();
   const list = alarms.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || a.at - b.at);
   $('#als').innerHTML = list.length ? list.map((a) => `<div class="it ${a.done ? 'done' : (a.at <= now ? 'due' : '')}" data-a="${a.id}" title="눌러서 고치기">
-      <div class="tm">${a.done ? '✓ ' : (a.at <= now ? '🔔 ' : '')}${alTime(a.at)}${a.rep !== 'none' ? ` <span class="rp">· ${AREP[a.rep]}</span>` : ''}${a.tg ? ' <span class="rp">· 📨</span>' : ''}</div>
+      <div class="tm">${a.done ? '✓ ' : (a.at <= now ? '🔔 ' : '')}${alTime(a.at)}${a.rep !== 'none' ? ` <span class="rp">· ${AREP[a.rep]}</span>` : ''}</div>
       <div class="tt">${esc(a.txt || '(내용 없음)')}</div>
       <button class="x" title="이 알림 지우기">✕</button></div>`).join('')
     : '<div style="color:var(--muted);font-size:11.5px;padding:10px 2px;line-height:1.7">등록된 알림이 없습니다.<br>위 <b>＋</b> 로 추가하세요.</div>';
@@ -1546,12 +1543,12 @@ $('#als').onclick = (e) => {
   openAlEd(a.id, it);
 };
 // 알림 등록·고치기 창
-let alFor = null, alRep = 'none', alTg = false;
+let alFor = null, alRep = 'none';
 function openAlEd(id, anchor) {
   const a = id ? alarms.find((x) => x.id === id) : null;
   alFor = a ? a.id : null;
   const d = new Date(a ? a.at : Math.ceil((Date.now() + 10 * 60000) / 300000) * 300000);   // 새 알림은 10분 뒤(5분 단위)
-  alRep = a ? a.rep : 'none'; alTg = a ? !!a.tg : false;
+  alRep = a ? a.rep : 'none';
   $('#alEd').innerHTML = `<div class="sec">알림 내용</div>
     <input class="ti tx" maxlength="200" placeholder="예: 백업 테이프 교체" value="${esc(a ? a.txt : '')}">
     <div class="sec" style="margin-top:9px">날짜 · 시간</div>
@@ -1559,7 +1556,6 @@ function openAlEd(id, anchor) {
       <input class="ti tm" type="time" value="${pad2(d.getHours())}:${pad2(d.getMinutes())}"></div>
     <div class="sec" style="margin-top:9px">반복</div>
     <div class="reps">${Object.keys(AREP).map((k) => `<button data-r="${k}" class="${alRep === k ? 'on' : ''}">${AREP[k]}</button>`).join('')}</div>
-    <label class="tgl"><input type="checkbox" class="tg"${alTg ? ' checked' : ''}> 텔레그램으로도 보내기 <b>(창을 닫아 두어도 옴)</b></label>
     <button class="go2">${a ? '고치기' : '등록'}</button>
     ${a ? '<button class="rm2">이 알림 지우기</button>' : ''}`;
   const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : anchor;
@@ -1575,12 +1571,11 @@ function saveAl() {
   if (!dt || !tm) { alert('날짜와 시간을 정해 주세요.'); return; }
   const at = new Date(`${dt}T${tm}`).getTime();
   if (!Number.isFinite(at)) { alert('날짜·시간을 다시 확인해 주세요.'); return; }
-  alTg = !!($('#alEd .tg') && $('#alEd .tg').checked);
   const a = alarms.find((x) => x.id === alFor);
-  if (a) { a.txt = txt; a.at = at; a.rep = alRep; a.done = false; a.tg = alTg; a.sent = 0; }
+  if (a) { a.txt = txt; a.at = at; a.rep = alRep; a.done = false; }
   else {
     if (alarms.length >= 100) { alert('알림은 100개까지 만들 수 있습니다.'); return; }
-    alarms.push({ id: uid(), txt, at, rep: alRep, done: false, tg: alTg, sent: 0 });
+    alarms.push({ id: uid(), txt, at, rep: alRep, done: false });
   }
   prefs.alarm = true;
   $('#alEd').hidden = true; alFor = null;

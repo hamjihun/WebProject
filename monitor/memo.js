@@ -65,8 +65,6 @@ const alarm = (a) => ({
   at: clamp(num(a && a.at, Date.now()), 0, 4102444800000),      // 2100년까지
   rep: REP_OK[a && a.rep] ? a.rep : 'none',
   done: !!(a && a.done),
-  tg: !!(a && a.tg),                                            // 텔레그램으로도 보내기
-  sent: num(a && a.sent, 0),                                    // 이번 차례의 텔레그램 발송 시각
 });
 // 반복 알림의 다음 차례 (화면 쪽 nextAt() 과 같은 규칙)
 function nextAt(at, rep) {
@@ -215,27 +213,10 @@ function create(opts) {
           if (action === 'snooze') a.at = Date.now() + 10 * 60000;
           else if (REP_OK[a.rep] && a.rep !== 'none') a.at = nextAt(a.at, a.rep);
           else a.done = true;
-          a.sent = 0;                                   // 다음 차례에는 텔레그램을 다시 보낸다
           save();
         }
       }
       return this.getAlarms(uid);
-    },
-    // 텔레그램으로 보낼 차례가 된 알림 (사람마다)
-    dueTelegram(now) {
-      const out = [];
-      for (const [uid, u] of Object.entries(all)) {
-        for (const a of (Array.isArray(u && u.alarms) ? u.alarms : [])) {
-          if (a && a.tg && !a.done && !a.sent && num(a.at) <= now) out.push({ uid, id: a.id, txt: str(a.txt, 200), at: num(a.at) });
-        }
-      }
-      return out;
-    },
-    markSent(uid, id) {
-      const u = all[uid];
-      if (!u || !Array.isArray(u.alarms)) return;
-      const a = u.alarms.find((x) => x && x.id === id);
-      if (a) { a.sent = Date.now(); save(); }
     },
     removeUser(uid) { if (all[uid]) { delete all[uid]; save(); } },
   };

@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.35.0';
+const VERSION = '1.35.1';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -847,20 +847,6 @@ setInterval(() => {
   try { alerter.evaluate(view); } catch (e) { console.error('알림 평가 오류:', e.message); }
   for (const s of view) if (!s.online) { hourBucket(s.host, Date.now()).off += 10; hourlyDirty = true; }   // 오프라인 시간 누적 (가동률 통계용)
 }, 10000).unref();
-// 메모 알림 중 "텔레그램으로도 보내기" 를 켠 것은 화면이 꺼져 있어도 서버가 보낸다
-setInterval(async () => {
-  let due = [];
-  try {
-    if (!alerter.getSettings().telegram.enabled) return;         // 텔레그램을 안 쓰면 나중을 위해 그대로 둔다
-    due = memo.dueTelegram(Date.now());
-  } catch (e) { return; }
-  for (const a of due) {
-    memo.markSent(a.uid, a.id);                                  // 먼저 표시해서 두 번 보내지 않게
-    const when = new Date(a.at).toLocaleString('ko-KR', { hour12: false });
-    try { await alerter.sendText(`🔔 <b>[메모 알림]</b>\n${String(a.txt).replace(/[<>&]/g, '')}\n<i>${when}</i>`); }
-    catch (e) { console.error('메모 알림 텔레그램 실패:', e.message); }
-  }
-}, 30000).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); saveHourly(true); process.exit(0); });
 
 server.on('error', (e) => {
