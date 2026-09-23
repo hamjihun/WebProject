@@ -73,8 +73,7 @@ function create(opts) {
 
   return {
     APPS, ALL_PAGES, ADMIN_PAGE, OPEN_FILES,
-    // tools/ 는 내려받는 설치 파일(윈도우 알림 프로그램)이라 로그인 전에도 받을 수 있다. 자료는 들어 있지 않고, 프로그램이 서버에 물어볼 때는 따로 로그인한다.
-    isOpenFile(file) { return OPEN_FILES.has(file) || /^tools\/[A-Za-z0-9._-]+$/.test(file); },
+    isOpenFile(file) { return OPEN_FILES.has(file); },
     // 쿠키에서 로그인한 사용자 찾기
     fromCookie(cookie) {
       const m = /(?:^|;\s*)ims_sess=([a-f0-9]+)/.exec(String(cookie || ''));
