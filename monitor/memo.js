@@ -7,6 +7,7 @@ const path = require('path');
 
 const MAX_BOARDS = 20, MAX_PAGES = 50, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
 const MAX_STROKES = 600, MAX_PTS = 2000;   // 그림 메모: 선 개수 · 선 하나의 점 개수
+const MAX_ALARMS = 100;                    // 알림판에 담아 둘 수 있는 알림 개수
 const MAX_IMG = 3 * 1024 * 1024;          // 사진 한 장 (data URL 글자 수)
 const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 용량
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
@@ -55,6 +56,16 @@ function drawing(d) {
   })).filter((k) => k.p.length >= 2);
   return { w: clamp(num(d.w, 320), 40, 4000), h: clamp(num(d.h, 232), 40, 4000), s };
 }
+
+// 알림 (알림판). 시각은 1970년부터의 밀리초, rep = 반복
+const REP_OK = { none: 1, day: 1, week: 1, month: 1 };
+const alarm = (a) => ({
+  id: str(a && a.id, 32) || rid(),
+  txt: str(a && a.txt, 200),
+  at: clamp(num(a && a.at, Date.now()), 0, 4102444800000),      // 2100년까지
+  rep: REP_OK[a && a.rep] ? a.rep : 'none',
+  done: !!(a && a.done),
+});
 
 function create(opts) {
   const FILE = opts.file;
@@ -119,6 +130,7 @@ function create(opts) {
     acolor: color(p && p.acolor, 'green'),
     magnet: !(p && p.magnet === false),
     side: !(p && p.side === false),        // 왼쪽 탭 보이기
+    alarm: !(p && p.alarm === false),      // 오른쪽 알림판 보이기
     theme: (p && p.theme) === 'dark' ? 'dark' : 'light',   // 화면 테마 (기본: 밝게)
     pc: hex(p && p.pc, '#1f2937'),                         // 그림판 펜 색
     pw: clamp(num(p && p.pw, 4), 1, 60),                   // 그림판 펜 굵기
@@ -163,19 +175,21 @@ function create(opts) {
       const list = boards.slice(0, MAX_BOARDS).map(board);
       if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', pages: [{ id: rid(), name: '메모 1', notes: [], areas: [], links: [] }] });
       const act = list.some((b) => b.id === active) ? active : list[0].id;
-      return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs) };
+      const al = (Array.isArray(all[uid] && all[uid].alarms) ? all[uid].alarms : []).slice(0, MAX_ALARMS).map(alarm);
+      return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs), alarms: al };
     },
     set(uid, data) {
       const list = (Array.isArray(data && data.boards) ? data.boards : []).slice(0, MAX_BOARDS).map(board);
       if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', pages: [{ id: rid(), name: '메모 1', notes: [], areas: [], links: [] }] });
       const active = list.some((b) => b.id === data.active) ? data.active : list[0].id;
       const trash = (Array.isArray(data && data.trash) ? data.trash : []).slice(0, MAX_TRASH).map(trashItem);
-      const next = { active, boards: list, trash, prefs: prefs(data && data.prefs) };
+      const alarms = (Array.isArray(data && data.alarms) ? data.alarms : []).slice(0, MAX_ALARMS).map(alarm);
+      const next = { active, boards: list, trash, prefs: prefs(data && data.prefs), alarms };
       const size = JSON.stringify(next).length;
       if (size > MAX_USER) throw new Error('사진이 너무 많습니다. 오래된 사진 메모를 지운 뒤 다시 저장해 주세요');
       all[uid] = next;
       save();
-      return { boards: list, active, trash, prefs: next.prefs };
+      return { boards: list, active, trash, prefs: next.prefs, alarms };
     },
     removeUser(uid) { if (all[uid]) { delete all[uid]; save(); } },
   };

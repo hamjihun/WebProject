@@ -60,6 +60,60 @@
   #addPage { margin-top:9px; background:none; border:1px dashed var(--line); color:var(--muted); border-radius:var(--r);
     padding:6px 0; font:inherit; font-size:12px; cursor:pointer; }
   #addPage:hover { color:var(--accent); border-color:var(--accent); }
+  /* 오른쪽 알림판 */
+  #al { flex:none; width:208px; display:flex; flex-direction:column; overflow:auto;
+    background:var(--side); border-left:1px solid var(--line); padding:9px 9px 12px; }
+  body.noal #al { display:none; }
+  #al .sh { display:flex; align-items:center; gap:5px; color:var(--muted); font-size:11px; padding:0 0 7px 2px; }
+  #al .sh span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #al .sh button { flex:none; background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
+    width:20px; height:20px; line-height:1; font:inherit; font-size:13px; cursor:pointer; padding:0; }
+  #al .sh button:hover { color:var(--accent); border-color:var(--accent); }
+  #alShow { display:none; flex:none; align-self:flex-start; margin:9px 0 0 4px; background:var(--card); border:1px solid var(--line);
+    color:var(--muted); border-radius:var(--r); width:20px; height:34px; font:inherit; font-size:13px; cursor:pointer; padding:0; }
+  #alShow:hover { color:var(--accent); border-color:var(--accent); }
+  body.noal #alShow { display:block; }
+  #als { display:flex; flex-direction:column; gap:4px; }
+  #als .it { position:relative; background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    padding:6px 20px 6px 8px; cursor:pointer; }
+  #als .it:hover { border-color:var(--accent); }
+  #als .it .tm { color:var(--accent); font-size:11px; font-weight:700; }
+  #als .it .rp { color:var(--muted); font-weight:400; }
+  #als .it .tt { font-size:12px; line-height:1.45; margin-top:2px; word-break:break-all; }
+  #als .it.due { border-color:var(--bad); background:rgba(225,29,72,.06); }
+  #als .it.due .tm { color:var(--bad); }
+  #als .it.done { opacity:.5; }
+  #als .it.done .tt { text-decoration:line-through; }
+  #als .it .x { position:absolute; top:3px; right:3px; margin:0; display:none; color:var(--muted); font-size:12px; }
+  #als .it:hover .x { display:block; }
+  #als .it .x:hover { color:var(--bad); }
+  #alEd { width:246px; }
+  #alEd .rw { display:flex; gap:5px; }
+  #alEd .rw .ti { min-width:0; }
+  #alEd .reps { display:flex; gap:4px; }
+  #alEd .reps button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    font:inherit; font-size:11.5px; padding:5px 0; cursor:pointer; }
+  #alEd .reps button:hover { border-color:var(--accent); }
+  #alEd .reps button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
+  #alEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:var(--onacc); border:0; border-radius:var(--r);
+    font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
+  #alEd .rm2 { width:100%; margin-top:5px; background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
+    font:inherit; font-size:12px; padding:6px 0; cursor:pointer; }
+  #alEd .rm2:hover { border-color:var(--bad); color:var(--bad); }
+  #alPop { position:static; width:min(420px,94vw); padding:18px 20px 14px; }
+  #alPop .hdr { display:flex; align-items:center; gap:8px; font-size:16px; font-weight:700; color:var(--accent); }
+  #alPop .hdr .bell { font-size:22px; animation:ring 1.2s ease-in-out infinite; }
+  @keyframes ring { 0%,60%,100% { transform:rotate(0); } 70% { transform:rotate(14deg); } 80% { transform:rotate(-12deg); } 90% { transform:rotate(8deg); } }
+  #alPop .list { margin:13px 0 4px; display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow:auto; }
+  #alPop .it { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:var(--r); padding:9px 11px; }
+  #alPop .it .tm { color:var(--muted); font-size:11.5px; }
+  #alPop .it .tt { font-size:14px; line-height:1.5; margin-top:3px; word-break:break-all; white-space:pre-wrap; }
+  #alPop .ft { display:flex; gap:7px; padding-top:12px; }
+  #alPop .ft button { flex:1; background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
+    font:inherit; font-size:13px; padding:8px 0; cursor:pointer; }
+  #alPop .ft button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
+  #alPop .ft button.go { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
+  #alPop .ft button.go:hover { color:var(--onacc); }
   #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
       radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
@@ -275,6 +329,7 @@
     <div class="tc">
       <button class="go" id="addNote">＋ 새 메모</button>
       <button id="addDraw">＋ 그림판</button>
+      <button id="addAlarm">＋ 알림</button>
       <button id="addArea">＋ 새 범위</button>
       <button id="addEtc">＋ 기타 ▾</button>
     </div>
@@ -293,6 +348,11 @@
   </div>
   <button id="sdShow" title="탭 보이기">›</button>
   <div id="board"><div id="canvas"></div></div>
+  <button id="alShow" title="알림판 보이기">‹</button>
+  <div id="al">
+    <div class="sh"><span>🔔 알림판</span><button id="alAdd" title="알림 추가">＋</button><button id="alHide" title="알림판 숨기기">›</button></div>
+    <div id="als"></div>
+  </div>
 </div>
 <div class="pop" id="pal" hidden></div>
 <div class="pop" id="bmenu" hidden></div>
@@ -303,6 +363,8 @@
 <div class="pop" id="pmenu" hidden></div>
 <div class="pop" id="fmt" hidden></div>
 <div class="pop" id="pen" hidden></div>
+<div class="pop" id="alEd" hidden></div>
+<div class="mask" id="alMask" hidden><div class="pop" id="alPop"></div></div>
 <div class="pop" id="etc" hidden></div>
 <div class="pop" id="lnkEd" hidden></div>
 
@@ -338,7 +400,8 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
-let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4 };
+let alarms = [];                                                  // 알림판 (사람마다 하나)
+let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4, alarm: true };
 // 그림판 펜 (색·굵기는 설정에 저장, 지우개는 그때그때)
 const PENS = ['#1f2937', '#dc2626', '#ea580c', '#eab308', '#16a34a', '#2563eb', '#7c3aed', '#94a3b8'];
 let eraser = false;
@@ -402,7 +465,7 @@ function render() {
     const o = find('n', el.closest('[data-id]').dataset.id);
     if (o && o.draw) paint(el, o.draw);
   }
-  renderBoards(); renderPages(); posPen();
+  renderBoards(); renderPages(); posPen(); renderAlarms();
   $('#binN').textContent = trash.length ? ' ' + trash.length : '';
 }
 // 링크 아이콘: 이모지를 넣었으면 그것, 아니면 그 사이트 그림, 안 나오면 첫 글자
@@ -1287,7 +1350,7 @@ function backupDown() {
   const pad = (n) => String(n).padStart(2, '0');
   const d = new Date();
   const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards, trash, prefs };
+  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards, trash, prefs, alarms };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1309,7 +1372,8 @@ $('#upfile').onchange = async (e) => {
     active = j.boards.some((b) => b.id === j.active) ? j.active : j.boards[0].id;
     trash = Array.isArray(j.trash) ? j.trash : [];
     if (j.prefs) prefs = { ...prefs, ...j.prefs };
-    sel = null; touch(); render(); await saveNow();
+    alarms = Array.isArray(j.alarms) ? j.alarms : [];
+    sel = null; touch(); render(); renderAlarms(); await saveNow();
     alert('복원했습니다.');
   } catch (err) { alert('복원하지 못했습니다: ' + err.message); }
 };
@@ -1333,6 +1397,12 @@ const HELP = `
     <li>고르면 <b>펜 창</b>이 뜹니다 — 색 8가지, <b>굵기는 숫자(1~60px)</b>로 적거나 －/＋ 로 조절, <b>🧽 지우개</b>, <b>↶ 되돌리기</b>, <b>🗑 전부 지우기</b>.</li>
     <li>메모 크기를 바꾸면 그림도 함께 늘어납니다. 제목·색은 다른 메모와 똑같이 씁니다.</li>
     <li>태블릿·터치 화면에서는 손가락이나 펜으로도 그려집니다.</li></ul>
+  <h4>알림판</h4>
+  <ul><li>위쪽 <b>＋ 알림</b> 이나 오른쪽 <b>알림판의 ＋</b> 로 등록합니다 — 내용 · 날짜 · 시간 · 반복(한 번만/매일/매주/매월).</li>
+    <li>시간이 되면 화면 가운데에 <b>팝업</b>이 뜨고 소리가 납니다. <b>확인</b> 또는 <b>10분 뒤 다시</b> 를 고릅니다.</li>
+    <li>등록한 알림은 <b>오른쪽 알림판</b>에 시간 순으로 보입니다. 누르면 고치고, ✕ 로 지웁니다.</li>
+    <li>알림판은 머리의 <b>›</b> 로 숨기고, 숨기면 오른쪽 가장자리의 <b>‹</b> 로 다시 폅니다.</li>
+    <li>알림은 <b>이 메모 화면이 열려 있을 때</b> 울립니다. 닫아 두었다면 다시 열었을 때 지난 알림이 바로 뜹니다.</li></ul>
   <h4>링크 아이콘</h4>
   <ul><li><b>＋ 기타 → 🔗 링크 아이콘 만들기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둡니다.</li>
     <li>한 번 누르면 새 탭으로 열리고, <b>오른쪽 단추</b>로 이름·주소·아이콘을 고칩니다.</li>
@@ -1363,7 +1433,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.32.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.34.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1423,7 +1493,160 @@ document.addEventListener('mousedown', (e) => {
   if (!e.target.closest('#pmenu') && !e.target.closest('.pg')) $('#pmenu').hidden = true;
   if (!e.target.closest('#etc') && !e.target.closest('#addEtc')) $('#etc').hidden = true;
   if (!e.target.closest('#lnkEd') && !e.target.closest('.lnk')) { $('#lnkEd').hidden = true; lnkFor = null; }
+  if (!e.target.closest('#alEd') && !e.target.closest('#addAlarm') && !e.target.closest('#alAdd') && !e.target.closest('#als')) { $('#alEd').hidden = true; alFor = null; }
 });
+
+
+// ---- 알림판 (시간이 되면 팝업으로 알려 준다) ----
+// 이 화면(메모 보드)이 열려 있을 때 울린다. 닫혀 있던 동안 지난 알림은 다시 열었을 때 바로 뜬다.
+const AREP = { none: '한 번만', day: '매일', week: '매주', month: '매월' };
+const pad2 = (n) => String(n).padStart(2, '0');
+function alTime(ms) {
+  const d = new Date(ms), n = new Date(), t = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const day = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  if (day(d) === day(n)) return `오늘 ${t}`;
+  const tm = new Date(n); tm.setDate(tm.getDate() + 1);
+  if (day(d) === day(tm)) return `내일 ${t}`;
+  const ys = new Date(n); ys.setDate(ys.getDate() - 1);
+  if (day(d) === day(ys)) return `어제 ${t}`;
+  return `${d.getMonth() + 1}/${d.getDate()} ${t}`;
+}
+function nextAt(at, rep) {                                   // 반복 알림의 다음 차례
+  if (!AREP[rep] || rep === 'none') return 0;
+  const d = new Date(at), now = Date.now();
+  for (let i = 0; i < 400 && d.getTime() <= now; i++) {
+    if (rep === 'day') d.setDate(d.getDate() + 1);
+    else if (rep === 'week') d.setDate(d.getDate() + 7);
+    else d.setMonth(d.getMonth() + 1);
+  }
+  return d.getTime();
+}
+function renderAlarms() {
+  document.body.classList.toggle('noal', prefs.alarm === false);
+  const now = Date.now();
+  const list = alarms.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || a.at - b.at);
+  $('#als').innerHTML = list.length ? list.map((a) => `<div class="it ${a.done ? 'done' : (a.at <= now ? 'due' : '')}" data-a="${a.id}" title="눌러서 고치기">
+      <div class="tm">${a.done ? '✓ ' : (a.at <= now ? '🔔 ' : '')}${alTime(a.at)}${a.rep !== 'none' ? ` <span class="rp">· ${AREP[a.rep]}</span>` : ''}</div>
+      <div class="tt">${esc(a.txt || '(내용 없음)')}</div>
+      <button class="x" title="이 알림 지우기">✕</button></div>`).join('')
+    : '<div style="color:var(--muted);font-size:11.5px;padding:10px 2px;line-height:1.7">등록된 알림이 없습니다.<br>위 <b>＋</b> 로 추가하세요.</div>';
+}
+const alToggle = () => { prefs.alarm = prefs.alarm === false; touch(); renderAlarms(); };
+$('#alHide').onclick = alToggle;
+$('#alShow').onclick = alToggle;
+$('#als').onclick = (e) => {
+  const it = e.target.closest('.it'); if (!it) return;
+  const a = alarms.find((x) => x.id === it.dataset.a); if (!a) return;
+  if (e.target.classList.contains('x')) {
+    if (!confirm(`"${(a.txt || '내용 없음').slice(0, 30)}" 알림을 지울까요?`)) return;
+    alarms = alarms.filter((x) => x.id !== a.id); touch(); renderAlarms(); return;
+  }
+  openAlEd(a.id, it);
+};
+// 알림 등록·고치기 창
+let alFor = null, alRep = 'none';
+function openAlEd(id, anchor) {
+  const a = id ? alarms.find((x) => x.id === id) : null;
+  alFor = a ? a.id : null;
+  const d = new Date(a ? a.at : Math.ceil((Date.now() + 10 * 60000) / 300000) * 300000);   // 새 알림은 10분 뒤(5분 단위)
+  alRep = a ? a.rep : 'none';
+  $('#alEd').innerHTML = `<div class="sec">알림 내용</div>
+    <input class="ti tx" maxlength="200" placeholder="예: 백업 테이프 교체" value="${esc(a ? a.txt : '')}">
+    <div class="sec" style="margin-top:9px">날짜 · 시간</div>
+    <div class="rw"><input class="ti dt" type="date" value="${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}">
+      <input class="ti tm" type="time" value="${pad2(d.getHours())}:${pad2(d.getMinutes())}"></div>
+    <div class="sec" style="margin-top:9px">반복</div>
+    <div class="reps">${Object.keys(AREP).map((k) => `<button data-r="${k}" class="${alRep === k ? 'on' : ''}">${AREP[k]}</button>`).join('')}</div>
+    <button class="go2">${a ? '고치기' : '등록'}</button>
+    ${a ? '<button class="rm2">이 알림 지우기</button>' : ''}`;
+  const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : anchor;
+  $('#alEd').style.left = Math.max(8, Math.min(window.innerWidth - 256, (r ? r.left : 200) - 60)) + 'px';
+  $('#alEd').style.top = Math.max(8, Math.min(window.innerHeight - 320, (r ? r.bottom : 100) + 6)) + 'px';
+  $('#alEd').hidden = false;
+  const t = $('#alEd .tx'); if (t) { t.focus(); t.select(); }
+}
+function saveAl() {
+  const txt = $('#alEd .tx').value.trim().slice(0, 200);
+  const dt = $('#alEd .dt').value, tm = $('#alEd .tm').value;
+  if (!txt) { alert('알림 내용을 적어 주세요.'); $('#alEd .tx').focus(); return; }
+  if (!dt || !tm) { alert('날짜와 시간을 정해 주세요.'); return; }
+  const at = new Date(`${dt}T${tm}`).getTime();
+  if (!Number.isFinite(at)) { alert('날짜·시간을 다시 확인해 주세요.'); return; }
+  const a = alarms.find((x) => x.id === alFor);
+  if (a) { a.txt = txt; a.at = at; a.rep = alRep; a.done = false; }
+  else {
+    if (alarms.length >= 100) { alert('알림은 100개까지 만들 수 있습니다.'); return; }
+    alarms.push({ id: uid(), txt, at, rep: alRep, done: false });
+  }
+  prefs.alarm = true;
+  $('#alEd').hidden = true; alFor = null;
+  touch(); renderAlarms();
+  $('#st').textContent = at > Date.now() ? `알림 ${alTime(at)}` : '알림 등록';
+}
+$('#alEd').onclick = (e) => {
+  const r = e.target.dataset.r;
+  if (r) { alRep = r; for (const b of $('#alEd').querySelectorAll('.reps button')) b.classList.toggle('on', b.dataset.r === r); return; }
+  if (e.target.classList.contains('go2')) { saveAl(); return; }
+  if (e.target.classList.contains('rm2')) {
+    const a = alarms.find((x) => x.id === alFor);
+    if (a && !confirm(`"${(a.txt || '내용 없음').slice(0, 30)}" 알림을 지울까요?`)) return;
+    alarms = alarms.filter((x) => x.id !== alFor);
+    $('#alEd').hidden = true; alFor = null; touch(); renderAlarms();
+  }
+};
+$('#alEd').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') saveAl();
+  else if (e.key === 'Escape') { $('#alEd').hidden = true; alFor = null; }
+});
+$('#addAlarm').onclick = () => { if ($('#alEd').hidden) openAlEd(null, $('#addAlarm')); else { $('#alEd').hidden = true; alFor = null; } };
+$('#alAdd').onclick = () => { if ($('#alEd').hidden) openAlEd(null, $('#alAdd')); else { $('#alEd').hidden = true; alFor = null; } };
+
+// 시간이 되면 팝업 (10초마다 확인)
+let alPopOn = false;
+function beep() {
+  try {
+    const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+    const c = new C(), t0 = c.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const o = c.createOscillator(), g = c.createGain(), t = t0 + i * 0.36;
+      o.type = 'sine'; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.32);
+    }
+    setTimeout(() => { try { c.close(); } catch (e) {} }, 1600);
+  } catch (e) {}
+}
+function dueAlarms() { const now = Date.now(); return alarms.filter((a) => !a.done && a.at <= now); }
+function checkAlarms() {
+  if (alPopOn) return;
+  const due = dueAlarms(); if (!due.length) return;
+  alPopOn = true; beep();
+  $('#alPop').innerHTML = `<div class="hdr"><span class="bell">🔔</span>알림 ${due.length > 1 ? `(${due.length}건)` : ''}</div>
+    <div class="list">${due.map((a) => `<div class="it"><div class="tm">${alTime(a.at)}${a.rep !== 'none' ? ` · ${AREP[a.rep]}` : ''}</div>
+      <div class="tt">${esc(a.txt || '(내용 없음)')}</div></div>`).join('')}</div>
+    <div class="ft"><button data-a="snooze">10분 뒤 다시</button><button class="go" data-a="ok">확인</button></div>`;
+  $('#alMask').hidden = false;
+}
+function closeAlPop(snooze) {
+  const due = dueAlarms(), now = Date.now();
+  for (const a of due) {
+    if (snooze) a.at = now + 10 * 60000;
+    else if (a.rep !== 'none') a.at = nextAt(a.at, a.rep);
+    else a.done = true;
+  }
+  $('#alMask').hidden = true; alPopOn = false;
+  touch(); renderAlarms();
+}
+$('#alMask').onclick = (e) => {
+  const a = e.target.dataset.a;
+  if (a === 'ok') closeAlPop(false);
+  else if (a === 'snooze') closeAlPop(true);
+};
+setInterval(checkAlarms, 10000);
+setInterval(renderAlarms, 60000);                            // "오늘 14:00" 같은 표시 갱신
 
 // ---- 저장 ----
 let timer = null;
@@ -1431,7 +1654,7 @@ function touch() { dirty = true; $('#st').textContent = '저장 대기'; clearTi
 async function saveNow() {
   if (!dirty || saving) return;
   saving = true; $('#st').textContent = '저장 중';
-  const body = JSON.stringify({ boards, active, trash, prefs });
+  const body = JSON.stringify({ boards, active, trash, prefs, alarms });
   dirty = false;
   try {
     const r = await fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
@@ -1444,7 +1667,7 @@ async function saveNow() {
 }
 window.addEventListener('beforeunload', () => {
   if (!dirty) return;
-  try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boards, active, trash, prefs }), keepalive: true }); } catch (e) {}
+  try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boards, active, trash, prefs, alarms }), keepalive: true }); } catch (e) {}
 });
 window.addEventListener('resize', render);
 $('#board').addEventListener('scroll', posPen);
@@ -1471,7 +1694,8 @@ $('#board').addEventListener('scroll', posPen);
   const j = await r.json();
   boards = j.boards || []; active = j.active || (boards[0] && boards[0].id) || '';
   trash = j.trash || []; if (j.prefs) prefs = { ...prefs, ...j.prefs };
-  render();
+  alarms = Array.isArray(j.alarms) ? j.alarms : [];
+  render(); renderAlarms(); checkAlarms();
 })();
 </script>
 </body>
