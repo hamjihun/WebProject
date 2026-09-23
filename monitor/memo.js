@@ -65,7 +65,20 @@ const alarm = (a) => ({
   at: clamp(num(a && a.at, Date.now()), 0, 4102444800000),      // 2100년까지
   rep: REP_OK[a && a.rep] ? a.rep : 'none',
   done: !!(a && a.done),
+  tg: !!(a && a.tg),                                            // 텔레그램으로도 보내기
+  sent: num(a && a.sent, 0),                                    // 이번 차례의 텔레그램 발송 시각
 });
+// 반복 알림의 다음 차례 (화면 쪽 nextAt() 과 같은 규칙)
+function nextAt(at, rep) {
+  if (!REP_OK[rep] || rep === 'none') return 0;
+  const d = new Date(at), now = Date.now();
+  for (let i = 0; i < 400 && d.getTime() <= now; i++) {
+    if (rep === 'day') d.setDate(d.getDate() + 1);
+    else if (rep === 'week') d.setDate(d.getDate() + 7);
+    else d.setMonth(d.getMonth() + 1);
+  }
+  return d.getTime();
+}
 
 function create(opts) {
   const FILE = opts.file;
@@ -190,6 +203,39 @@ function create(opts) {
       all[uid] = next;
       save();
       return { boards: list, active, trash, prefs: next.prefs, alarms };
+    },
+    // ---- 알림 (모든 화면에서 쓰는 가벼운 창구) ----
+    getAlarms(uid) { return (Array.isArray(all[uid] && all[uid].alarms) ? all[uid].alarms : []).slice(0, MAX_ALARMS).map(alarm); },
+    // 확인 / 10분 뒤 다시 — 서버에서 바로 처리한다 (여러 화면에서 눌러도 어긋나지 않게)
+    ackAlarm(uid, id, action) {
+      const u = all[uid];
+      if (u && Array.isArray(u.alarms)) {
+        const a = u.alarms.find((x) => x && x.id === id);
+        if (a) {
+          if (action === 'snooze') a.at = Date.now() + 10 * 60000;
+          else if (REP_OK[a.rep] && a.rep !== 'none') a.at = nextAt(a.at, a.rep);
+          else a.done = true;
+          a.sent = 0;                                   // 다음 차례에는 텔레그램을 다시 보낸다
+          save();
+        }
+      }
+      return this.getAlarms(uid);
+    },
+    // 텔레그램으로 보낼 차례가 된 알림 (사람마다)
+    dueTelegram(now) {
+      const out = [];
+      for (const [uid, u] of Object.entries(all)) {
+        for (const a of (Array.isArray(u && u.alarms) ? u.alarms : [])) {
+          if (a && a.tg && !a.done && !a.sent && num(a.at) <= now) out.push({ uid, id: a.id, txt: str(a.txt, 200), at: num(a.at) });
+        }
+      }
+      return out;
+    },
+    markSent(uid, id) {
+      const u = all[uid];
+      if (!u || !Array.isArray(u.alarms)) return;
+      const a = u.alarms.find((x) => x && x.id === id);
+      if (a) { a.sent = Date.now(); save(); }
     },
     removeUser(uid) { if (all[uid]) { delete all[uid]; save(); } },
   };

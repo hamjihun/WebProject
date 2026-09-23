@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.34.0';
+const VERSION = '1.35.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -592,6 +592,21 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
+  // ---- 메모 알림 (모든 화면에서 씀. 메모 본문 없이 알림만 주고받는다) ----
+  if (url.pathname === '/api/alarms') {
+    if (!me) return json(res, 200, { ok: true, alarms: [], now: Date.now() });        // 로그인 전이면 조용히 빈 목록
+    if (!auth.can(me, 'memo.html')) return json(res, 200, { ok: true, alarms: [], now: Date.now() });
+    try {
+      if (req.method === 'GET') return json(res, 200, { ok: true, alarms: memo.getAlarms(me.id), now: Date.now() });
+      if (req.method === 'POST') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const act = raw.action === 'snooze' ? 'snooze' : 'ok';
+        const list = memo.ackAlarm(me.id, String(raw.id || '').slice(0, 32), act);
+        return json(res, 200, { ok: true, alarms: list, now: Date.now() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
   // ---- 메모 보드 (사람마다 자기 보드) ----
   if (url.pathname === '/api/memo') {
     if (!me || !auth.can(me, 'memo.html')) return json(res, 403, { ok: false, error: '메모 화면 권한이 없습니다' });
@@ -832,6 +847,20 @@ setInterval(() => {
   try { alerter.evaluate(view); } catch (e) { console.error('알림 평가 오류:', e.message); }
   for (const s of view) if (!s.online) { hourBucket(s.host, Date.now()).off += 10; hourlyDirty = true; }   // 오프라인 시간 누적 (가동률 통계용)
 }, 10000).unref();
+// 메모 알림 중 "텔레그램으로도 보내기" 를 켠 것은 화면이 꺼져 있어도 서버가 보낸다
+setInterval(async () => {
+  let due = [];
+  try {
+    if (!alerter.getSettings().telegram.enabled) return;         // 텔레그램을 안 쓰면 나중을 위해 그대로 둔다
+    due = memo.dueTelegram(Date.now());
+  } catch (e) { return; }
+  for (const a of due) {
+    memo.markSent(a.uid, a.id);                                  // 먼저 표시해서 두 번 보내지 않게
+    const when = new Date(a.at).toLocaleString('ko-KR', { hour12: false });
+    try { await alerter.sendText(`🔔 <b>[메모 알림]</b>\n${String(a.txt).replace(/[<>&]/g, '')}\n<i>${when}</i>`); }
+    catch (e) { console.error('메모 알림 텔레그램 실패:', e.message); }
+  }
+}, 30000).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); saveHourly(true); process.exit(0); });
 
 server.on('error', (e) => {

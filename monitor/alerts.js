@@ -444,6 +444,8 @@ function create({ settingsFile, logDir, log = console.log }) {
       saveSettings();
       return this.getSettings(true);
     },
+    // 다른 기능(메모 알림)에서 쓰는 단순 전송
+    async sendText(text) { return sendTelegram(text); },
     async sendTest() {
       if (!/^-?\d{5,}$/.test(String(settings.telegram.chatId))) throw new Error('채팅 ID는 숫자여야 합니다. 봇에게 메시지를 보낸 뒤 "채팅 ID 찾기"로 본인을 선택하세요');
       const r = await tgRequest('sendMessage', { chat_id: settings.telegram.chatId, parse_mode: 'HTML',

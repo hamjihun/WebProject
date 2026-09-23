@@ -95,25 +95,13 @@
     font:inherit; font-size:11.5px; padding:5px 0; cursor:pointer; }
   #alEd .reps button:hover { border-color:var(--accent); }
   #alEd .reps button.on { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
+  #alEd .tgl { display:flex; align-items:center; gap:5px; margin-top:10px; font-size:11.5px; color:var(--muted); cursor:pointer; }
+  #alEd .tgl b { color:var(--text); font-weight:400; }
   #alEd .go2 { width:100%; margin-top:11px; background:var(--accent); color:var(--onacc); border:0; border-radius:var(--r);
     font:inherit; font-weight:700; padding:7px 0; cursor:pointer; }
   #alEd .rm2 { width:100%; margin-top:5px; background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
     font:inherit; font-size:12px; padding:6px 0; cursor:pointer; }
   #alEd .rm2:hover { border-color:var(--bad); color:var(--bad); }
-  #alPop { position:static; width:min(420px,94vw); padding:18px 20px 14px; }
-  #alPop .hdr { display:flex; align-items:center; gap:8px; font-size:16px; font-weight:700; color:var(--accent); }
-  #alPop .hdr .bell { font-size:22px; animation:ring 1.2s ease-in-out infinite; }
-  @keyframes ring { 0%,60%,100% { transform:rotate(0); } 70% { transform:rotate(14deg); } 80% { transform:rotate(-12deg); } 90% { transform:rotate(8deg); } }
-  #alPop .list { margin:13px 0 4px; display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow:auto; }
-  #alPop .it { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:var(--r); padding:9px 11px; }
-  #alPop .it .tm { color:var(--muted); font-size:11.5px; }
-  #alPop .it .tt { font-size:14px; line-height:1.5; margin-top:3px; word-break:break-all; white-space:pre-wrap; }
-  #alPop .ft { display:flex; gap:7px; padding-top:12px; }
-  #alPop .ft button { flex:1; background:var(--card); border:1px solid var(--line); color:var(--text); border-radius:var(--r);
-    font:inherit; font-size:13px; padding:8px 0; cursor:pointer; }
-  #alPop .ft button:hover { border-color:var(--accent); color:var(--accent); background:var(--soft); }
-  #alPop .ft button.go { background:var(--accent); color:var(--onacc); border-color:var(--accent); font-weight:700; }
-  #alPop .ft button.go:hover { color:var(--onacc); }
   #board { position:relative; flex:1; min-height:0; overflow:auto; isolation:isolate; background:
       radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0/28px 28px, var(--bg); }
   #canvas { position:relative; }
@@ -364,7 +352,6 @@
 <div class="pop" id="fmt" hidden></div>
 <div class="pop" id="pen" hidden></div>
 <div class="pop" id="alEd" hidden></div>
-<div class="mask" id="alMask" hidden><div class="pop" id="alPop"></div></div>
 <div class="pop" id="etc" hidden></div>
 <div class="pop" id="lnkEd" hidden></div>
 
@@ -1402,7 +1389,11 @@ const HELP = `
     <li>시간이 되면 화면 가운데에 <b>팝업</b>이 뜨고 소리가 납니다. <b>확인</b> 또는 <b>10분 뒤 다시</b> 를 고릅니다.</li>
     <li>등록한 알림은 <b>오른쪽 알림판</b>에 시간 순으로 보입니다. 누르면 고치고, ✕ 로 지웁니다.</li>
     <li>알림판은 머리의 <b>›</b> 로 숨기고, 숨기면 오른쪽 가장자리의 <b>‹</b> 로 다시 폅니다.</li>
-    <li>알림은 <b>이 메모 화면이 열려 있을 때</b> 울립니다. 닫아 두었다면 다시 열었을 때 지난 알림이 바로 뜹니다.</li></ul>
+    <li>알림은 <b>서버 현황·대시보드·일정 등 어느 화면을 보고 있어도</b> 뜹니다. 한 곳에서 확인하면 나머지 화면의 팝업도 닫힙니다.</li>
+    <li><b>다른 탭을 보고 있을 때</b>는 소리와 함께 탭 제목이 <b>🔔 알림!</b> 으로 깜빡입니다.</li>
+    <li><b>⚙ → 🔔 윈도우 알림 켜기</b> 를 한 번 눌러 허용하면 <b>창을 최소화해 두어도</b> 바탕화면에 뜹니다.</li>
+    <li>등록할 때 <b>텔레그램으로도 보내기</b> 를 체크하면 <b>브라우저를 닫아 두어도</b> 시간이 됐을 때 텔레그램으로 옵니다.</li>
+    <li>브라우저를 모두 닫아 두었다면(텔레그램 없이) 다시 열었을 때 지난 알림이 바로 뜹니다.</li></ul>
   <h4>링크 아이콘</h4>
   <ul><li><b>＋ 기타 → 🔗 링크 아이콘 만들기</b> 로 자주 쓰는 사이트를 바탕화면 아이콘처럼 붙여둡니다.</li>
     <li>한 번 누르면 새 탭으로 열리고, <b>오른쪽 단추</b>로 이름·주소·아이콘을 고칩니다.</li>
@@ -1433,7 +1424,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.34.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.35.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1453,6 +1444,9 @@ function openCfg() {
     <div class="row"><button data-p="magnet" data-v="1" class="${prefs.magnet ? 'on' : ''}">켜기</button>
       <button data-p="magnet" data-v="0" class="${prefs.magnet ? '' : 'on'}">끄기</button></div>
     <div style="color:var(--muted);font-size:11px;margin-top:11px;line-height:1.6">여기서 정한 색·크기는 <b>앞으로 새로 만드는</b> 메모에 적용됩니다. 이미 붙여 둔 메모는 그대로입니다.</div>
+    <div class="sec" style="margin-top:12px">알림</div>
+    <div class="row"><button data-p="note">🔔 윈도우 알림 켜기</button></div>
+    <div style="color:var(--muted);font-size:10.5px;margin-top:5px;line-height:1.6">켜 두면 창을 최소화하거나 다른 탭을 봐도 바탕화면에 알림이 뜹니다. (브라우저가 막으면 팝업·소리·탭 제목으로 알려 줍니다)</div>
     <div class="sec" style="margin-top:12px">백업</div>
     <div class="row"><button data-p="dl">💾 백업 받기</button><button data-p="up">📂 복원</button></div>
     <button class="hlp" data-p="help">❓ 도움말 (사용법 보기)</button>
@@ -1474,6 +1468,14 @@ $('#cfg').onclick = (e) => {
   else if (k === 'magnet') prefs.magnet = v === '1';
   else if (k === 'fs') prefs.fs = Number(v);
   else if (k === 'theme') { prefs.theme = v; applyTheme(); }
+  else if (k === 'note') {
+    $('#cfg').hidden = true;
+    MON.alarms.ask().then((r) => {
+      if (r === 'granted') alert('윈도우 알림을 켰습니다. 이제 창을 최소화해 두어도 알림이 뜹니다.');
+      else if (r === 'denied') alert('브라우저에서 알림이 차단돼 있습니다.\n주소창 왼쪽 자물쇠(또는 ⓘ) → 알림 → 허용으로 바꿔 주세요.');
+    });
+    return;
+  }
   else if (k === 'help') { $('#cfg').hidden = true; openHelp(); return; }
   else if (k === 'dl') { $('#cfg').hidden = true; backupDown(); return; }
   else if (k === 'up') { $('#cfg').hidden = true; $('#upfile').value = ''; $('#upfile').click(); return; }
@@ -1526,7 +1528,7 @@ function renderAlarms() {
   const now = Date.now();
   const list = alarms.slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || a.at - b.at);
   $('#als').innerHTML = list.length ? list.map((a) => `<div class="it ${a.done ? 'done' : (a.at <= now ? 'due' : '')}" data-a="${a.id}" title="눌러서 고치기">
-      <div class="tm">${a.done ? '✓ ' : (a.at <= now ? '🔔 ' : '')}${alTime(a.at)}${a.rep !== 'none' ? ` <span class="rp">· ${AREP[a.rep]}</span>` : ''}</div>
+      <div class="tm">${a.done ? '✓ ' : (a.at <= now ? '🔔 ' : '')}${alTime(a.at)}${a.rep !== 'none' ? ` <span class="rp">· ${AREP[a.rep]}</span>` : ''}${a.tg ? ' <span class="rp">· 📨</span>' : ''}</div>
       <div class="tt">${esc(a.txt || '(내용 없음)')}</div>
       <button class="x" title="이 알림 지우기">✕</button></div>`).join('')
     : '<div style="color:var(--muted);font-size:11.5px;padding:10px 2px;line-height:1.7">등록된 알림이 없습니다.<br>위 <b>＋</b> 로 추가하세요.</div>';
@@ -1544,12 +1546,12 @@ $('#als').onclick = (e) => {
   openAlEd(a.id, it);
 };
 // 알림 등록·고치기 창
-let alFor = null, alRep = 'none';
+let alFor = null, alRep = 'none', alTg = false;
 function openAlEd(id, anchor) {
   const a = id ? alarms.find((x) => x.id === id) : null;
   alFor = a ? a.id : null;
   const d = new Date(a ? a.at : Math.ceil((Date.now() + 10 * 60000) / 300000) * 300000);   // 새 알림은 10분 뒤(5분 단위)
-  alRep = a ? a.rep : 'none';
+  alRep = a ? a.rep : 'none'; alTg = a ? !!a.tg : false;
   $('#alEd').innerHTML = `<div class="sec">알림 내용</div>
     <input class="ti tx" maxlength="200" placeholder="예: 백업 테이프 교체" value="${esc(a ? a.txt : '')}">
     <div class="sec" style="margin-top:9px">날짜 · 시간</div>
@@ -1557,6 +1559,7 @@ function openAlEd(id, anchor) {
       <input class="ti tm" type="time" value="${pad2(d.getHours())}:${pad2(d.getMinutes())}"></div>
     <div class="sec" style="margin-top:9px">반복</div>
     <div class="reps">${Object.keys(AREP).map((k) => `<button data-r="${k}" class="${alRep === k ? 'on' : ''}">${AREP[k]}</button>`).join('')}</div>
+    <label class="tgl"><input type="checkbox" class="tg"${alTg ? ' checked' : ''}> 텔레그램으로도 보내기 <b>(창을 닫아 두어도 옴)</b></label>
     <button class="go2">${a ? '고치기' : '등록'}</button>
     ${a ? '<button class="rm2">이 알림 지우기</button>' : ''}`;
   const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : anchor;
@@ -1572,11 +1575,12 @@ function saveAl() {
   if (!dt || !tm) { alert('날짜와 시간을 정해 주세요.'); return; }
   const at = new Date(`${dt}T${tm}`).getTime();
   if (!Number.isFinite(at)) { alert('날짜·시간을 다시 확인해 주세요.'); return; }
+  alTg = !!($('#alEd .tg') && $('#alEd .tg').checked);
   const a = alarms.find((x) => x.id === alFor);
-  if (a) { a.txt = txt; a.at = at; a.rep = alRep; a.done = false; }
+  if (a) { a.txt = txt; a.at = at; a.rep = alRep; a.done = false; a.tg = alTg; a.sent = 0; }
   else {
     if (alarms.length >= 100) { alert('알림은 100개까지 만들 수 있습니다.'); return; }
-    alarms.push({ id: uid(), txt, at, rep: alRep, done: false });
+    alarms.push({ id: uid(), txt, at, rep: alRep, done: false, tg: alTg, sent: 0 });
   }
   prefs.alarm = true;
   $('#alEd').hidden = true; alFor = null;
@@ -1602,50 +1606,13 @@ $('#alEd').addEventListener('keydown', (e) => {
 $('#addAlarm').onclick = () => { if ($('#alEd').hidden) openAlEd(null, $('#addAlarm')); else { $('#alEd').hidden = true; alFor = null; } };
 $('#alAdd').onclick = () => { if ($('#alEd').hidden) openAlEd(null, $('#alAdd')); else { $('#alEd').hidden = true; alFor = null; } };
 
-// 시간이 되면 팝업 (10초마다 확인)
-let alPopOn = false;
-function beep() {
-  try {
-    const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
-    const c = new C(), t0 = c.currentTime;
-    for (let i = 0; i < 2; i++) {
-      const o = c.createOscillator(), g = c.createGain(), t = t0 + i * 0.36;
-      o.type = 'sine'; o.frequency.value = 880;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-      o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.32);
-    }
-    setTimeout(() => { try { c.close(); } catch (e) {} }, 1600);
-  } catch (e) {}
-}
-function dueAlarms() { const now = Date.now(); return alarms.filter((a) => !a.done && a.at <= now); }
-function checkAlarms() {
-  if (alPopOn) return;
-  const due = dueAlarms(); if (!due.length) return;
-  alPopOn = true; beep();
-  $('#alPop').innerHTML = `<div class="hdr"><span class="bell">🔔</span>알림 ${due.length > 1 ? `(${due.length}건)` : ''}</div>
-    <div class="list">${due.map((a) => `<div class="it"><div class="tm">${alTime(a.at)}${a.rep !== 'none' ? ` · ${AREP[a.rep]}` : ''}</div>
-      <div class="tt">${esc(a.txt || '(내용 없음)')}</div></div>`).join('')}</div>
-    <div class="ft"><button data-a="snooze">10분 뒤 다시</button><button class="go" data-a="ok">확인</button></div>`;
-  $('#alMask').hidden = false;
-}
-function closeAlPop(snooze) {
-  const due = dueAlarms(), now = Date.now();
-  for (const a of due) {
-    if (snooze) a.at = now + 10 * 60000;
-    else if (a.rep !== 'none') a.at = nextAt(a.at, a.rep);
-    else a.done = true;
-  }
-  $('#alMask').hidden = true; alPopOn = false;
-  touch(); renderAlarms();
-}
-$('#alMask').onclick = (e) => {
-  const a = e.target.dataset.a;
-  if (a === 'ok') closeAlPop(false);
-  else if (a === 'snooze') closeAlPop(true);
-};
-setInterval(checkAlarms, 10000);
+// 시간이 되면 팝업 — 공통(common.js)이 맡는다.
+// 메모 화면뿐 아니라 서버 현황·대시보드·일정 등 **어느 화면에 있어도** 같은 팝업이 뜨고,
+// 한 화면에서 확인하면 나머지 화면의 팝업도 닫힌다. (윈도우 알림을 켜 두면 최소화해도 뜬다)
+MON.alarms.start((list) => {
+  if (dirty || saving) return;                               // 아직 저장 안 된 내 변경이 있으면 건드리지 않는다
+  alarms = list; renderAlarms();
+});
 setInterval(renderAlarms, 60000);                            // "오늘 14:00" 같은 표시 갱신
 
 // ---- 저장 ----
@@ -1695,7 +1662,7 @@ $('#board').addEventListener('scroll', posPen);
   boards = j.boards || []; active = j.active || (boards[0] && boards[0].id) || '';
   trash = j.trash || []; if (j.prefs) prefs = { ...prefs, ...j.prefs };
   alarms = Array.isArray(j.alarms) ? j.alarms : [];
-  render(); renderAlarms(); checkAlarms();
+  render(); renderAlarms(); MON.alarms.poll();
 })();
 </script>
 </body>

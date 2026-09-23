@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.34.0';
+  const UI_VERSION = '1.35.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -24,6 +24,7 @@
 
   function renderNav(active) {
     if (embed) return;
+    alStart();                     // 메모 알림은 어느 화면에 있어도 뜬다 (TV 모드는 제외)
     const nav = document.createElement('nav');
     nav.id = 'topnav';
     const isMon = PAGES.some(([f]) => f === here);
@@ -202,6 +203,147 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ringing) sndStop(); });
   }
 
-  window.MON = { UI_VERSION, applyMe, sound: { check: sndCheck, start: sndStart, stop: sndStop, init: sndInit, settings: () => snd }, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
+  // ---- 메모 알림 (어느 화면을 보고 있어도 뜬다) ----
+  // 20초마다 서버에 물어보고, 시간이 된 알림이 있으면 화면 가운데 팝업 + 소리 + 탭 제목 깜빡임.
+  // 윈도우 알림(브라우저 알림)을 켜 두면 창을 최소화해 두어도 바탕화면에 뜬다.
+  const AL_POLL = 20000;
+  const AL_BELL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23ef4444'/%3E%3Cpath d='M16 6a5 5 0 0 0-5 5v4l-2 4h14l-2-4v-4a5 5 0 0 0-5-5zm0 20a3 3 0 0 0 3-3h-6a3 3 0 0 0 3 3z' fill='%23fff'/%3E%3C/svg%3E";
+  let alAll = [], alDue = [], alOpen = false, alBlinkT = null, alBeepT = null, alTitleOld = '', alIconOld = null, alOnChange = null;
+  const alCan = () => (typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  function alFmt(ms) {
+    const d = new Date(ms), n = new Date(), p = (x) => String(x).padStart(2, '0');
+    const day = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+    const t = `${p(d.getHours())}:${p(d.getMinutes())}`;
+    if (day(d) === day(n)) return `오늘 ${t}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${t}`;
+  }
+  function alBeep() {
+    try {
+      const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+      const c = new C(), t0 = c.currentTime;
+      for (let i = 0; i < 2; i++) {
+        const o = c.createOscillator(), g = c.createGain(), t = t0 + i * 0.36;
+        o.type = 'sine'; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+        o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.32);
+      }
+      setTimeout(() => { try { c.close(); } catch (e) {} }, 1600);
+    } catch (e) {}
+  }
+  function alIcon() {
+    let el = document.querySelector("link[rel~='icon']");
+    if (!el) { el = document.createElement('link'); el.rel = 'icon'; document.head.appendChild(el); }
+    return el;
+  }
+  function alMark(on) {                                   // 탭 제목 · 아이콘으로 뒤에서도 보이게
+    const ic = alIcon();
+    if (on) {
+      if (alBlinkT) return;
+      alTitleOld = document.title; alIconOld = ic.getAttribute('href');
+      ic.setAttribute('href', AL_BELL);
+      let f = false;
+      alBlinkT = setInterval(() => { f = !f; document.title = f ? '🔔 알림!' : alTitleOld; }, 900);
+      document.title = '🔔 알림!';
+    } else {
+      if (alBlinkT) { clearInterval(alBlinkT); alBlinkT = null; document.title = alTitleOld || document.title; }
+      if (alIconOld != null) { ic.setAttribute('href', alIconOld); alIconOld = null; }
+    }
+  }
+  function alBox() {
+    let b = document.getElementById('monAlarm');
+    if (b) return b;
+    const st = document.createElement('style');
+    st.textContent = `#monAlarm{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+      #monAlarm[hidden]{display:none}
+      #monAlarm .bx{width:min(420px,94vw);background:#fff;color:#14342e;border-radius:6px;padding:18px 20px 14px;box-shadow:0 18px 50px rgba(0,0,0,.4)}
+      #monAlarm .hd{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;color:#0d9488}
+      #monAlarm .hd i{font-style:normal;font-size:22px;animation:monring 1.2s ease-in-out infinite}
+      @keyframes monring{0%,60%,100%{transform:rotate(0)}70%{transform:rotate(14deg)}80%{transform:rotate(-12deg)}90%{transform:rotate(8deg)}}
+      #monAlarm .ls{margin:13px 0 4px;display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow:auto}
+      #monAlarm .it{border:1px solid #d3e2de;border-left:3px solid #0d9488;border-radius:4px;padding:9px 11px}
+      #monAlarm .it .tm{color:#6b8a84;font-size:11.5px}
+      #monAlarm .it .tt{font-size:14px;line-height:1.5;margin-top:3px;word-break:break-all;white-space:pre-wrap}
+      #monAlarm .ft{display:flex;gap:7px;padding-top:12px}
+      #monAlarm .ft button{flex:1;background:#fff;border:1px solid #d3e2de;color:#14342e;border-radius:4px;font:inherit;font-size:13px;padding:8px 0;cursor:pointer}
+      #monAlarm .ft button:hover{border-color:#0d9488;color:#0d9488;background:#d7f0ea}
+      #monAlarm .ft button.go{background:#0d9488;color:#fff;border-color:#0d9488;font-weight:700}`;
+    document.head.appendChild(st);
+    b = document.createElement('div'); b.id = 'monAlarm'; b.hidden = true;
+    b.innerHTML = '<div class="bx"><div class="hd"><i>🔔</i><span class="ti"></span></div><div class="ls"></div>'
+      + '<div class="ft"><button data-a="snooze">10분 뒤 다시</button><button class="go" data-a="ok">확인</button></div></div>';
+    document.body.appendChild(b);
+    b.onclick = (e) => { const a = e.target.dataset.a; if (a) alAck(a); };
+    return b;
+  }
+  function alShow(due) {
+    const b = alBox();
+    b.querySelector('.ti').textContent = '알림' + (due.length > 1 ? ` (${due.length}건)` : '');
+    b.querySelector('.ls').innerHTML = due.map((a) => `<div class="it"><div class="tm">${alFmt(a.at)}</div>`
+      + `<div class="tt">${esc(a.txt || '(내용 없음)')}</div></div>`).join('');
+    b.hidden = false;
+    alOpen = true; alDue = due;
+    alBeep(); alMark(true);
+    if (alBeepT) clearInterval(alBeepT);
+    alBeepT = setInterval(alBeep, 30000);                  // 확인할 때까지 30초마다 다시
+    if (alCan()) {                                         // 윈도우 알림 (창을 최소화해 두어도 뜬다)
+      try {
+        const n = new Notification('🔔 알림 · IMS', { body: due.map((a) => a.txt).join('\n').slice(0, 300), tag: 'ims-memo-alarm', requireInteraction: true });
+        n.onclick = () => { try { window.focus(); n.close(); } catch (e) {} };
+      } catch (e) {}
+    }
+  }
+  function alHide() {
+    const b = document.getElementById('monAlarm'); if (b) b.hidden = true;
+    alOpen = false; alDue = [];
+    if (alBeepT) { clearInterval(alBeepT); alBeepT = null; }
+    alMark(false);
+  }
+  async function alAck(action) {
+    const list = alDue.slice();
+    alHide();
+    for (const a of list) {
+      try {
+        const r = await fetch('api/alarms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.id, action }) });
+        const j = await r.json(); if (j && j.alarms) alAll = j.alarms;
+      } catch (e) {}
+    }
+    if (alOnChange) { try { alOnChange(alAll); } catch (e) {} }
+  }
+  async function alPoll() {
+    try {
+      const r = await fetch('api/alarms', { cache: 'no-store' });
+      if (!r.ok) return;
+      const j = await r.json();
+      alAll = Array.isArray(j.alarms) ? j.alarms : [];
+      if (alOnChange) { try { alOnChange(alAll); } catch (e) {} }
+      const due = alAll.filter((a) => !a.done && a.at <= Date.now());
+      if (!due.length) { if (alOpen) alHide(); return; }      // 다른 화면에서 확인했으면 이 화면 팝업도 닫는다
+      if (!alOpen) alShow(due);
+    } catch (e) {}
+  }
+  function alAsk() {                                         // 윈도우 알림 켜기
+    if (typeof Notification === 'undefined') {
+      alert('이 브라우저(또는 http 주소)에서는 윈도우 알림을 쓸 수 없습니다.\n메모 화면을 열어 두면 팝업과 소리로 알려 줍니다.');
+      return Promise.resolve('unsupported');
+    }
+    if (Notification.permission === 'granted') return Promise.resolve('granted');
+    return Notification.requestPermission().then((p) => {
+      if (p === 'granted') new Notification('🔔 알림 켜짐', { body: '이제 창을 최소화해 두어도 알림이 뜹니다.' });
+      return p;
+    }).catch(() => 'denied');
+  }
+  function alStart(onChange) {                               // 각 화면에서 한 번 부른다
+    if (onChange) alOnChange = onChange;
+    if (alStart.on) { alPoll(); return; }
+    alStart.on = true;
+    alPoll();
+    setInterval(alPoll, AL_POLL);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) alPoll(); });
+  }
+
+  window.MON = { UI_VERSION, applyMe,
+    alarms: { start: alStart, poll: alPoll, ask: alAsk, can: alCan, supported: () => typeof Notification !== 'undefined' }, sound: { check: sndCheck, start: sndStart, stop: sndStop, init: sndInit, settings: () => snd }, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
     setVersion(v) { const e = document.getElementById('navver'); if (e) e.textContent = v ? '수집기 v' + v : ''; } };
 })();
