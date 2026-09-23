@@ -274,7 +274,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.36.2';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.36.3';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -313,10 +313,9 @@ function fmtLeft(g) {
   return g.days_left < 30 ? `<span class="bad">약 ${g.days_left}일 후 가득</span>` : `약 ${g.days_left}일 후 가득`;
 }
 function level(p) { return p >= 90 ? 'b' : p >= 75 ? 'w' : ''; }
-function bar(label, pct, text, mount) {
+function bar(label, pct, text) {
   pct = Math.max(0, Math.min(100, pct || 0));
-  const m = mount ? ` data-mount="${esc(mount)}"` : '';   // 디스크 줄: 오른쪽 단추로 숨길 수 있게
-  return `<div class="row"${m}><span class="lbl">${label}</span><div class="bar"><i class="${level(pct)}" style="width:${pct}%"></i></div><span class="val">${text}</span></div>`;
+  return `<div class="row"><span class="lbl">${label}</span><div class="bar"><i class="${level(pct)}" style="width:${pct}%"></i></div><span class="val">${text}</span></div>`;
 }
 // OS 이름 정리: "Microsoft Windows Server 2016 Standard 10.0.14393" → "Windows Server 2016 Standard"
 function shortOs(os) {
@@ -333,7 +332,7 @@ function cardHtml(s) {
   const disks = (s.disks || []).map(d => {
     const g = gmap[d.mount];
     const warn = g && g.days_left != null && g.days_left < 90 ? `<div class="growth">${fmtLeft(g)}</div>` : '';
-    return bar(`<span title="${esc(d.mount)} (오른쪽 단추 = 이 디스크 숨기기)">${esc(d.mount)}</span>`, d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`, d.mount) + warn;
+    return bar(`<span title="${esc(d.mount)}">${esc(d.mount)}</span>`, d.pct, `${fmtBytes(d.used)} / ${fmtBytes(d.total)}`) + warn;
   }).join('');
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
@@ -383,24 +382,7 @@ function render() {
     c.addEventListener('dragover', (e) => { if (dragging && dragging !== c.dataset.host) { e.preventDefault(); c.classList.add('dropTarget'); } });
     c.addEventListener('dragleave', () => c.classList.remove('dropTarget'));
     c.addEventListener('drop', (e) => { e.preventDefault(); if (dragging && dragging !== c.dataset.host) moveHost(dragging, c.dataset.host); });
-    c.addEventListener('contextmenu', (e) => {          // 디스크 줄에서 오른쪽 단추 = 이 디스크 숨기기
-      const row = e.target.closest('.row[data-mount]'); if (!row) return;
-      e.preventDefault();
-      hideDisk(c.dataset.host, row.dataset.mount);
-    });
   }
-}
-
-// 카드에서 이 디스크만 감추기 (되돌리기: 카드 클릭 → 상세 창의 "화면에 보일 디스크")
-async function hideDisk(host, mount) {
-  const s = servers.find(x => x.host === host); if (!s) return;
-  if (!confirm(`${mount} 디스크를 이 카드에서 숨길까요?\n\n· 화면과 디스크 알림에서 빠집니다 (기록은 그대로 쌓입니다)\n· 되돌리려면 카드를 눌러 상세 창의 "화면에 보일 디스크" 에서 다시 체크하세요`)) return;
-  const off = ((s.hide_disks || []).concat([mount]));
-  try {
-    const r = await fetch('api/mute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host, hide_disks: off }) });
-    const j = await r.json(); if (j.ok) s.hide_disks = j.hide_disks;
-  } catch (e) {}
-  await refresh(); loadAlerts();
 }
 
 // ---------- 순서 변경 / 삭제 ----------
