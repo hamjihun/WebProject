@@ -32,6 +32,7 @@ const DEFAULTS = {
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
   hideDisks: {},                   // 서버별로 화면·알림에서 뺄 디스크 { 호스트명: ['VeeamBackup'] }
+  growthBase: {},                  // 드라이브 증가량 초기화 기준점 { 호스트명: { 'D:': { ts, used } } } — 이 시점 이전 기록은 증가량 계산에서 뺀다
   hostConf: {},                    // 서버별 에이전트 설정 { 호스트명: { usb_paths: 'DB=E:\\DBBackup; DATA=F:\\GWData' } } (전송 응답으로 에이전트에 전달)
   remind_min: 60,                  // 계속 경고 상태면 이 간격으로 다시 알림 (0 = 처음 한 번만)
   recovery: true,                  // 정상 복귀 알림
@@ -379,12 +380,29 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (settings.hostRules && settings.hostRules[host]) { delete settings.hostRules[host]; changed = true; }
       if (settings.hostConf && settings.hostConf[host]) { delete settings.hostConf[host]; changed = true; }
       if (settings.hideDisks && settings.hideDisks[host]) { delete settings.hideDisks[host]; changed = true; }
+      if (settings.growthBase && settings.growthBase[host]) { delete settings.growthBase[host]; changed = true; }
       if (changed) saveSettings();
     },
     isMuted(host) { return !!(settings.muted && settings.muted[host]); },
     getHostRules(host) { return (settings.hostRules && settings.hostRules[host]) || {}; },
     getHostConf(host) { return (settings.hostConf && settings.hostConf[host]) || {}; },
     // 서버별로 화면·알림에서 뺄 디스크 (예: 가상화 호스트에 보이는 백업용 데이터스토어)
+    // 드라이브 증가량 초기화 (자료를 크게 옮긴 뒤 "1일 후 가득" 같은 잘못된 예상을 지우고 새로 지켜보기)
+    getGrowthBase(host) { return (settings.growthBase && settings.growthBase[host]) || {}; },
+    setGrowthBase(host, disks, mounts, clear) {                   // disks: 지금 값 [{mount, used}], mounts: 대상 (빈 배열 = 전체)
+      if (!settings.growthBase) settings.growthBase = {};
+      const cur = { ...(settings.growthBase[host] || {}) };
+      const want = (Array.isArray(mounts) ? mounts : []).map(String);
+      for (const d of (Array.isArray(disks) ? disks : [])) {
+        if (!d || !d.mount || (want.length && !want.includes(d.mount))) continue;
+        if (clear) delete cur[d.mount];
+        else cur[d.mount] = { ts: Date.now(), used: Number(d.used) || 0 };
+      }
+      if (Object.keys(cur).length) settings.growthBase[host] = cur; else delete settings.growthBase[host];
+      clearRule(host, 'full');                                     // 예전 예상으로 켜진 "곧 가득" 알림은 버린다
+      saveSettings();
+      return this.getGrowthBase(host);
+    },
     getHideDisks(host) { return (settings.hideDisks && settings.hideDisks[host]) || []; },
     setHideDisks(host, list) {
       if (!settings.hideDisks) settings.hideDisks = {};

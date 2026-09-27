@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.36.4';
+const VERSION = '1.37.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -353,25 +353,31 @@ function recordDaily(entry, m) {
 }
 
 // 드라이브별 전일/7일/30일 대비 증가량과 예상 소진일
-function diskGrowth(entry) {
+function diskGrowth(entry, host) {
   const daily = entry.daily || {};
   const keys = Object.keys(daily).sort();
   if (!keys.length) return [];
   const todayKey = keys[keys.length - 1];
   const today = daily[todayKey];
-  const before = (n) => {            // n일 전 이하로 가장 가까운 스냅샷
-    const t = new Date(today.ts); t.setDate(t.getDate() - n);
-    const target = dayKey(t.getTime());
-    let best = null;
-    for (const k of keys) { if (k <= target) best = k; else break; }
-    return best && best !== todayKey ? best : null;
-  };
+  const bases = host ? alerter.getGrowthBase(host) : {};      // 초기화한 드라이브: 그 시점 값을 출발점으로
   const out = [];
   for (const [mount, cur] of Object.entries(today.disks)) {
+    const b = bases[mount], bKey = b ? dayKey(b.ts) : null;
+    // 비교에 쓸 날짜들: 초기화했으면 그날(초기화 시점 값) 이후만
+    const cand = b ? [bKey].concat(keys.filter((k) => k > bKey)) : keys;
+    const usedAt = (k) => (b && k === bKey ? b.used : (daily[k] && daily[k].disks[mount] ? daily[k].disks[mount].used : null));
+    const before = (n) => {          // n일 전 이하로 가장 가까운 스냅샷
+      const t = new Date(today.ts); t.setDate(t.getDate() - n);
+      const target = dayKey(t.getTime());
+      let best = null;
+      for (const k of cand) { if (k <= target) best = k; else break; }
+      return best && best < todayKey ? best : null;
+    };
     const g = { mount, used: cur.used, total: cur.total, day: null, week: null, month: null, rate_day: null, days_left: null };
+    if (b) g.reset = b.ts;
     for (const [name, n] of [['day', 1], ['week', 7], ['month', 30]]) {
-      const k = before(n);
-      if (k && daily[k].disks[mount]) { g[name] = cur.used - daily[k].disks[mount].used; g[name + '_days'] = daysBetween(k, todayKey); }
+      const k = before(n), u = k ? usedAt(k) : null;
+      if (u != null) { g[name] = cur.used - u; g[name + '_days'] = daysBetween(k, todayKey); }
     }
     const basis = ['month', 'week', 'day'].find((b) => g[b] != null);
     if (basis) {
@@ -421,7 +427,7 @@ function serversView() {
     const hide = new Set(hideList.map((x) => String(x).toLowerCase()));
     const all = Array.isArray(e.latest.disks) ? e.latest.disks : [];
     const disks = hide.size ? all.filter((d) => !hide.has(String(d.mount || '').toLowerCase())) : all;
-    const growth = diskGrowth(e).filter((g) => !hide.has(String(g.mount || '').toLowerCase()));
+    const growth = diskGrowth(e, host).filter((g) => !hide.has(String(g.mount || '').toLowerCase()));
     list.push({ ...e.latest, disks, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth, days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host), all_disks: all.map((d) => d.mount), hide_disks: hideList });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
@@ -731,6 +737,11 @@ const server = http.createServer(async (req, res) => {
       if (typeof raw.muted === 'boolean') { muted = alerter.setMuted(host, raw.muted); console.log(`[${new Date().toLocaleTimeString()}] 알림 ${muted ? '끔' : '켬'}: ${host}`); }
       let rules = alerter.getHostRules(host);
       if (raw.rules && typeof raw.rules === 'object') { rules = alerter.setHostRules(host, raw.rules); console.log(`[${new Date().toLocaleTimeString()}] 서버별 규칙: ${host} ${JSON.stringify(rules)}`); }
+      if (raw.growth_reset !== undefined) {                     // 드라이브 증가량 초기화 / 되돌리기
+        const disks = (store.get(host).latest || {}).disks || [];
+        const base = alerter.setGrowthBase(host, disks, Array.isArray(raw.growth_reset) ? raw.growth_reset : [], !!raw.growth_undo);
+        console.log(`[${new Date().toLocaleTimeString()}] 증가량 ${raw.growth_undo ? '초기화 취소' : '초기화'}: ${host} ${JSON.stringify(Object.keys(base))}`);
+      }
       let hide = alerter.getHideDisks(host);
       if (Array.isArray(raw.hide_disks)) { hide = alerter.setHideDisks(host, raw.hide_disks); console.log(`[${new Date().toLocaleTimeString()}] 숨긴 디스크: ${host} ${JSON.stringify(hide)}`); }
       return json(res, 200, { ok: true, host, muted, rules, hide_disks: hide });
@@ -829,7 +840,7 @@ const server = http.createServer(async (req, res) => {
     const e = store.get(host);
     if (!e) return json(res, 404, { ok: false, error: 'unknown host' });
     const daily = Object.keys(e.daily || {}).sort().map((k) => ({ date: k, disks: e.daily[k].disks }));
-    return json(res, 200, { host, history: e.history, daily, growth: diskGrowth(e) });
+    return json(res, 200, { host, history: e.history, daily, growth: diskGrowth(e, host) });
   }
 
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/home.html')) return serveStatic(res, 'home.html');
