@@ -7,6 +7,7 @@
 #   ims-agent name "ERP 서버"    모니터링 화면에 표시할 이름 설정 (빈 문자열이면 호스트명)
 #   ims-agent disks "/,/data"   화면에 보일 마운트 지정 (빈 문자열이면 자동: /boot, snap 등 시스템 파티션 제외)
 #   ims-agent restart|stop|start
+#   ims-agent ensure            꺼져 있을 때만 다시 켜기 (시놀로지 작업 스케줄러에서 5분마다 돌리는 용도)
 #   ims-agent log               실시간 로그
 #   ims-agent uninstall         제거 (모니터링 화면에서도 자동으로 빠짐)
 set -e
@@ -46,6 +47,11 @@ cmd_install() {
     echo "  제어판 → 작업 스케줄러 → 생성 → 트리거된 작업 → 사용자 정의 스크립트"
     echo "  이벤트: 부팅 / 사용자: root / 작업 설정 → 스크립트에 아래 한 줄:"
     echo "    $BIN start"
+    echo
+    echo "▶ 멈췄을 때 자동으로 다시 켜기 (꼭 등록 권장 — DSM 이 백그라운드 프로그램을 끄는 경우가 있음):"
+    echo "  작업 스케줄러 → 생성 → 예약된 작업 → 사용자 정의 스크립트"
+    echo "  사용자: root / 일정: 매일, 첫 실행 00:00, 빈도 5분마다 / 스크립트:"
+    echo "    $BIN ensure"
     cmd_status; return
   fi
   cat > "$UNIT" <<UNIT
@@ -74,7 +80,12 @@ UNIT
 # systemd 가 없을 때 (시놀로지 등): nohup 으로 실행
 [ -d /usr/local/ims-agent ] && [ ! -d /opt/ims-agent ] && DIR=/usr/local/ims-agent
 PIDF=/var/run/ims-agent.pid
-nosd_running() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+# PID 파일만 믿지 않고 그 번호가 정말 우리 에이전트인지 본다 (죽은 뒤 남은 좀비·다른 프로그램이 번호를 물려받은 경우 대비)
+nosd_running() {
+  [ -f "$PIDF" ] || return 1
+  _p="$(cat "$PIDF" 2>/dev/null)"; [ -n "$_p" ] || return 1
+  tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | grep -q 'ims-agent\.sh'
+}
 nosd_start() { nosd_stop; nohup "$DIR/ims-agent.sh" >> /var/log/ims-agent.log 2>&1 & echo $! > "$PIDF"; sleep 3; }
 nosd_stop() { if nosd_running; then kill "$(cat "$PIDF")" 2>/dev/null; fi; rm -f "$PIDF"; pkill -f "$DIR/ims-agent.sh" 2>/dev/null || true; }
 
@@ -111,6 +122,9 @@ case "${1:-}" in
   restart|stop|start) need_root
     if has_systemd; then systemctl "$1" $APP && echo "$1 완료"
     else case "$1" in start|restart) nosd_start;; stop) nosd_stop;; esac; echo "$1 완료"; fi;;
+  ensure) need_root   # 꺼져 있을 때만 켠다 (켜져 있으면 아무것도 안 함)
+    if has_systemd; then systemctl is-active --quiet $APP || systemctl start $APP
+    elif ! nosd_running; then nosd_start; echo "$(date '+%F %T') 멈춰 있어서 다시 시작함 (ensure)" >> /var/log/ims-agent.log; fi;;
   log) if has_systemd; then journalctl -u $APP -f; else tail -f /var/log/ims-agent.log; fi;;
   uninstall|remove) cmd_uninstall;;
   *) sed -n '2,12p' "$0"; exit 1;;
