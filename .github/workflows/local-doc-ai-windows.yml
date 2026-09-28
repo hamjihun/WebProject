@@ -56,6 +56,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
           Get-ChildItem dist-installer
 
+      - name: Silent install / uninstall test
+        run: |
+          $setup = (Get-ChildItem dist-installer\*.exe).FullName
+          $dir = "$env:LOCALAPPDATA\Programs\LocalDocAI"
+          $p = Start-Process $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$env:RUNNER_TEMP\install.log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or -not (Test-Path "$dir\LocalDocAI.exe")) { Get-Content "$env:RUNNER_TEMP\install.log" -Tail 40; throw "install failed ($($p.ExitCode))" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -PassThru
+          Start-Sleep -Seconds 3
+          if (Test-Path "$dir\LocalDocAI.exe") { throw "uninstall failed ($($p.ExitCode))" }
+          "install/uninstall OK"
+
       - uses: actions/upload-artifact@v4
         with:
           name: LocalDocAI-Setup-${{ env.APP_VERSION }}

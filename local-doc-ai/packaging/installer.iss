@@ -246,7 +246,8 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
-  if (CurPageID = OllamaPage.ID) and not OllamaInstalled() then begin
+  { 조용히 설치(/VERYSILENT, IT 일괄 배포)할 때는 멈추지 않는다 }
+  if (CurPageID = OllamaPage.ID) and not WizardSilent() and not OllamaInstalled() then begin
     MsgBox('Ollama를 먼저 설치해 주세요.' + #13#10 +
       '[Ollama 내려받기]로 받은 파일을 실행해 설치가 끝나면 [다음]이 켜집니다.', mbInformation, MB_OK);
     Result := False;
@@ -258,16 +259,74 @@ begin
   StopOllamaTimer();
 end;
 
+{ ---------------------------------------------------------------- 제거 }
+
+var
+  WantDeleteData, WantDeleteModels: Boolean;
+
+function AskButtons(const Title, Text, YesLabel, NoLabel: String): Boolean;
+var
+  Labels: TArrayOfString;
+begin
+  SetArrayLength(Labels, 2);
+  Labels[0] := YesLabel;
+  Labels[1] := NoLabel;
+  Result := SuppressibleTaskDialogMsgBox(Title, Text, mbConfirmation, MB_YESNO, Labels, 0, IDNO) = IDYES;
+end;
+
+{ 이 프로그램이 받는 모델만 지운다. Ollama가 없으면 남은 모델 폴더를 지운다. }
+procedure DeleteModels();
+var
+  Exe, ModelsDir: String;
+  Models: TArrayOfString;
+  I, Code: Integer;
+begin
+  Exe := FindOllama();
+  if Exe = '' then begin
+    ModelsDir := ExpandConstant('{%USERPROFILE}\.ollama\models');
+    if DirExists(ModelsDir) then
+      DelTree(ModelsDir, True, True, True);
+    Exit;
+  end;
+  SetArrayLength(Models, 3);
+  Models[0] := 'qwen3:4b';
+  Models[1] := 'qwen3:1.7b';
+  Models[2] := 'bge-m3';
+  { 모델 삭제는 Ollama가 켜져 있어야 한다. 이미 켜져 있으면 이 명령은 그냥 끝난다. }
+  Exec(Exe, 'serve', '', SW_HIDE, ewNoWait, Code);
+  Sleep(3000);
+  for I := 0 to GetArrayLength(Models) - 1 do
+    Exec(Exe, 'rm ' + Models[I], '', SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: String;
 begin
-  if CurUninstallStep = usPostUninstall then begin
-    DataDir := ExpandConstant('{localappdata}\LocalDocAI');
+  DataDir := ExpandConstant('{localappdata}\LocalDocAI');
+
+  { 파일을 지우기 전에 무엇을 함께 지울지 먼저 묻는다 }
+  if CurUninstallStep = usUninstall then begin
+    WantDeleteData := False;
     if DirExists(DataDir) then
-      if SuppressibleMsgBox('올린 문서와 대화 기록도 함께 삭제할까요?' + #13#10 + #13#10 +
-        '[아니요]를 누르면 나중에 다시 설치했을 때 그대로 이어서 쓸 수 있습니다.' + #13#10 +
-        '(저장 위치: ' + DataDir + ')', mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
-        DelTree(DataDir, True, True, True);
+      WantDeleteData := AskButtons(
+        '올린 문서와 대화 기록도 삭제할까요?',
+        '남겨두면 나중에 다시 설치했을 때 그대로 이어서 쓸 수 있습니다.' + #13#10 +
+        '(저장 위치: ' + DataDir + ')',
+        '문서·대화 기록 삭제', '남겨두기');
+
+    WantDeleteModels := AskButtons(
+      '다운로드한 AI 모델도 삭제할까요?',
+      '삭제할 모델: qwen3:4b, qwen3:1.7b, bge-m3 (약 2~4GB)' + #13#10 +
+      '다시 설치하면 모델을 새로 받아야 합니다.' + #13#10 +
+      'Ollama 프로그램 자체는 지워지지 않습니다. (설정 → 앱에서 따로 제거)',
+      'AI 모델 삭제', '남겨두기');
+  end;
+
+  if CurUninstallStep = usPostUninstall then begin
+    if WantDeleteData and DirExists(DataDir) then
+      DelTree(DataDir, True, True, True);
+    if WantDeleteModels then
+      DeleteModels();
   end;
 end;
