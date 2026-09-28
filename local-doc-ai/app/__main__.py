@@ -1,18 +1,6 @@
 """실행: python -m app"""
-import threading
-import webbrowser
+import sys
 
-import uvicorn
+from .launcher import main
 
-from . import config
-
-
-def main() -> None:
-    url = f"http://{config.HOST}:{config.PORT}"
-    print(f"\n  사내 문서 AI 실행 중: {url}\n  이 창을 닫으면 프로그램이 종료됩니다.\n")
-    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    uvicorn.run("app.main:app", host=config.HOST, port=config.PORT, log_level="warning")
-
-
-if __name__ == "__main__":
-    main()
+sys.exit(main())

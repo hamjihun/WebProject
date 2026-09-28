@@ -20,16 +20,28 @@ NotebookLM처럼 **내가 올린 문서만 근거로** 업무 질문에 답하�
 
 ## 설치 (Windows)
 
-1. **파이썬 3.10 이상** 설치: https://www.python.org/downloads/
-   (설치 첫 화면에서 **Add python.exe to PATH**를 꼭 체크하세요)
-2. **Ollama** 설치: https://ollama.com/download (이 PC에서 AI 모델을 실행하는 엔진)
-3. 이 폴더의 **`install.bat`**을 더블클릭하세요.
-   - 필요한 구성요소를 설치합니다.
-   - PC 메모리에 맞는 AI 모델과 검색용 모델(`bge-m3`)을 받습니다 (약 2~4GB).
-   - 바탕화면에 **사내 문서 AI** 바로가기를 만듭니다.
-4. 바탕화면의 **사내 문서 AI**(또는 `run.bat`)를 실행하면 브라우저가 열립니다.
+1. 설치 파일 **`LocalDocAI-Setup-x.x.x.exe`**를 받습니다.
+   - GitHub 저장소 → **Releases → local-doc-ai-latest**에서 받을 수 있습니다.
+2. 받은 파일을 실행하면 설치 마법사가 열립니다. **관리자 권한은 필요 없습니다.**
 
-> 검은 창을 닫으면 프로그램이 종료됩니다.
+   | 단계 | 화면 | 할 일 |
+   |---|---|---|
+   | 1 | 환영 | [다음] |
+   | 2 | **AI 엔진(Ollama) 설치 확인** | Ollama가 없으면 **[Ollama 내려받기]**로 받아 설치합니다. 설치가 끝나면 자동으로 확인되고 [다음]이 켜집니다 |
+   | 3 | 설치 위치 | 기본값 그대로 [다음] |
+   | 4 | 추가 작업 | 바탕화면 바로가기 선택 → [다음] |
+   | 5 | 설치 | [설치] |
+   | 6 | 완료 | "사내 문서 AI 실행하기"를 체크한 채 [마침] |
+
+3. 처음 실행하면 **처음 설정** 창이 뜹니다. **[모델 받기 시작]**을 누르면 PC 메모리에 맞는 AI 모델(약 2~4GB)을 받습니다. 진행률이 표시되고, 처음 한 번만 받으면 됩니다.
+4. 이후에는 바탕화면이나 시작 메뉴의 **사내 문서 AI**를 실행하면 됩니다.
+
+> 프로그램은 작업 표시줄 오른쪽 아래(알림 영역)에 파란 아이콘으로 떠 있습니다.
+> 아이콘을 **더블클릭**하면 화면이 다시 열리고, **우클릭 → 종료**로 끌 수 있습니다.
+
+- 삭제: **설정 → 앱 → 사내 문서 AI → 제거**. 제거할 때 올린 문서와 대화 기록도 지울지 묻습니다.
+- 데이터 저장 위치: `%LOCALAPPDATA%\LocalDocAI\data` (올린 파일, 검색 데이터, 대화 기록)
+- 문제가 생기면 `%LOCALAPPDATA%\LocalDocAI\logs\app.log`를 확인하세요.
 
 ## 사용법
 
@@ -58,29 +70,20 @@ NotebookLM처럼 **내가 올린 문서만 근거로** 업무 질문에 답하�
 - 프로그램은 `127.0.0.1`(이 PC)에서만 열리고, 같은 네트워크의 다른 PC에서는 접속할 수 없습니다.
 - 다른 웹사이트가 이 프로그램에 요청을 보내지 못하도록 막아 두었습니다 (Host/Origin 검사).
 - 화면에 외부 글꼴, 외부 스크립트, 분석 도구를 쓰지 않습니다.
-- 올린 파일, 검색 데이터, 대화 기록은 모두 이 폴더 아래 `data\`에만 저장됩니다.
+- 올린 파일, 검색 데이터, 대화 기록은 모두 `%LOCALAPPDATA%\LocalDocAI\data`에만 저장됩니다.
   PC를 반납하거나 초기화할 때는 `data` 폴더를 지우면 됩니다.
 
 ## 인터넷이 막힌 PC에 설치하기
 
 인터넷이 되는 PC에서 준비물을 받아 USB 등으로 옮깁니다.
 
-```bat
-:: 1) 파이썬 패키지 미리 받기 (이 폴더에서 실행)
-py -m pip download -r requirements.txt -d wheels
-
-:: 2) 모델 미리 받기
-ollama pull qwen3:4b
-ollama pull bge-m3
-```
-
-- 이 폴더 전체(`wheels` 포함)를 대상 PC로 복사합니다. `install.bat`이 `wheels` 폴더를 발견하면 인터넷 없이 설치합니다.
-- 모델은 `%USERPROFILE%\.ollama\models` 폴더를 통째로 대상 PC의 같은 위치에 복사합니다.
-  (이 경우 install.bat의 모델 다운로드 단계는 이미 받은 모델이라 바로 넘어갑니다)
+1. `LocalDocAI-Setup-x.x.x.exe`와 `OllamaSetup.exe`(https://ollama.com/download)를 옮겨 차례로 설치합니다.
+2. 인터넷이 되는 PC에서 모델을 받습니다: `ollama pull qwen3:4b`, `ollama pull bge-m3` (메모리 8~12GB PC는 `qwen3:1.7b`)
+3. 그 PC의 `%USERPROFILE%\.ollama\models` 폴더를 통째로 대상 PC의 같은 위치에 복사합니다.
 
 ## 설정 값 (고급)
 
-화면의 ⚙ 설정 또는 `data\settings.json`에서 바꿀 수 있습니다.
+화면의 ⚙ 설정 또는 `%LOCALAPPDATA%\LocalDocAI\data\settings.json`에서 바꿀 수 있습니다.
 
 | 항목 | 기본값 | 설명 |
 |---|---|---|
@@ -102,14 +105,36 @@ python -m venv .venv
 .venv/bin/python -m app                          # 실행
 ```
 
+### 설치 파일 빌드
+
+`local-doc-ai/` 아래 파일을 고쳐서 GitHub에 올리면, GitHub Actions(`.github/workflows/local-doc-ai-windows.yml`)가
+Windows에서 자동으로 다음을 수행합니다.
+
+1. 테스트 실행
+2. PyInstaller로 `LocalDocAI.exe` 생성 (`packaging/local_doc_ai.spec`), 빌드된 exe 자체 점검(`--selftest`)
+3. Inno Setup으로 설치 마법사 `LocalDocAI-Setup-x.x.x.exe` 생성 (`packaging/installer.iss`)
+4. Actions 결과물과 Releases의 `local-doc-ai-latest`에 업로드
+
+직접 빌드하려면 (Windows):
+
+```bat
+pip install -r requirements-build.txt
+pyinstaller --noconfirm packaging\local_doc_ai.spec
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss
+```
+
 구조:
 
 ```
+packaging/          exe·설치 마법사 빌드 설정 (PyInstaller, Inno Setup)
+launcher_entry.py   exe 시작 파일
 app/
+  launcher.py       실행기: 중복 실행 방지, Ollama 자동 시작, 트레이 아이콘
   main.py           웹 서버(API), 이 PC에서만 접속 허용
   parsers.py        파일 형식별 텍스트 추출 (엑셀 행 묶음, 슬라이드, PDF 페이지 등)
   chunker.py        긴 글을 검색 단위 조각으로 나누기
   ollama_client.py  로컬 Ollama 호출 (임베딩, 답변 생성)
+  system.py         PC 메모리 확인, Ollama 찾기/실행
   rag.py            문서 등록 작업, 검색(벡터+키워드), 프롬프트, 답변
   db.py             SQLite 저장소
   static/           화면 (외부 라이브러리 없음)

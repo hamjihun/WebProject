@@ -38,31 +38,140 @@ function load(key, fallback) {
 
 // ------------------------------------------------------------ 상태 표시
 
+const setup = { dismissed: false, pulling: false, starting: false };
+
 async function checkStatus() {
   const dot = $("#statusDot");
   const banner = $("#banner");
   try {
     const s = await api("/api/status");
-    if (!s.ollama) {
-      dot.className = "status-dot bad";
-      dot.title = "AI 엔진(Ollama)이 꺼져 있습니다";
-      banner.innerHTML = "AI 엔진(Ollama)에 연결할 수 없습니다. 시작 메뉴에서 <b>Ollama</b>를 실행한 뒤 잠시 기다려 주세요.";
-      banner.hidden = false;
-    } else if (s.missing.length) {
-      dot.className = "status-dot bad";
-      dot.title = "필요한 모델이 설치되지 않았습니다";
-      banner.innerHTML = "필요한 AI 모델이 설치되어 있지 않습니다. 명령 프롬프트에서 다음을 실행해 주세요: " +
-        s.missing.map((m) => `<code>ollama pull ${esc(m)}</code>`).join(" ");
-      banner.hidden = false;
-    } else {
-      dot.className = "status-dot ok";
-      dot.title = `준비됨 · 답변 모델 ${s.chat_model}`;
+    const ready = s.ollama && !s.missing.length;
+    dot.className = `status-dot ${ready ? "ok" : "bad"}`;
+    dot.title = ready ? `준비됨 · 답변 모델 ${s.chat_model}` : "처음 설정이 필요합니다";
+    if (ready) {
       banner.hidden = true;
+      // 설정 창이 열려 있으면 '준비 완료' 화면으로 바꿔 보여준다
+      if ($("#setup").open && !setup.pulling && !$("#setupBody [data-act=close]")) openSetup();
+    } else {
+      banner.innerHTML = `AI 준비가 끝나지 않았습니다. <button class="btn" id="bannerSetup">설정 계속하기</button>`;
+      banner.hidden = false;
+      $("#bannerSetup").onclick = () => { setup.dismissed = false; openSetup(); };
+      if (!setup.dismissed && !$("#setup").open) openSetup();
     }
     return s;
   } catch {
     dot.className = "status-dot bad";
     return null;
+  }
+}
+
+// ------------------------------------------------------------ 처음 설정 (Ollama · 모델 받기)
+
+function gb(bytes) { return (bytes / 1024 ** 3).toFixed(2); }
+
+async function openSetup() {
+  const dlg = $("#setup");
+  const body = $("#setupBody");
+  const info = await api("/api/setup");
+  if (!dlg.open) dlg.showModal();
+
+  const step = (n, title, desc, stateCls) =>
+    `<div class="step ${stateCls}"><span class="mark">${stateCls === "done" ? "✓" : n}</span><div><b>${title}</b><div class="muted">${desc}</div></div></div>`;
+  const engineOk = info.ollama_running;
+  const modelsOk = engineOk && !info.missing.length;
+
+  let html = `<h2>처음 설정</h2>
+    <p class="muted">이 PC에서 AI를 돌리려면 두 가지가 필요합니다. 문서는 외부로 전송되지 않습니다.</p>
+    <div class="steps">
+      ${step(1, "AI 엔진(Ollama)", engineOk ? "실행 중" : info.ollama_installed ? "설치됨 · 시작하는 중" : "설치 필요", engineOk ? "done" : "active")}
+      ${step(2, "AI 모델", modelsOk ? "준비됨" : info.missing.map((m) => `${esc(m)} (약 ${info.sizes_gb[m] ?? "?"}GB)`).join(", "), modelsOk ? "done" : engineOk ? "active" : "")}
+    </div>`;
+
+  if (!engineOk && !info.ollama_installed) {
+    html += `<p>아래 버튼으로 Ollama를 내려받아 설치한 뒤 <b>다시 확인</b>을 눌러 주세요.</p>
+      <div class="actions">
+        <button class="btn" data-act="later">나중에</button>
+        <a class="btn" href="https://ollama.com/download" target="_blank" rel="noopener">다운로드 페이지</a>
+        <button class="btn primary" data-act="recheck">다시 확인</button>
+      </div>`;
+  } else if (!engineOk) {
+    html += `<p>AI 엔진을 시작하고 있습니다. 잠시만 기다려 주세요…</p>
+      <div class="actions"><button class="btn" data-act="later">나중에</button><button class="btn primary" data-act="recheck">다시 확인</button></div>`;
+    if (!setup.starting) {
+      setup.starting = true;
+      api("/api/setup/start-ollama", { method: "POST" }).finally(() => setTimeout(() => { setup.starting = false; if (dlg.open) openSetup(); }, 4000));
+    }
+  } else if (!modelsOk) {
+    const total = info.missing.reduce((a, m) => a + (info.sizes_gb[m] || 1), 0).toFixed(1);
+    html += `<p>PC 메모리 <b>${info.ram_gb}GB</b>에 맞는 모델을 받습니다 (모두 약 ${total}GB, 처음 한 번만).<br>
+      인터넷 속도에 따라 5~20분 걸릴 수 있습니다.</p>
+      <div id="pullBox"></div>
+      <div class="actions">
+        <button class="btn" data-act="later">나중에</button>
+        <button class="btn primary" data-act="pull">모델 받기 시작</button>
+      </div>`;
+  } else {
+    html += `<p>모든 준비가 끝났습니다. 왼쪽에서 자료를 올리고 질문해 보세요.</p>
+      <div class="actions"><button class="btn primary" data-act="close">시작하기</button></div>`;
+  }
+  body.innerHTML = html;
+  body.onclick = async (e) => {
+    const act = e.target.dataset?.act;
+    if (act === "later") { setup.dismissed = true; dlg.close(); }
+    if (act === "close") { dlg.close(); checkStatus(); }
+    if (act === "recheck") openSetup();
+    if (act === "pull") pullModels(info.missing, e.target);
+  };
+}
+
+$("#setup").addEventListener("cancel", (e) => {
+  if (setup.pulling) e.preventDefault();
+  else setup.dismissed = true;
+});
+
+async function pullModels(models, btn) {
+  setup.pulling = true;
+  btn.disabled = true;
+  btn.textContent = "받는 중…";
+  const box = $("#pullBox");
+  box.innerHTML = models.map((m, i) =>
+    `<div style="margin:10px 0"><div>${esc(m)} <span class="muted" id="pl${i}">대기 중</span></div><div class="progress"><i id="pb${i}"></i></div></div>`).join("");
+  try {
+    for (let i = 0; i < models.length; i++) {
+      const res = await fetch("/api/setup/pull", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: models[i] }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || res.status);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const ev = JSON.parse(buf.slice(0, nl)); buf = buf.slice(nl + 1);
+          if (ev.type === "error") throw new Error(ev.message);
+          if (ev.type === "progress" && ev.total) {
+            const pct = Math.min(100, (ev.completed / ev.total) * 100);
+            $(`#pb${i}`).style.width = `${pct}%`;
+            $(`#pl${i}`).textContent = `${gb(ev.completed)} / ${gb(ev.total)}GB`;
+          } else if (ev.type === "progress") {
+            $(`#pl${i}`).textContent = ev.status === "success" ? "완료" : "준비 중…";
+          }
+          if (ev.type === "done") { $(`#pb${i}`).style.width = "100%"; $(`#pl${i}`).textContent = "완료"; }
+        }
+      }
+    }
+    setup.pulling = false;
+    await openSetup();
+    checkStatus();
+  } catch (err) {
+    setup.pulling = false;
+    box.insertAdjacentHTML("beforeend", `<p class="err">⚠ ${esc(err.message)}<br>인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>`);
+    btn.disabled = false;
+    btn.textContent = "다시 시도";
   }
 }
 

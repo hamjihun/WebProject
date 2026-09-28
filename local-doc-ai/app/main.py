@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, db, ollama_client, rag
+from . import config, db, ollama_client, rag, system
 from .parsers import SUPPORTED_EXTS
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -53,11 +53,65 @@ def status():
     except ollama_client.OllamaError as e:
         return {"ollama": False, "message": str(e), "models": [], "missing": [s.chat_model, s.embed_model]}
 
-    def installed(name: str) -> bool:
-        return any(m == name or m == f"{name}:latest" for m in models)
-
-    missing = [m for m in (s.chat_model, s.embed_model) if not installed(m)]
+    missing = [m for m in (s.chat_model, s.embed_model) if not _installed(m, models)]
     return {"ollama": True, "models": models, "missing": missing, "chat_model": s.chat_model, "embed_model": s.embed_model}
+
+
+@app.get("/api/ping")
+def ping():
+    return {"app": "local-doc-ai"}
+
+
+@app.get("/api/setup")
+def setup_info():
+    """처음 실행 안내 화면용: PC 메모리, 필요한 모델, 설치 여부."""
+    s = config.get_settings()
+    info = {
+        "ram_gb": round(system.total_ram_gb(), 1),
+        "ollama_installed": system.find_ollama() is not None,
+        "ollama_running": True,
+        "required": [s.chat_model, s.embed_model],
+        "missing": [],
+        "sizes_gb": system.MODEL_SIZES_GB,
+    }
+    try:
+        models = ollama_client.list_models()
+    except ollama_client.OllamaError:
+        info["ollama_running"] = False
+        info["missing"] = info["required"]
+        return info
+    info["missing"] = [m for m in info["required"] if not _installed(m, models)]
+    return info
+
+
+@app.post("/api/setup/start-ollama")
+def setup_start_ollama():
+    return {"started": system.start_ollama()}
+
+
+class PullIn(BaseModel):
+    model: str = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/setup/pull")
+def setup_pull(body: PullIn):
+    s = config.get_settings()
+    if body.model not in (s.chat_model, s.embed_model):
+        raise HTTPException(400, "허용되지 않은 모델입니다.")
+
+    def stream():
+        try:
+            for p in ollama_client.pull_stream(body.model):
+                yield json.dumps({"type": "progress", **p}, ensure_ascii=False) + "\n"
+            yield json.dumps({"type": "done"}) + "\n"
+        except ollama_client.OllamaError as e:
+            yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+def _installed(name: str, models: list[str]) -> bool:
+    return any(m == name or m == f"{name}:latest" for m in models)
 
 
 @app.get("/api/settings")

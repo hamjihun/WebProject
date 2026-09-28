@@ -119,3 +119,16 @@ dialog small { font-weight: 400; color: var(--muted); }
   .sources { width: auto; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
   .source-view { position: fixed; inset: 0; width: auto; z-index: 10; }
 }
+
+.setup { width: min(520px, calc(100% - 32px)); }
+.setup h2 { font-size: 18px; margin-bottom: 4px; }
+.setup p { line-height: 1.7; margin: 8px 0; }
+.setup .steps { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.setup .step { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+.setup .step .mark { width: 22px; height: 22px; border-radius: 50%; background: var(--line); color: var(--muted); font-size: 12px; display: grid; place-items: center; }
+.setup .step.done .mark { background: var(--ok); color: #fff; }
+.setup .step.active .mark { background: var(--accent); color: #fff; }
+.setup .progress { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+.setup .progress > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.setup .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.setup .err { color: var(--danger); }

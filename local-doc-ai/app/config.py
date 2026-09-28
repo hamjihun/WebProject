@@ -7,12 +7,25 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.environ.get("DOCAI_DATA_DIR", BASE_DIR / "data"))
+FROZEN = getattr(sys, "frozen", False)  # 설치형 exe 로 실행 중
+
+
+def _default_data_dir() -> Path:
+    if FROZEN:
+        # 설치 폴더와 분리해서 사용자 폴더에 저장 (프로그램을 지웠다 다시 깔아도 유지)
+        root = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
+        return Path(root) / "LocalDocAI" / "data"
+    return BASE_DIR / "data"
+
+
+DATA_DIR = Path(os.environ.get("DOCAI_DATA_DIR") or _default_data_dir())
+LOG_DIR = DATA_DIR.parent / "logs" if FROZEN else DATA_DIR / "logs"
 FILES_DIR = DATA_DIR / "files"
 DB_PATH = DATA_DIR / "docai.sqlite3"
 SETTINGS_PATH = DATA_DIR / "settings.json"
@@ -53,6 +66,11 @@ def get_settings() -> Settings:
     with _lock:
         if _settings is None:
             _settings = Settings()
+            if not SETTINGS_PATH.exists() and "DOCAI_CHAT_MODEL" not in os.environ:
+                # 처음 실행: PC 메모리에 맞는 모델을 고른다
+                from .system import recommended_profile
+
+                _apply(_settings, recommended_profile())
             if SETTINGS_PATH.exists():
                 try:
                     saved = json.loads(SETTINGS_PATH.read_text(encoding="utf-8-sig"))

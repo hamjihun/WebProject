@@ -70,6 +70,32 @@ def chat_stream(messages: list[dict]) -> Iterator[str]:
         raise OllamaError(f"AI 모델 요청 실패: {e}") from e
 
 
+def pull_stream(model: str) -> Iterator[dict]:
+    """모델 다운로드. {"status", "completed", "total"} 진행 상황을 차례로 돌려준다 (바이트 단위, 전체 합계)."""
+    layers: dict[str, tuple[int, int]] = {}
+    try:
+        with httpx.stream(
+            "POST", _url("/api/pull"), json={"model": model, "stream": True},
+            timeout=httpx.Timeout(None, connect=5),
+        ) as r:
+            if r.status_code != 200:
+                r.read()
+                raise OllamaError(_err_msg(r, model))
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                if data.get("error"):
+                    raise OllamaError(f"'{model}' 다운로드 실패: {data['error']}")
+                if data.get("digest") and data.get("total"):
+                    layers[data["digest"]] = (data.get("completed", 0), data["total"])
+                done = sum(c for c, _ in layers.values())
+                total = sum(t for _, t in layers.values())
+                yield {"status": data.get("status", ""), "completed": done, "total": total}
+    except httpx.HTTPError as e:
+        raise OllamaError(f"'{model}' 다운로드 실패: {e}") from e
+
+
 def _content_pieces(r: httpx.Response) -> Iterator[str]:
     for line in r.iter_lines():
         if not line:

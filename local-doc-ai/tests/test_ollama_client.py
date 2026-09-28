@@ -60,3 +60,23 @@ def test_embed_normalizes(monkeypatch):
     v = ollama_client.embed(["a", "b"])
     assert np.allclose(v[0], [0.6, 0.8])
     assert np.allclose(v[1], [0, 0])
+
+
+def test_pull_stream_sums_layers(monkeypatch):
+    lines = [
+        json.dumps({"status": "pulling manifest"}),
+        json.dumps({"status": "pulling a", "digest": "a", "total": 100, "completed": 50}),
+        json.dumps({"status": "pulling b", "digest": "b", "total": 300, "completed": 0}),
+        json.dumps({"status": "pulling b", "digest": "b", "total": 300, "completed": 300}),
+        json.dumps({"status": "success"}),
+    ]
+
+    @contextmanager
+    def fake_stream(method, url, json=None, timeout=None):
+        assert url.endswith("/api/pull") and json["model"] == "bge-m3"
+        yield FakeResponse(lines=lines)
+
+    monkeypatch.setattr(ollama_client.httpx, "stream", fake_stream)
+    events = list(ollama_client.pull_stream("bge-m3"))
+    assert events[2] == {"status": "pulling b", "completed": 50, "total": 400}
+    assert events[-1] == {"status": "success", "completed": 350, "total": 400}
