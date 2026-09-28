@@ -255,6 +255,20 @@ begin
   end;
 end;
 
+{ 업데이트 설치 시 실행 중인 이전 버전을 먼저 끈다 (파일이 사용 중이라 덮어쓰지 못하는 문제 방지) }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Code, I: Integer;
+begin
+  Result := '';
+  for I := 1 to 3 do begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExe} /F /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    { 128 = 실행 중인 프로세스 없음 }
+    if Code = 128 then Break;
+    Sleep(1000);
+  end;
+end;
+
 procedure DeinitializeSetup();
 begin
   StopOllamaTimer();

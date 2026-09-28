@@ -62,6 +62,14 @@ jobs:
           $dir = "$env:LOCALAPPDATA\Programs\LocalDocAI"
           $p = Start-Process $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$env:RUNNER_TEMP\install.log`"" -Wait -PassThru
           if ($p.ExitCode -ne 0 -or -not (Test-Path "$dir\LocalDocAI.exe")) { Get-Content "$env:RUNNER_TEMP\install.log" -Tail 40; throw "install failed ($($p.ExitCode))" }
+          # 프로그램이 실행 중인 상태에서 다시 설치(업데이트)해도 되는지 확인
+          $env:DOCAI_DATA_DIR = "$env:RUNNER_TEMP\docai-running\data"
+          Start-Process "$dir\LocalDocAI.exe" -ArgumentList "--no-browser"
+          Start-Sleep -Seconds 8
+          if (-not (Get-Process LocalDocAI -ErrorAction SilentlyContinue)) { throw "app did not start" }
+          $p = Start-Process $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$env:RUNNER_TEMP\update.log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\update.log" -Tail 40; throw "update over running app failed ($($p.ExitCode))" }
+          "update over running app OK"
           $p = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -PassThru
           Start-Sleep -Seconds 3
           if (Test-Path "$dir\LocalDocAI.exe") { throw "uninstall failed ($($p.ExitCode))" }
