@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>사내 문서 AI</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5bd3'/%3E%3Cpath d='M9 8h10l4 4v12H9z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">사내 문서 AI</div>
+    <div class="nb-controls">
+      <select id="nbSelect" aria-label="노트북 선택"></select>
+      <button id="nbNew" class="btn ghost" title="새 노트북">+ 새 노트북</button>
+      <button id="nbRename" class="btn ghost icon" title="이름 바꾸기">✎</button>
+      <button id="nbDelete" class="btn ghost icon" title="노트북 삭제">🗑</button>
+    </div>
+    <div class="top-right">
+      <span id="statusDot" class="status-dot" title="AI 상태 확인 중"></span>
+      <button id="openSettings" class="btn ghost icon" title="설정">⚙</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="layout">
+    <aside class="sources">
+      <div class="panel-head">
+        <h2>자료</h2>
+        <label class="select-all"><input type="checkbox" id="selectAll" checked> 전체 선택</label>
+      </div>
+      <label id="dropZone" class="dropzone">
+        <input type="file" id="fileInput" multiple
+          accept=".pdf,.xlsx,.xlsm,.xls,.csv,.pptx,.docx,.hwp,.hwpx,.txt,.md">
+        <strong>파일 올리기</strong>
+        <span>클릭하거나 여기로 끌어다 놓으세요</span>
+        <span class="muted">PDF · 엑셀 · PPT · 워드 · 한글 · 텍스트</span>
+      </label>
+      <ul id="docList" class="doc-list"></ul>
+      <p class="privacy">🔒 올린 문서와 대화는 이 PC 안에만 저장됩니다.</p>
+    </aside>
+
+    <section class="chat">
+      <div id="messages" class="messages"></div>
+      <form id="askForm" class="ask">
+        <textarea id="question" rows="1" placeholder="선택한 자료에 대해 질문하세요 (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
+        <button id="sendBtn" class="btn primary" type="submit">보내기</button>
+        <button id="stopBtn" class="btn" type="button" hidden>중지</button>
+      </form>
+      <div class="chat-foot">
+        <span class="muted">AI 답변은 틀릴 수 있습니다. 중요한 내용은 출처를 눌러 원문을 확인하세요.</span>
+        <button id="clearChat" class="link">대화 지우기</button>
+      </div>
+    </section>
+
+    <aside id="sourceView" class="source-view" hidden>
+      <div class="panel-head">
+        <h2 id="svTitle">출처</h2>
+        <button id="svClose" class="btn ghost icon" title="닫기">✕</button>
+      </div>
+      <div id="svMeta" class="muted"></div>
+      <pre id="svText" class="sv-text"></pre>
+      <a id="svOpen" class="btn" target="_blank">원본 파일 열기</a>
+    </aside>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" id="settingsForm">
+      <h2>설정</h2>
+      <label>답변 모델
+        <select name="chat_model" id="chatModel"></select>
+        <small>메모리 8GB PC: qwen3:1.7b · 16GB PC: qwen3:4b 권장</small>
+      </label>
+      <label>참고할 자료 조각 수
+        <input type="number" name="top_k" min="1" max="12">
+        <small>적을수록 빠르고, 많을수록 여러 자료를 종합합니다 (기본 5)</small>
+      </label>
+      <label>문맥 길이 (토큰)
+        <input type="number" name="num_ctx" min="2048" max="32768" step="1024">
+        <small>메모리가 부족하면 4096으로 낮추세요</small>
+      </label>
+      <label>관련도 최소 점수
+        <input type="number" name="min_score" min="0" max="1" step="0.05">
+        <small>높이면 엉뚱한 자료를 덜 쓰고, 낮추면 더 많이 찾습니다 (기본 0.3)</small>
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn">취소</button>
+        <button value="save" class="btn primary">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
