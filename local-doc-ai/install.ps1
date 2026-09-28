@@ -46,11 +46,18 @@ Say "  완료" Green
 Say "[3/5] AI 엔진(Ollama) 확인" Yellow
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) {
-    $guess = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
-    if (Test-Path $guess) { $ollama = Get-Item $guess }
+    # 방금 설치해서 PATH가 아직 반영되지 않았거나, 관리자 권한으로 실행한 경우를 대비해 흔한 설치 위치를 찾아본다
+    $guesses = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"),
+        (Join-Path $env:ProgramFiles "Ollama\ollama.exe")
+    ) + (Get-ChildItem "$env:SystemDrive\Users" -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName "AppData\Local\Programs\Ollama\ollama.exe" })
+    foreach ($g in $guesses) {
+        if (Test-Path $g) { $ollama = Get-Item $g; break }
+    }
 }
 if (-not $ollama) {
-    Fail "Ollama가 설치되어 있지 않습니다. https://ollama.com/download 에서 Windows용을 설치한 뒤 install.bat 을 다시 실행하세요. 또는: winget install Ollama.Ollama"
+    Fail "Ollama가 설치되어 있지 않습니다. https://ollama.com/download 에서 Windows용을 설치한 뒤, 이 창을 닫고 install.bat 을 다시 실행하세요. 또는: winget install Ollama.Ollama"
 }
 $ollamaExe = if ($ollama.Source) { $ollama.Source } else { $ollama.FullName }
 try { Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 3 | Out-Null }
