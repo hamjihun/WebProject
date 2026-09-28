@@ -39,7 +39,7 @@ MAX_UPLOAD_MB = int(os.environ.get("DOCAI_MAX_UPLOAD_MB", "100"))
 @dataclass
 class Settings:
     ollama_url: str = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-    chat_model: str = os.environ.get("DOCAI_CHAT_MODEL", "qwen3:4b")
+    chat_model: str = os.environ.get("DOCAI_CHAT_MODEL", "qwen3:4b-instruct")
     embed_model: str = os.environ.get("DOCAI_EMBED_MODEL", "bge-m3")
     # 한 번에 AI에게 넘기는 문서 조각 수. 적을수록 빠르다.
     top_k: int = int(os.environ.get("DOCAI_TOP_K", "5"))
@@ -77,7 +77,22 @@ def get_settings() -> Settings:
                     _apply(_settings, saved)
                 except (OSError, ValueError):
                     pass
+                else:
+                    _migrate(_settings)
         return _settings
+
+
+def _migrate(s: Settings) -> None:
+    """이전 버전 기본 모델을 쓰고 있으면 새 기본 모델로 바꾼다 (처음 설정 창에서 새로 받게 됨)."""
+    from .system import MODEL_MIGRATIONS
+
+    new = MODEL_MIGRATIONS.get(s.chat_model)
+    if new:
+        s.chat_model = new
+        try:
+            SETTINGS_PATH.write_text(json.dumps(asdict(s), ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
 
 
 def update_settings(values: dict) -> Settings:

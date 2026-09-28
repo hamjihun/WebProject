@@ -253,8 +253,10 @@ def parse_pptx(path: Path, chunk_chars: int) -> list[Block]:
                 out += shape_texts(sh.shapes)
             elif getattr(sh, "has_table", False) and sh.has_table:
                 for row in sh.table.rows:
-                    cells = [c.text.strip().replace("\n", " ") for c in row.cells]
-                    if any(cells):
+                    # 병합된 셀은 한 번만 (빈 칸이 '| |' 로 늘어서는 것 방지)
+                    cells = [c.text.strip().replace("\n", " ") for c in row.cells if not c.is_spanned]
+                    cells = [c for c in cells if c]
+                    if cells:
                         out.append(" | ".join(cells))
             elif getattr(sh, "has_text_frame", False) and sh.has_text_frame:
                 t = sh.text_frame.text.strip()

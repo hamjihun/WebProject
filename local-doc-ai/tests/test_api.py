@@ -106,3 +106,22 @@ def test_status_reports_missing_models(fake_ollama, monkeypatch):
 
 def test_keywords_strip_particles():
     assert rag._keywords("누리산업의 담당자는 누구야") == ["누리산업", "담당자", "누구야"]
+
+
+def test_untagged_thinking_is_removed(fake_ollama, monkeypatch):
+    def thinking_chat(messages):
+        yield "Okay, the user asks about "
+        yield "누리산업. Let me check.</th"
+        yield "ink>\n\n담당자는 이서연입니다 [1]"
+
+    monkeypatch.setattr(rag.ollama_client, "chat_stream", thinking_chat)
+    with TestClient(app) as client:
+        nb = client.post("/api/notebooks", json={"name": "생각"}).json()
+        client.post(f"/api/notebooks/{nb['id']}/documents",
+                    files=[("files", ("거래처.xlsx", _xlsx_bytes(), "application/octet-stream"))])
+        docs = _wait_ready(client, nb["id"])
+        events = _ask(client, nb["id"], "누리산업 담당자", [docs[0]["id"]])
+        resets = [e for e in events if e["type"] == "reset"]
+        assert resets == [{"type": "reset", "text": "담당자는 이서연입니다 [1]"}]
+        msgs = client.get(f"/api/notebooks/{nb['id']}/messages").json()
+        assert msgs[-1]["content"] == "담당자는 이서연입니다 [1]"

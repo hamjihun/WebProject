@@ -13,7 +13,7 @@ NotebookLM처럼 **내가 올린 문서만 근거로** 업무 질문에 답하�
 
 | PC 메모리 | 자동으로 선택되는 모델 | 체감 |
 |---|---|---|
-| 16GB 이상 | `qwen3:4b` | 답변 품질이 적당하고 속도도 쓸 만함 |
+| 16GB 이상 | `qwen3:4b-instruct` | 답변 품질이 적당하고 속도도 쓸 만함 |
 | 8~12GB | `qwen3:1.7b` | 빠르지만 복잡한 질문에는 약함 |
 
 별도 그래픽카드는 없어도 되지만, 있으면 더 빨라집니다. 쓸 때는 전원 어댑터를 연결하는 것이 좋습니다.
@@ -78,7 +78,7 @@ NotebookLM처럼 **내가 올린 문서만 근거로** 업무 질문에 답하�
 인터넷이 되는 PC에서 준비물을 받아 USB 등으로 옮깁니다.
 
 1. `LocalDocAI-Setup-x.x.x.exe`와 `OllamaSetup.exe`(https://ollama.com/download)를 옮겨 차례로 설치합니다.
-2. 인터넷이 되는 PC에서 모델을 받습니다: `ollama pull qwen3:4b`, `ollama pull bge-m3` (메모리 8~12GB PC는 `qwen3:1.7b`)
+2. 인터넷이 되는 PC에서 모델을 받습니다: `ollama pull qwen3:4b-instruct`, `ollama pull bge-m3` (메모리 8~12GB PC는 `qwen3:1.7b`)
 3. 그 PC의 `%USERPROFILE%\.ollama\models` 폴더를 통째로 대상 PC의 같은 위치에 복사합니다.
 
 ## 설정 값 (고급)
@@ -87,7 +87,7 @@ NotebookLM처럼 **내가 올린 문서만 근거로** 업무 질문에 답하�
 
 | 항목 | 기본값 | 설명 |
 |---|---|---|
-| `chat_model` | `qwen3:4b` | 답변 모델. `ollama pull`로 받은 다른 모델도 사용 가능 |
+| `chat_model` | `qwen3:4b-instruct` | 답변 모델. `ollama pull`로 받은 다른 모델도 사용 가능. `qwen3:4b`처럼 '생각 과정'을 먼저 쓰는 모델은 매우 느려서 권장하지 않음 |
 | `embed_model` | `bge-m3` | 검색용 모델. 바꾸면 기존 문서를 다시 올려야 함 |
 | `top_k` | 5 | 질문 하나에 참고할 문서 조각 수 |
 | `num_ctx` | 6144 | AI가 한 번에 읽는 분량(토큰). 메모리 부족 시 4096 |

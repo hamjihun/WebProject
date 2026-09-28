@@ -160,7 +160,8 @@ async function pullModels(models, btn) {
           } else if (ev.type === "progress") {
             $(`#pl${i}`).textContent = ev.status === "success" ? "완료" : "준비 중…";
           }
-          if (ev.type === "done") { $(`#pb${i}`).style.width = "100%"; $(`#pl${i}`).textContent = "완료"; }
+          if (ev.type === "switched") $(`#pl${i}`).textContent = `${ev.model} 모델로 대신 받는 중…`;
+          if (ev.type === "done") { $(`#pb${i}`).style.width = "100%"; $(`#pl${i}`).textContent = ev.model && ev.model !== models[i] ? `완료 (${ev.model})` : "완료"; }
         }
       }
     }
@@ -495,6 +496,10 @@ async function ask() {
         } else if (ev.type === "token") {
           if (!gotToken) { gotToken = true; text = ""; }
           text += ev.text;
+          paintAssistant(el, text, true);
+        } else if (ev.type === "reset") {
+          gotToken = true;
+          text = ev.text;
           paintAssistant(el, text, true);
         } else if (ev.type === "error") {
           el.classList.add("error");

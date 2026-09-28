@@ -99,15 +99,34 @@ def setup_pull(body: PullIn):
     if body.model not in (s.chat_model, s.embed_model):
         raise HTTPException(400, "허용되지 않은 모델입니다.")
 
+    candidates = [body.model]
+    if body.model == s.chat_model:
+        candidates += system.PULL_FALLBACKS.get(body.model, [])
+
     def stream():
-        try:
-            for p in ollama_client.pull_stream(body.model):
-                yield json.dumps({"type": "progress", **p}, ensure_ascii=False) + "\n"
-            yield json.dumps({"type": "done"}) + "\n"
-        except ollama_client.OllamaError as e:
-            yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n"
+        last_error = ""
+        for model in candidates:
+            try:
+                for p in ollama_client.pull_stream(model):
+                    yield json.dumps({"type": "progress", **p}, ensure_ascii=False) + "\n"
+            except ollama_client.OllamaError as e:
+                last_error = str(e)
+                if _is_missing_model_error(last_error) and model != candidates[-1]:
+                    continue  # 저장소에 없는 이름 → 다음 후보로
+                break
+            if model != body.model:
+                config.update_settings({"chat_model": model})
+                yield json.dumps({"type": "switched", "model": model}, ensure_ascii=False) + "\n"
+            yield json.dumps({"type": "done", "model": model}) + "\n"
+            return
+        yield json.dumps({"type": "error", "message": last_error}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+def _is_missing_model_error(msg: str) -> bool:
+    m = msg.lower()
+    return "file does not exist" in m or "not found" in m or "manifest" in m
 
 
 def _installed(name: str, models: list[str]) -> bool:

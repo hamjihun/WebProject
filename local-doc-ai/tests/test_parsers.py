@@ -89,11 +89,19 @@ def test_pptx_slides_tables_notes(tmp_path):
     tbl = s2.shapes.add_table(2, 2, Inches(1), Inches(2), Inches(4), Inches(1)).table
     tbl.cell(0, 0).text, tbl.cell(0, 1).text = "항목", "금액"
     tbl.cell(1, 0).text, tbl.cell(1, 1).text = "광고", "500만원"
+    s3 = prs.slides.add_slide(prs.slide_layouts[5])
+    s3.shapes.title.text = "담당자"
+    t3 = s3.shapes.add_table(2, 3, Inches(1), Inches(2), Inches(6), Inches(1)).table
+    t3.cell(0, 0).merge(t3.cell(0, 1))
+    t3.cell(0, 0).text, t3.cell(0, 2).text = "구분", "실사자"
+    t3.cell(1, 0).text, t3.cell(1, 1).text, t3.cell(1, 2).text = "자재", "수삽", "이재열"
     p = tmp_path / "전략.pptx"
     prs.save(p)
 
     blocks = parse_file(p, "전략.pptx")
-    assert [b.location for b in blocks] == ["슬라이드 1", "슬라이드 2"]
+    assert [b.location for b in blocks] == ["슬라이드 1", "슬라이드 2", "슬라이드 3"]
+    assert "구분 | 실사자" in blocks[2].text and "| |" not in blocks[2].text
+    assert "자재 | 수삽 | 이재열" in blocks[2].text
     assert "# 영업 전략" in blocks[0].text
     assert "신규 거래처 20곳 확보" in blocks[0].text
     assert "[발표자 노트] 3분기까지 완료" in blocks[0].text

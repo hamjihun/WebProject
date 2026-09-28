@@ -37,12 +37,27 @@ def recommended_profile(ram_gb: float | None = None) -> dict:
     ram = total_ram_gb() if ram_gb is None else ram_gb
     # 16GB PC는 윈도우가 약간 빼고 보고하므로 14GB 기준
     if ram >= 14:
-        return {"chat_model": "qwen3:4b", "num_ctx": 6144, "top_k": 5}
+        return {"chat_model": DEFAULT_CHAT_16GB, "num_ctx": 6144, "top_k": 5}
     return {"chat_model": "qwen3:1.7b", "num_ctx": 4096, "top_k": 4}
 
 
+# '생각 과정' 없이 바로 답하는 모델 (노트북에서 훨씬 빠르다).
+# qwen3:4b 는 항상 긴 생각 과정을 먼저 출력하는 모델로 바뀌어 쓰지 않는다.
+DEFAULT_CHAT_16GB = "qwen3:4b-instruct"
+
+# 모델 저장소에 해당 이름이 없을 때 차례로 시도할 대체 모델
+PULL_FALLBACKS = {
+    "qwen3:4b-instruct": ["qwen3:4b-instruct-2507-q4_K_M", "gemma3:4b"],
+}
+
+# 이전 버전의 기본 모델 → 새 기본 모델
+MODEL_MIGRATIONS = {"qwen3:4b": DEFAULT_CHAT_16GB}
+
 # 대략적인 다운로드 크기 (GB), 안내용
-MODEL_SIZES_GB = {"qwen3:4b": 2.5, "qwen3:1.7b": 1.4, "bge-m3": 1.2}
+MODEL_SIZES_GB = {
+    "qwen3:4b-instruct": 2.5, "qwen3:4b-instruct-2507-q4_K_M": 2.5, "gemma3:4b": 3.3,
+    "qwen3:4b": 2.5, "qwen3:1.7b": 1.4, "bge-m3": 1.2,
+}
 
 
 def find_ollama() -> str | None:

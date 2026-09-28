@@ -115,7 +115,8 @@ begin
     DownloadButton.Enabled := True;
   end;
   if (OllamaPage <> nil) and (WizardForm.CurPageID = OllamaPage.ID) then
-    WizardForm.NextButton.Enabled := Found;
+    { 조용히 설치할 때는 [다음]이 꺼져 있으면 설치가 중단되므로 끄지 않는다 }
+    WizardForm.NextButton.Enabled := Found or WizardSilent();
 end;
 
 procedure OllamaTimerProc(Wnd: LongWord; Msg: LongWord; IdEvent: LongWord; Time: LongWord);
@@ -288,10 +289,13 @@ begin
       DelTree(ModelsDir, True, True, True);
     Exit;
   end;
-  SetArrayLength(Models, 3);
-  Models[0] := 'qwen3:4b';
-  Models[1] := 'qwen3:1.7b';
-  Models[2] := 'bge-m3';
+  SetArrayLength(Models, 6);
+  Models[0] := 'qwen3:4b-instruct';
+  Models[1] := 'qwen3:4b-instruct-2507-q4_K_M';
+  Models[2] := 'gemma3:4b';
+  Models[3] := 'qwen3:4b';
+  Models[4] := 'qwen3:1.7b';
+  Models[5] := 'bge-m3';
   { 모델 삭제는 Ollama가 켜져 있어야 한다. 이미 켜져 있으면 이 명령은 그냥 끝난다. }
   Exec(Exe, 'serve', '', SW_HIDE, ewNoWait, Code);
   Sleep(3000);
@@ -317,7 +321,7 @@ begin
 
     WantDeleteModels := AskButtons(
       '다운로드한 AI 모델도 삭제할까요?',
-      '삭제할 모델: qwen3:4b, qwen3:1.7b, bge-m3 (약 2~4GB)' + #13#10 +
+      '삭제할 모델: 이 프로그램이 받은 qwen3 / gemma3 답변 모델과 bge-m3 (약 2~6GB)' + #13#10 +
       '다시 설치하면 모델을 새로 받아야 합니다.' + #13#10 +
       'Ollama 프로그램 자체는 지워지지 않습니다. (설정 → 앱에서 따로 제거)',
       'AI 모델 삭제', '남겨두기');

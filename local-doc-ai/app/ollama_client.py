@@ -46,8 +46,13 @@ def embed(texts: list[str]) -> np.ndarray:
     return vecs / norms
 
 
-# 생각(thinking) 과정을 먼저 길게 출력하는 모델. 노트북에서는 너무 느려서 끈다.
+# 생각(thinking) 과정을 켜고 끌 수 있는 모델. 노트북에서는 너무 느려서 끈다.
 _THINKING_PREFIXES = ("qwen3", "deepseek-r1", "magistral", "gpt-oss")
+
+
+def _wants_think_off(model: str) -> bool:
+    m = model.lower()
+    return m.startswith(_THINKING_PREFIXES) and "instruct" not in m
 
 
 def chat_stream(messages: list[dict]) -> Iterator[str]:
@@ -58,16 +63,23 @@ def chat_stream(messages: list[dict]) -> Iterator[str]:
         "stream": True,
         "options": {"num_ctx": s.num_ctx, "temperature": s.temperature},
     }
-    if s.chat_model.lower().startswith(_THINKING_PREFIXES):
+    if _wants_think_off(s.chat_model):
         payload["think"] = False
-    try:
-        with httpx.stream("POST", _url("/api/chat"), json=payload, timeout=httpx.Timeout(600, connect=5)) as r:
-            if r.status_code != 200:
-                r.read()
-                raise OllamaError(_err_msg(r, s.chat_model))
-            yield from strip_think(_content_pieces(r))
-    except httpx.HTTPError as e:
-        raise OllamaError(f"AI 모델 요청 실패: {e}") from e
+    for attempt in range(2):
+        try:
+            with httpx.stream("POST", _url("/api/chat"), json=payload, timeout=httpx.Timeout(600, connect=5)) as r:
+                if r.status_code != 200:
+                    r.read()
+                    msg = _err_msg(r, s.chat_model)
+                    # 생각 기능이 없는 모델에 think 옵션을 보내면 거절될 수 있다 → 빼고 다시
+                    if attempt == 0 and "think" in payload and "think" in msg.lower():
+                        payload.pop("think")
+                        continue
+                    raise OllamaError(msg)
+                yield from strip_think(_content_pieces(r))
+                return
+        except httpx.HTTPError as e:
+            raise OllamaError(f"AI 모델 요청 실패: {e}") from e
 
 
 def pull_stream(model: str) -> Iterator[dict]:

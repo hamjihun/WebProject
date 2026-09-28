@@ -206,7 +206,17 @@ def answer(notebook_id: int, question: str, doc_ids: list[int]) -> Iterator[dict
         yield {"type": "token", "text": NOT_FOUND}
     else:
         try:
+            raw = ""
+            thought_removed = False
             for piece in ollama_client.chat_stream(build_messages(question, hits, history)):
+                raw += piece
+                if not thought_removed and "</think>" in raw:
+                    # 여는 태그 없이 생각 과정부터 쓰는 모델: 지금까지 쓴 생각 부분을 화면에서 지운다
+                    thought_removed = True
+                    answer_text = raw.split("</think>", 1)[1].lstrip()
+                    parts = [answer_text]
+                    yield {"type": "reset", "text": answer_text}
+                    continue
                 parts.append(piece)
                 yield {"type": "token", "text": piece}
         except ollama_client.OllamaError as e:
