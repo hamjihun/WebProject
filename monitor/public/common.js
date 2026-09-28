@@ -1,24 +1,27 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.37.1';
+  const UI_VERSION = '1.37.2';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
   const embed = params.get('embed') === '1' || params.get('tv') === '1';
 
   // ---- 화면 크기 (서버 모니터링 화면만) ----
-  // 브라우저 확대(Ctrl+휠)는 같은 주소의 모든 화면(메모 포함)에 한꺼번에 걸린다.
-  // 그래서 모니터링 화면은 여기서 정한 크기를 따로 기억해 두고, 메모에서 Ctrl+휠로 브라우저 확대를 바꿔도
-  // 같은 크기로 보이게 되돌려 맞춘다. (want = 정한 크기, dpr = 정할 때의 화면 배율)
+  // 브라우저 확대(Ctrl+휠)는 같은 주소의 모든 화면(메모 포함)에 한꺼번에 걸린다. 그래서 모니터링 화면은
+  //  ① 본문(서버 카드·대시보드 칸 등)만 여기서 정한 크기(want)로 키우고 줄인다 — 상단바·팝업은 그대로
+  //  ② 메모에서 브라우저 확대를 바꿔도 모니터링 화면 전체가 정할 때(dpr)와 같은 크기로 보이게 되돌려 맞춘다
   const ZKEY = 'imsMonZoom';
-  const zOn = PAGES.some(([f]) => f === here) && params.get('embed') !== '1';
-  let zNow = 1;
+  const Z_TARGET = { 'index.html': '#main', 'dashboard.html': 'body > .wrap', 'stats.html': 'main.wrap', 'backup.html': 'main.wrap' };
+  const zOn = !!Z_TARGET[here] && params.get('embed') !== '1';
+  let zNow = 1;                                            // 화면 전체에 걸린 배율 (마우스 좌표 보정용)
   function zGet() { try { const o = JSON.parse(localStorage.getItem(ZKEY) || 'null'); if (o && o.want > 0 && o.dpr > 0) return o; } catch (e) {} return null; }
   function zApply() {
     if (!zOn) return;
     const o = zGet();
-    zNow = o ? Math.min(3, Math.max(0.3, o.want * o.dpr / (window.devicePixelRatio || 1))) : 1;
+    zNow = o ? Math.min(3, Math.max(0.3, o.dpr / (window.devicePixelRatio || 1))) : 1;
     document.documentElement.style.zoom = Math.abs(zNow - 1) < 0.001 ? '' : String(zNow);
+    const t = document.querySelector(Z_TARGET[here]);
+    if (t) t.style.zoom = o && Math.abs(o.want - 1) > 0.001 ? String(o.want) : '';
     const v = document.getElementById('navzv'); if (v) v.textContent = Math.round((o ? o.want : 1) * 100) + '%';
   }
   function zSet(want) {                                    // want: 1 = 처음 정할 때 보이던 크기
@@ -34,6 +37,7 @@
   const zStep = (d) => { const o = zGet(); zSet((o ? o.want : 1) + d); };
   if (zOn) {
     zApply();
+    document.addEventListener('DOMContentLoaded', zApply);
     window.addEventListener('resize', zApply);            // 메모 등에서 브라우저 확대가 바뀌면 되돌려 맞춘다
     // 이 화면에서 Ctrl+휠 / Ctrl+ + - 0 은 브라우저 확대 대신 이 화면 크기만 바꾼다 (메모 화면에 영향 없음)
     window.addEventListener('wheel', (e) => { if (!e.ctrlKey) return; e.preventDefault(); zStep(e.deltaY < 0 ? 0.1 : -0.1); }, { passive: false });
@@ -69,7 +73,7 @@
     const isMon = PAGES.some(([f]) => f === here);
     nav.innerHTML = `<a href="home.html" class="home" title="다른 화면으로 이동">← 홈</a><div class="brand" id="navbrand">${isMon ? '서버 모니터' : ''}</div>` +
       `<span id="navtabs">` + (isMon ? PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}" data-page="${f}">${t}</a>`).join('') : '') + `</span>` +
-      `<span class="spacer"></span><span class="who" id="navwho"></span><a class="snd" id="navpw" href="password.html" title="내 비밀번호 바꾸기" style="text-decoration:none" hidden>비밀번호</a><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span>${zOn ? '<span class="zm" title="이 화면 크기 (Ctrl+휠 도 됨 · 메모 화면과 따로 기억)"><button id="navzm">－</button><button id="navzv">100%</button><button id="navzp">＋</button></span>' : ''}<button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
+      `<span class="spacer"></span><span class="who" id="navwho"></span><a class="snd" id="navpw" href="password.html" title="내 비밀번호 바꾸기" style="text-decoration:none" hidden>비밀번호</a><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span>${zOn ? '<span class="zm" title="서버 카드 크기 (Ctrl+휠 도 됨 · 상단바·팝업은 그대로 · 메모 화면과 따로 기억)"><button id="navzm">－</button><button id="navzv">100%</button><button id="navzp">＋</button></span>' : ''}<button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
     st.textContent = `#topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:44px;background:var(--card,#1e293b);border-bottom:1px solid var(--line,#334155);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
