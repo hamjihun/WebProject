@@ -1,10 +1,49 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.37.0';
+  const UI_VERSION = '1.37.1';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
   const embed = params.get('embed') === '1' || params.get('tv') === '1';
+
+  // ---- 화면 크기 (서버 모니터링 화면만) ----
+  // 브라우저 확대(Ctrl+휠)는 같은 주소의 모든 화면(메모 포함)에 한꺼번에 걸린다.
+  // 그래서 모니터링 화면은 여기서 정한 크기를 따로 기억해 두고, 메모에서 Ctrl+휠로 브라우저 확대를 바꿔도
+  // 같은 크기로 보이게 되돌려 맞춘다. (want = 정한 크기, dpr = 정할 때의 화면 배율)
+  const ZKEY = 'imsMonZoom';
+  const zOn = PAGES.some(([f]) => f === here) && params.get('embed') !== '1';
+  let zNow = 1;
+  function zGet() { try { const o = JSON.parse(localStorage.getItem(ZKEY) || 'null'); if (o && o.want > 0 && o.dpr > 0) return o; } catch (e) {} return null; }
+  function zApply() {
+    if (!zOn) return;
+    const o = zGet();
+    zNow = o ? Math.min(3, Math.max(0.3, o.want * o.dpr / (window.devicePixelRatio || 1))) : 1;
+    document.documentElement.style.zoom = Math.abs(zNow - 1) < 0.001 ? '' : String(zNow);
+    const v = document.getElementById('navzv'); if (v) v.textContent = Math.round((o ? o.want : 1) * 100) + '%';
+  }
+  function zSet(want) {                                    // want: 1 = 처음 정할 때 보이던 크기
+    const o = zGet();
+    if (want == null) { try { localStorage.removeItem(ZKEY); } catch (e) {} }   // 원래대로 (브라우저 확대를 따라감)
+    else {
+      want = Math.round(Math.min(2, Math.max(0.5, want)) * 10) / 10;
+      try { localStorage.setItem(ZKEY, JSON.stringify({ want, dpr: o ? o.dpr : (window.devicePixelRatio || 1) })); } catch (e) {}
+    }
+    zApply();
+    window.dispatchEvent(new Event('resize'));             // 차트·배치 다시 그리기
+  }
+  const zStep = (d) => { const o = zGet(); zSet((o ? o.want : 1) + d); };
+  if (zOn) {
+    zApply();
+    window.addEventListener('resize', zApply);            // 메모 등에서 브라우저 확대가 바뀌면 되돌려 맞춘다
+    // 이 화면에서 Ctrl+휠 / Ctrl+ + - 0 은 브라우저 확대 대신 이 화면 크기만 바꾼다 (메모 화면에 영향 없음)
+    window.addEventListener('wheel', (e) => { if (!e.ctrlKey) return; e.preventDefault(); zStep(e.deltaY < 0 ? 0.1 : -0.1); }, { passive: false });
+    window.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); zStep(0.1); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zStep(-0.1); }
+      else if (e.key === '0') { e.preventDefault(); zSet(null); }
+    });
+  }
 
   function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function fmtBytes(b) { if (!b) return '0 B'; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (b >= 1024 && i < 4) { b /= 1024; i++; } return (i >= 3 ? b.toFixed(1) : Math.round(b)) + ' ' + u[i]; }
@@ -30,7 +69,7 @@
     const isMon = PAGES.some(([f]) => f === here);
     nav.innerHTML = `<a href="home.html" class="home" title="다른 화면으로 이동">← 홈</a><div class="brand" id="navbrand">${isMon ? '서버 모니터' : ''}</div>` +
       `<span id="navtabs">` + (isMon ? PAGES.map(([f, t]) => `<a href="${f}" class="${f === (active || here) ? 'on' : ''}" data-page="${f}">${t}</a>`).join('') : '') + `</span>` +
-      `<span class="spacer"></span><span class="who" id="navwho"></span><a class="snd" id="navpw" href="password.html" title="내 비밀번호 바꾸기" style="text-decoration:none" hidden>비밀번호</a><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span><button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
+      `<span class="spacer"></span><span class="who" id="navwho"></span><a class="snd" id="navpw" href="password.html" title="내 비밀번호 바꾸기" style="text-decoration:none" hidden>비밀번호</a><button class="snd" id="navout" title="로그아웃" hidden>로그아웃</button><span class="ver" id="navver"></span>${zOn ? '<span class="zm" title="이 화면 크기 (Ctrl+휠 도 됨 · 메모 화면과 따로 기억)"><button id="navzm">－</button><button id="navzv">100%</button><button id="navzp">＋</button></span>' : ''}<button class="snd" id="navfs" title="전체화면 (F11 과 같음, 다시 누르거나 Esc 로 해제)">⛶ 전체화면</button><button class="snd" id="navsnd" title="알림 소리 설정">🔊</button><a href="index.html#alerts" class="bell" id="navbell">🔔 알림<b id="navcnt" hidden>0</b></a>`;
     document.body.insertBefore(nav, document.body.firstChild);
     const st = document.createElement('style');
     st.textContent = `#topnav{display:flex;align-items:center;gap:4px;padding:0 16px;height:44px;background:var(--card,#1e293b);border-bottom:1px solid var(--line,#334155);font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
@@ -49,10 +88,21 @@
 #topnav .bell b{background:#ef4444;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:4px}
 #topnav .snd{background:none;border:1px solid var(--line,#334155);color:var(--muted,#94a3b8);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;margin-right:6px;font-family:inherit}
 #topnav .snd.on{color:var(--text,#e2e8f0)}#topnav .snd.ring{background:#ef4444;color:#fff;border-color:#ef4444;animation:sndblink 1s infinite}
-@keyframes sndblink{50%{opacity:.5}}`;
+@keyframes sndblink{50%{opacity:.5}}
+#topnav .zm{order:3;display:flex;margin-right:6px;border:1px solid var(--line,#334155);border-radius:6px;overflow:hidden}
+#topnav .zm button{background:none;border:0;color:var(--muted,#94a3b8);font:inherit;font-size:12px;padding:4px 7px;cursor:pointer}
+#topnav .zm button:hover{color:var(--text,#e2e8f0);background:rgba(148,163,184,.12)}
+#topnav .zm #navzv{min-width:44px;border-left:1px solid var(--line,#334155);border-right:1px solid var(--line,#334155)}`;
     document.head.appendChild(st);
     sndInit();
     applyMe();
+    if (zOn) {
+      document.getElementById('navzm').onclick = () => zStep(-0.1);
+      document.getElementById('navzp').onclick = () => zStep(0.1);
+      document.getElementById('navzv').onclick = () => zSet(null);     // 가운데 숫자 = 원래대로
+      document.getElementById('navzv').title = '누르면 원래대로 (브라우저 확대를 따라감)';
+      zApply();
+    }
     const fs = document.getElementById('navfs');
     if (fs) { fs.onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
       document.addEventListener('fullscreenchange', () => { fs.textContent = document.fullscreenElement ? '⛶ 전체화면 해제' : '⛶ 전체화면'; }); }
@@ -343,7 +393,7 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) alPoll(); });
   }
 
-  window.MON = { UI_VERSION, applyMe,
+  window.MON = { UI_VERSION, applyMe, zoom: () => zNow,
     alarms: { start: alStart, poll: alPoll, ask: alAsk, can: alCan, supported: () => typeof Notification !== 'undefined' }, sound: { check: sndCheck, start: sndStart, stop: sndStop, init: sndInit, settings: () => snd }, esc, fmtBytes, fmtUptime, shortOs, fmtTime, label, grade, renderNav, pollNav, embed, params,
     setVersion(v) { const e = document.getElementById('navver'); if (e) e.textContent = v ? '수집기 v' + v : ''; } };
 })();

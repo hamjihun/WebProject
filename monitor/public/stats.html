@@ -278,7 +278,7 @@ function lineChart(el, legendEl, series, opt) {
     const show = rows.filter((x) => x.p[0] === near).sort((a, b) => b.p[1] - a.p[1]).slice(0, 12);
     const cur = svg.querySelector('#cur'); cur.style.display = ''; cur.setAttribute('x1', X(near)); cur.setAttribute('x2', X(near));
     tip.innerHTML = `<b>${data.gran === 'hour' && !opt.day ? fmtDT(near) : fmtDate(near)}</b>` + show.map((x) => `<div><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${x.ser.color};margin-right:5px"></i>${esc(x.ser.name)} ${x.p[1].toFixed(1)}${opt.unit}</div>`).join('');
-    tip.style.display = 'block'; tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, e.pageX + 14) + 'px'; tip.style.top = (e.pageY - 10) + 'px';
+    tip.style.display = 'block'; const z = (window.MON && MON.zoom()) || 1; tip.style.left = Math.min(window.innerWidth / z - tip.offsetWidth - 10, e.pageX / z + 14) + 'px'; tip.style.top = (e.pageY / z - 10) + 'px';
   };
   el.onmouseleave = () => { tip.style.display = 'none'; const c = svg.querySelector('#cur'); if (c) c.style.display = 'none'; };
 }

@@ -336,7 +336,7 @@ function bindDrag(el, obj, type, id) {
     if (e.target.classList.contains('gh')) { resizing = true; ow = obj.w; oh = obj.h; }
     sx = e.clientX; sy = e.clientY; ox = obj.x; oy = obj.y; moved = false; snapped = false;
     const mv = (e) => {
-      const dx = (e.clientX - sx) / zoom, dy = (e.clientY - sy) / zoom; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; if (!moved) return;
+      const pz = (window.MON && MON.zoom()) || 1, dx = (e.clientX - sx) / zoom / pz, dy = (e.clientY - sy) / zoom / pz; if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; if (!moved) return;
       if (!snapped) { snap(); snapped = true; }
       if (resizing) { obj.w = Math.max(40, snapG(ow + dx)); obj.h = Math.max(40, snapG(oh + dy)); el.style.width = obj.w + 'px'; el.style.height = obj.h + 'px'; }
       else { obj.x = Math.max(0, snapG(ox + dx)); obj.y = Math.max(0, snapG(oy + dy)); el.style.left = obj.x + 'px'; el.style.top = obj.y + 'px'; if (type === 'node') drawLinks(); }
@@ -363,7 +363,7 @@ function bindDrag(el, obj, type, id) {
   let px, py, sl, st, moved;
   $stage.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); px = e.clientX; py = e.clientY; sl = $stage.scrollLeft; st = $stage.scrollTop; moved = false; $stage.classList.add('panning');
-    const mv = (e) => { const dx = e.clientX - px, dy = e.clientY - py; if (Math.abs(dx) + Math.abs(dy) > 3) moved = true; $stage.scrollLeft = sl - dx; $stage.scrollTop = st - dy; };
+    const mv = (e) => { const pz = (window.MON && MON.zoom()) || 1, dx = (e.clientX - px) / pz, dy = (e.clientY - py) / pz; if (Math.abs(dx) + Math.abs(dy) > 3) moved = true; $stage.scrollLeft = sl - dx; $stage.scrollTop = st - dy; };
     const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); $stage.classList.remove('panning'); };
     document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up); e.preventDefault();
   });

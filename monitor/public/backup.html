@@ -170,7 +170,7 @@ function render() {
   }
   $('#mx').innerHTML = h + '</tbody></table>';
   const tip = $('#tip');
-  $('#mx').onmouseover = (e) => { const d = e.target.closest('.dot'); if (!d) { tip.style.display = 'none'; return; } const [host, stage, job, k] = d.dataset.id.split('|'); const r = rows.find((x) => x.host === host && x.stage === stage && (x.job || x.usb || '') === job); const t = tipText(r, k, cellState(r, k)); if (!t) return; tip.textContent = t; tip.style.display = 'block'; tip.style.left = Math.min(window.innerWidth - 260, e.clientX + 12) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; };
+  $('#mx').onmouseover = (e) => { const d = e.target.closest('.dot'); if (!d) { tip.style.display = 'none'; return; } const [host, stage, job, k] = d.dataset.id.split('|'); const r = rows.find((x) => x.host === host && x.stage === stage && (x.job || x.usb || '') === job); const t = tipText(r, k, cellState(r, k)); if (!t) return; tip.textContent = t; tip.style.display = 'block'; const z = (window.MON && MON.zoom()) || 1; tip.style.left = Math.min(window.innerWidth / z - 260, e.clientX / z + 12) + 'px'; tip.style.top = (e.clientY / z + 14) + 'px'; };
   $('#mx').onmouseleave = () => { tip.style.display = 'none'; };
   $('#mx').onclick = (e) => { const d = e.target.closest('.dot'); if (!d) return; sel = d.dataset.id; render(); showDetail(); };
   if (sel) showDetail();
