@@ -88,6 +88,15 @@
   #sEv .sh button.ed { width:auto; padding:0 10px; color:var(--text); }
   .se { background:var(--card); border:1px solid var(--accent); border-radius:var(--r); padding:11px 13px; }
   .se .tt { font-size:14.5px; font-weight:700; line-height:1.4; word-break:break-all; }
+  /* 옆 칸에서 바로 고치기: 평소엔 글처럼, 누르면 칸이 드러난다 */
+  .se input.tt, .se textarea.ds { display:block; width:100%; background:none; border:1px solid transparent; border-radius:var(--r);
+    color:var(--text); font-family:inherit; padding:3px 5px; margin-left:-6px; box-sizing:content-box; }
+  .se input.tt:hover, .se textarea.ds:hover { border-color:var(--line); }
+  .se input.tt:focus, .se textarea.ds:focus { outline:none; border-color:var(--accent); background:var(--bg); }
+  .se textarea.ds { resize:none; overflow:hidden; min-height:44px; margin-top:8px; }
+  .se .tags:empty { display:none; } .se .tags { margin-bottom:3px; }
+  .se .sv { color:var(--muted); font-size:10.5px; text-align:right; min-height:14px; margin-top:2px; }
+  .se .sv.bad { color:var(--bad); }
   .se .mt { color:var(--muted); font-size:11.5px; margin-top:3px; }
   .se .ds { font-size:13px; line-height:1.65; white-space:pre-wrap; word-break:break-all; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
   .se .ds.none, .se .nn { color:var(--muted); font-size:12px; }
@@ -646,16 +655,52 @@ function showSideEv() {
   const o = (ev.occ && ev.occ[date]) || null, status = (o && o.status) || ev.status || '예정';
   const notes = (ev.notes || []).filter((n) => rep === 'none' || n.date === date).sort((a, b) => b.at - a.at);
   const d = D(date);
-  box.innerHTML = `<div class="sh"><b>📌 일정</b><button class="ed" id="sEdit" title="전체 창에서 고치기">수정</button><button id="sClose" title="닫기">✕</button></div>
-    <div class="se"><div class="tt">${shareTag(ev)}${prioTag(ev.prio)}${esc(ev.title)}</div>
+  // 제목·내용을 고치는 중이면 다시 그리지 않는다 (커서가 풀리지 않게) — 달력 강조만 다시
+  if (box.contains(document.activeElement) && box.dataset.id === ev.id) {
+    for (const c of document.querySelectorAll(`.chip[data-id="${ev.id}"][data-date="${date}"]`)) c.classList.add('pick');
+    return;
+  }
+  box.dataset.id = ev.id;
+  box.innerHTML = `<div class="sh"><b>📌 일정</b><button class="ed" id="sEdit" title="날짜·상태·반복 등 전체 창에서 고치기">수정</button><button id="sClose" title="닫기">✕</button></div>
+    <div class="se"><div class="tags">${shareTag(ev)}${prioTag(ev.prio)}</div>
+      <input class="tt" id="sTitle" maxlength="100" value="${esc(ev.title)}" title="눌러서 바로 고치기">
       <div class="mt">${d.getMonth() + 1}/${d.getDate()} (${WD[d.getDay()]})${ev.time ? ' ' + ev.time : ''} · <span style="color:${ST_COLOR[status]}">●</span> ${status}${ev.owner ? ' · ' + esc(ev.owner) : ''}</div>
-      ${ev.desc ? `<div class="ds">${esc(ev.desc)}</div>` : '<div class="ds none">적어 둔 내용이 없습니다.</div>'}
+      <textarea class="ds" id="sDesc" maxlength="2000" placeholder="내용을 적으세요 (여기서 바로 고치면 저장됩니다)">${esc(ev.desc || '')}</textarea>
+      <div class="sv" id="sSaved"></div>
       ${notes.length ? `<div class="nh">메모 ${notes.length}</div>` + notes.map((n) => `<div class="nt"><div class="h">${esc(n.by || '')} · ${fmtAt(n.at)}</div><div class="b">${esc(n.text)}</div></div>`).join('') : ''}
     </div>`;
   box.hidden = false;
   for (const c of document.querySelectorAll(`.chip[data-id="${ev.id}"][data-date="${date}"]`)) c.classList.add('pick');
   $('#sEdit').onclick = () => openForm(ev, null, date);
   $('#sClose').onclick = () => { sideEv = null; showSideEv(); };
+  // 바로 고치기: 적는 동안 0.7초 뒤, 칸을 벗어날 때 저장
+  const ta = $('#sDesc'), ti = $('#sTitle');
+  const grow2 = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+  grow2();
+  ta.oninput = () => { grow2(); inlineSave(ev.id, false); };
+  ti.oninput = () => inlineSave(ev.id, false);
+  ta.onblur = ti.onblur = () => inlineSave(ev.id, true);
+  ti.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ti.blur(); } else if (e.key === 'Escape') { ti.value = ev.title; ti.blur(); } };
+}
+let inlineT = null;
+function inlineSave(id, now) {
+  clearTimeout(inlineT);
+  const run = async () => {
+    const ti = $('#sTitle'), ta = $('#sDesc'), sv = $('#sSaved'); if (!ti || !ta) return;
+    const ev = data.events.find((x) => x.id === id); if (!ev) return;
+    const title = ti.value.trim(), desc = ta.value;
+    if (!title) { if (now) { ti.value = ev.title; } if (sv) { sv.textContent = '제목은 비울 수 없습니다'; sv.className = 'sv bad'; } return; }
+    if (title === ev.title && desc === (ev.desc || '')) return;
+    if (sv) { sv.textContent = '저장 중…'; sv.className = 'sv'; }
+    try {
+      const r = await fetch('api/schedule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, title, desc }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+      data.events = j.events; fillFilters(); render();
+      const s2 = $('#sSaved'); if (s2) { const t = new Date(); s2.textContent = `저장됨 ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`; s2.className = 'sv'; }
+    } catch (err) { const s2 = $('#sSaved'); if (s2) { s2.textContent = err.message; s2.className = 'sv bad'; } }
+  };
+  if (now) run(); else inlineT = setTimeout(run, 700);
 }
 function fmtAt(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 // 수정 중인 일정의 배지 · 상태 버튼 · 메모를 다시 그린다
