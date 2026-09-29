@@ -82,6 +82,20 @@
   .sn .x { position:absolute; top:5px; right:5px; background:none; border:0; color:var(--muted); cursor:pointer; font-size:13px; padding:0 3px; opacity:0; }
   .sn:hover .x { opacity:1; } .sn .x:hover { color:var(--bad); }
   .snone { color:var(--muted); font-size:12px; line-height:1.7; padding:6px 2px; }
+  /* 옆 칸 일정 보기 (달력에서 일정을 누르면) */
+  #sEv { display:flex; flex-direction:column; gap:8px; margin-bottom:6px; }
+  #sEv[hidden] { display:none; }
+  #sEv .sh button.ed { width:auto; padding:0 10px; color:var(--text); }
+  .se { background:var(--card); border:1px solid var(--accent); border-radius:var(--r); padding:11px 13px; }
+  .se .tt { font-size:14.5px; font-weight:700; line-height:1.4; word-break:break-all; }
+  .se .mt { color:var(--muted); font-size:11.5px; margin-top:3px; }
+  .se .ds { font-size:13px; line-height:1.65; white-space:pre-wrap; word-break:break-all; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+  .se .ds.none, .se .nn { color:var(--muted); font-size:12px; }
+  .se .nh { color:var(--muted); font-size:11.5px; margin:12px 0 4px; }
+  .se .nt { border-left:2px solid var(--line); padding:3px 0 3px 9px; margin-top:6px; }
+  .se .nt .b { font-size:12.5px; line-height:1.55; white-space:pre-wrap; word-break:break-all; }
+  .se .nt .h { color:var(--muted); font-size:10.5px; margin-bottom:1px; }
+  .chip.pick { outline:2px solid var(--accent); outline-offset:-1px; }
 
   /* 월 달력 */
   table.cal { width:var(--calw,100%); border-collapse:collapse; table-layout:fixed; font-size:var(--calfs,12px); }   /* ⚙ 달력 폭 · 글자 크기 */
@@ -245,7 +259,7 @@
   <div class="kpis" id="kpis"></div>
   <div class="vrow">
     <div id="view"></div>
-    <aside id="smemo"><div class="sh"><b>📝 메모</b><button id="sAdd" title="메모 추가">＋</button></div><div id="sList"></div></aside>
+    <aside id="smemo"><div id="sEv" hidden></div><div class="sh"><b>📝 메모</b><button id="sAdd" title="메모 추가">＋</button></div><div id="sList"></div></aside>
   </div>
 </div>
 
@@ -416,6 +430,7 @@ function render() {
   else if (view === 'week') renderWeek(from);
   else if (view === 'year') renderYear();
   else renderTimeline();
+  if (typeof showSideEv === 'function') showSideEv();
 }
 function renderKpis() {
   if (view === 'todo') {
@@ -617,7 +632,30 @@ function renderYear() {
 function openEvent(id, date) {
   const ev = data.events.find((x) => x.id === id);
   if (!ev) return;
+  // 달력 옆 칸이 보일 때는 그 칸에 제목·내용·메모만 보여 주고, [수정] 으로 전체 창을 연다
+  if (document.body.classList.contains('side-on')) { sideEv = { id, date: date || ev.start }; showSideEv(); return; }
   openForm(ev, null, date || ev.start);
+}
+let sideEv = null;
+function showSideEv() {
+  const box = $('#sEv');
+  const ev = sideEv && data.events.find((x) => x.id === sideEv.id);
+  for (const c of document.querySelectorAll('.chip.pick')) c.classList.remove('pick');
+  if (!ev || !document.body.classList.contains('side-on')) { box.hidden = true; box.innerHTML = ''; if (!ev) sideEv = null; return; }
+  const date = sideEv.date, rep = (ev.repeat && ev.repeat.kind) || 'none';
+  const o = (ev.occ && ev.occ[date]) || null, status = (o && o.status) || ev.status || '예정';
+  const notes = (ev.notes || []).filter((n) => rep === 'none' || n.date === date).sort((a, b) => b.at - a.at);
+  const d = D(date);
+  box.innerHTML = `<div class="sh"><b>📌 일정</b><button class="ed" id="sEdit" title="전체 창에서 고치기">수정</button><button id="sClose" title="닫기">✕</button></div>
+    <div class="se"><div class="tt">${shareTag(ev)}${prioTag(ev.prio)}${esc(ev.title)}</div>
+      <div class="mt">${d.getMonth() + 1}/${d.getDate()} (${WD[d.getDay()]})${ev.time ? ' ' + ev.time : ''} · <span style="color:${ST_COLOR[status]}">●</span> ${status}${ev.owner ? ' · ' + esc(ev.owner) : ''}</div>
+      ${ev.desc ? `<div class="ds">${esc(ev.desc)}</div>` : '<div class="ds none">적어 둔 내용이 없습니다.</div>'}
+      ${notes.length ? `<div class="nh">메모 ${notes.length}</div>` + notes.map((n) => `<div class="nt"><div class="h">${esc(n.by || '')} · ${fmtAt(n.at)}</div><div class="b">${esc(n.text)}</div></div>`).join('') : ''}
+    </div>`;
+  box.hidden = false;
+  for (const c of document.querySelectorAll(`.chip[data-id="${ev.id}"][data-date="${date}"]`)) c.classList.add('pick');
+  $('#sEdit').onclick = () => openForm(ev, null, date);
+  $('#sClose').onclick = () => { sideEv = null; showSideEv(); };
 }
 function fmtAt(t) { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 // 수정 중인 일정의 배지 · 상태 버튼 · 메모를 다시 그린다
@@ -785,12 +823,13 @@ $('#add').onclick = () => openForm(null);
 
 // ---- 화면 설정 (이 PC 브라우저에 기억): 위 요약 칸, 달력 칸 높이 ----
 const LOOK_KEY = 'imsSchedLook';
-let look = { kpi: 'normal', cellh: 112, calw: 100, calfs: 12 };
+const LOOK_DEF = { kpi: 'small', cellh: 100, calw: 70, calfs: 12, side: true };   // 기본 화면 (요약 한 줄, 달력 70% + 옆 칸)
+let look = { ...LOOK_DEF };
 try { look = { ...look, ...(JSON.parse(localStorage.getItem(LOOK_KEY) || '{}') || {}) }; } catch (e) {}
 function applyLook(save) {
-  look.cellh = Math.max(50, Math.min(220, Math.round(Number(look.cellh) || 112)));
-  look.calw = Math.max(40, Math.min(100, Math.round(Number(look.calw) || 100)));
-  look.calfs = Math.max(9, Math.min(20, Math.round(Number(look.calfs) || 12)));
+  look.cellh = Math.max(50, Math.min(220, Math.round(Number(look.cellh) || LOOK_DEF.cellh)));
+  look.calw = Math.max(40, Math.min(100, Math.round(Number(look.calw) || LOOK_DEF.calw)));
+  look.calfs = Math.max(9, Math.min(20, Math.round(Number(look.calfs) || LOOK_DEF.calfs)));
   document.documentElement.style.setProperty('--calw', look.calw + '%');
   document.documentElement.style.setProperty('--calfs', look.calfs + 'px');
   if (typeof sideLayout === 'function' && document.getElementById('smemo')) try { sideLayout(); } catch (e) {}
@@ -852,9 +891,9 @@ function openCfg() {
     <div class="sec">위 요약 칸 (진행 중 · 완료 …)</div>
     <div class="row">${[['normal', '보통'], ['small', '작게'], ['off', '숨기기']].map(([k, n]) => `<button data-kpi="${k}" class="${look.kpi === k ? 'on' : ''}">${n}</button>`).join('')}</div>
     <div class="sec">달력 칸 높이 (월 보기)</div>
-    <div class="row"><button data-ch="-20" title="작게">－</button><span class="v">${look.cellh}px</span><button data-ch="20" title="크게">＋</button><button data-ch="0" title="처음 크기(112px)로">기본</button></div>
+    <div class="row"><button data-ch="-20" title="작게">－</button><span class="v">${look.cellh}px</span><button data-ch="20" title="크게">＋</button><button data-ch="0" title="기본 크기(100px)로">기본</button></div>
     <div class="sec">달력 가로 폭 (월 · 주 보기)</div>
-    <div class="row"><button data-cw="-10" title="좁게">－</button><span class="v">${look.calw}%</span><button data-cw="10" title="넓게">＋</button><button data-cw="0" title="화면 가득(100%)">기본</button></div>
+    <div class="row"><button data-cw="-10" title="좁게">－</button><span class="v">${look.calw}%</span><button data-cw="10" title="넓게">＋</button><button data-cw="0" title="기본 폭(70%, 옆에 메모 칸)">기본</button></div>
     <div class="sec">달력 옆 메모 (가로 폭을 줄이면 남는 자리에)</div>
     <div class="row"><button data-sd="1" class="${look.side !== false ? 'on' : ''}">보이기</button><button data-sd="0" class="${look.side === false ? 'on' : ''}">숨기기</button></div>
     <div class="sec">달력 글자 크기 (월 보기)</div>
@@ -874,10 +913,10 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#cfg').
 $('#cfg').onclick = async (e) => {
   const bt = e.target.closest('button'); if (!bt) return;
   if (bt.dataset.kpi) { look.kpi = bt.dataset.kpi; applyLook(true); openCfg(); return; }
-  if (bt.dataset.ch) { const d = Number(bt.dataset.ch); look.cellh = d ? look.cellh + d : 112; applyLook(true); openCfg(); return; }
-  if (bt.dataset.cw) { const d = Number(bt.dataset.cw); look.calw = d ? look.calw + d : 100; applyLook(true); openCfg(); return; }
-  if (bt.dataset.sd) { look.side = bt.dataset.sd === '1'; if (look.side && look.calw >= 100) look.calw = 75; applyLook(true); openCfg(); return; }
-  if (bt.dataset.cf) { const d = Number(bt.dataset.cf); look.calfs = d ? look.calfs + d : 12; applyLook(true); openCfg(); return; }
+  if (bt.dataset.ch) { const d = Number(bt.dataset.ch); look.cellh = d ? look.cellh + d : LOOK_DEF.cellh; applyLook(true); openCfg(); return; }
+  if (bt.dataset.cw) { const d = Number(bt.dataset.cw); look.calw = d ? look.calw + d : LOOK_DEF.calw; applyLook(true); openCfg(); return; }
+  if (bt.dataset.sd) { look.side = bt.dataset.sd === '1'; if (look.side && look.calw >= 100) look.calw = LOOK_DEF.calw; applyLook(true); openCfg(); return; }
+  if (bt.dataset.cf) { const d = Number(bt.dataset.cf); look.calfs = d ? look.calfs + d : LOOK_DEF.calfs; applyLook(true); openCfg(); return; }
   const c = bt.dataset.c; if (!c) return;
   if (c === 'light' || c === 'dark') {
     document.documentElement.dataset.theme = c;
