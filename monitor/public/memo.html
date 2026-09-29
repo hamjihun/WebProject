@@ -730,7 +730,7 @@ function newDraw(x, y) {
   const z = drawSize();
   const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: z.w, h: z.h,
     title: '', text: '', color: 'white', z: topZ() + 1, fs: prefs.fs, draw: { w: z.w, h: z.h - 26, s: [] } };
-  cur().notes.push(n); unstack(n, 'n'); sel = n.id; eraser = false; touch(); render();
+  cur().notes.push(n); sel = n.id; eraser = false; touch(); render();   // 겹쳐도 그 자리 맨 위에 (밀어내면 화면 밖 아래로 가 버림)
   const el = document.querySelector(`.note[data-id="${n.id}"]`); if (el) openPen(el, n.id);
 }
 $('#addDraw').onclick = () => {
@@ -875,7 +875,7 @@ document.addEventListener('paste', async (e) => {
     const w = Math.max(40, Math.round(dim.w * s)), h = Math.max(30, Math.round(dim.h * s));
     const c = viewCenter();
     const n = { id: uid(), x: Math.max(0, snap(c.x - w / 2)), y: Math.max(0, snap(c.y - h / 2)), w, h, title: '', text: '', img: ref, color: 'white', z: topZ() + 1, fs: 13 };
-    cur().notes.push(n); unstack(n, 'n'); sel = n.id;
+    cur().notes.push(n); sel = n.id;                   // 그림판처럼 화면 가운데 맨 위에 (밀어내지 않는다)
     touch(); render();
     $('#st').textContent = `사진 ${dim.w}×${dim.h}`;
   } catch (err) { alert('사진을 넣지 못했습니다: ' + err.message); $('#st').textContent = ''; }
@@ -1503,7 +1503,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.38.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.38.2';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
