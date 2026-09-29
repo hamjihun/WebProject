@@ -21,7 +21,7 @@
   .bar button, .bar select, .bar input { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:var(--r); padding:6px 12px; font:inherit; cursor:pointer; }
   .bar button:hover { border-color:var(--accent); }
   .bar button.on { background:var(--accent); color:var(--onacc); font-weight:700; border-color:var(--accent); }
-  .bar h1 { font-size:18px; margin:0 4px; min-width:130px; text-align:center; }
+  .bar h1 { font-size:18px; margin:0 4px; width:210px; flex:none; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* 폭 고정: 보기를 바꿔도 옆 단추가 밀리지 않게 */
   .bar .g { display:flex; gap:4px; } .bar .sp { flex:1; }
   /* 보기 고르기: [월 ▾](누르면 월·주·타임라인·연간 목록) [할 일] — 두 단추 같은 크기 */
   .bar .vg .vw { width:92px; text-align:center; padding-left:0; padding-right:0; }
@@ -370,7 +370,7 @@ function range() {
 
 function render() {
   const [from, to] = range();
-  $('#prev').hidden = $('#next').hidden = (view === 'todo');
+  $('#prev').style.visibility = $('#next').style.visibility = (view === 'todo' ? 'hidden' : '');   // 자리는 남겨 옆 단추가 움직이지 않게
   $('#title').textContent = view === 'todo' ? '오늘 · 이번 주' : view === 'year' ? `${cur.getFullYear()}년`
     : view === 'week' ? `${D(from).getMonth() + 1}월 ${D(from).getDate()}일 ~ ${D(to).getMonth() + 1}월 ${D(to).getDate()}일`
     : `${cur.getFullYear()}년 ${cur.getMonth() + 1}월`;
