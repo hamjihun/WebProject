@@ -23,6 +23,15 @@
   .bar button.on { background:var(--accent); color:var(--onacc); font-weight:700; border-color:var(--accent); }
   .bar h1 { font-size:18px; margin:0 4px; min-width:130px; text-align:center; }
   .bar .g { display:flex; gap:4px; } .bar .sp { flex:1; }
+  /* 보기 고르기: [월 ▾](누르면 월·주·타임라인·연간 목록) [할 일] — 두 단추 같은 크기 */
+  .bar .vg .vw { width:92px; text-align:center; padding-left:0; padding-right:0; }
+  .vdd { position:relative; }
+  .vlist { position:absolute; left:0; top:calc(100% + 4px); z-index:50; min-width:100%; display:flex; flex-direction:column; gap:2px;
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:4px; box-shadow:0 8px 20px rgba(0,0,0,.25); }
+  .vlist[hidden] { display:none; }
+  .bar .vlist button { border:0; text-align:left; padding:7px 12px; white-space:nowrap; background:none; }
+  .bar .vlist button:hover { background:var(--soft, rgba(148,163,184,.15)); }
+  .bar .vlist button.on { background:var(--accent); color:var(--onacc); }
   .bar label { color:var(--muted); font-size:12px; }
   .bar button.add { background:var(--accent); color:var(--onacc); font-weight:700; border-color:var(--accent); }
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
@@ -173,7 +182,11 @@
   <div class="bar">
     <div class="g"><button id="prev">◀</button><button id="today">오늘</button><button id="next">▶</button></div>
     <h1 id="title">-</h1>
-    <div class="g"><button class="vw on" data-v="todo">할 일</button><button class="vw" data-v="month">월</button><button class="vw" data-v="week">주</button><button class="vw" data-v="tl">타임라인</button><button class="vw" data-v="year">연간</button></div>
+    <div class="g vg">
+      <div class="vdd"><button class="vw on" id="vsel" title="달력 보기 고르기">월 ▾</button>
+        <div class="vlist" id="vlist" hidden><button data-v="month" class="on">월</button><button data-v="week">주</button><button data-v="tl">타임라인</button><button data-v="year">연간</button></div></div>
+      <button class="vw" id="vtodo" data-v="todo">할 일</button>
+    </div>
     <span class="sp"></span>
     <label for="fdept">부서</label><select id="fdept"></select>
     <label for="fowner">담당자</label><select id="fowner"></select>
@@ -265,7 +278,7 @@ const shareTag = (ev) => (ev.share || 'team') === 'team' ? '<span class="pr team
 const HOL = (k) => (data.holidays || {})[k] || '';
 
 let data = { events: [], depts: [], status: [], prios: [], holidays: {}, me: '', admin: false };
-let view = 'todo';
+let view = 'month';                                   // 첫 화면 = 월 달력
 let cur = new Date(); cur.setHours(0, 0, 0, 0);
 let editing = null;       // 수정 중인 일정 id
 let editDate = '';        // 수정 중인 회차 날짜 (반복 일정의 상태·메모 대상)
@@ -693,11 +706,24 @@ async function load() {
 $('#prev').onclick = () => { cur = view === 'week' ? addD(cur, -7) : addM(cur, view === 'year' ? -12 : -1); render(); };
 $('#next').onclick = () => { cur = view === 'week' ? addD(cur, 7) : addM(cur, view === 'year' ? 12 : 1); render(); };
 $('#today').onclick = () => { cur = new Date(); cur.setHours(0, 0, 0, 0); render(); };
-for (const b of document.querySelectorAll('.vw')) b.onclick = () => {
-  view = b.dataset.v;
-  for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x === b);
+// 보기 바꾸기: 왼쪽 [월 ▾] 단추를 누르면 월·주·타임라인·연간 목록, 오른쪽 [할 일]
+const VNAME = { month: '월', week: '주', tl: '타임라인', year: '연간' };
+let calView = 'month';                                 // 달력 쪽에서 마지막으로 고른 보기
+function setView(v) {
+  view = v;
+  if (VNAME[v]) calView = v;
+  $('#vsel').textContent = VNAME[calView] + ' ▾';
+  $('#vsel').classList.toggle('on', v !== 'todo');
+  $('#vtodo').classList.toggle('on', v === 'todo');
+  for (const x of $('#vlist').querySelectorAll('button')) x.classList.toggle('on', x.dataset.v === v);
+  $('#vlist').hidden = true;
   render();
-};
+}
+$('#vsel').onclick = (e) => { e.stopPropagation(); $('#vlist').hidden = !$('#vlist').hidden; };
+$('#vlist').onclick = (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); };
+$('#vtodo').onclick = () => setView('todo');
+document.addEventListener('click', (e) => { if (!e.target.closest('.vdd')) $('#vlist').hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#vlist').hidden = true; });
 for (const id of ['fdept', 'fowner', 'fstat', 'fprio', 'fshare']) $('#' + id).onchange = render;
 $('#add').onclick = () => openForm(null);
 // ---- 공휴일 관리 창 ----
@@ -743,7 +769,7 @@ $('#view').onclick = (e) => {
   const q = e.target.closest('[data-qs]');
   if (q) { e.stopPropagation(); api('PUT', { id: q.dataset.qid, occ_status: { date: q.dataset.qd, status: q.dataset.qs } }); return; }
   const n = e.target.closest('[data-new]'); if (n) { openForm(null, n.dataset.new); return; }
-  const m = e.target.closest('[data-day2]'); if (m) { cur = D(m.dataset.day2); view = 'week'; for (const x of document.querySelectorAll('.vw')) x.classList.toggle('on', x.dataset.v === 'week'); render(); return; }
+  const m = e.target.closest('[data-day2]'); if (m) { cur = D(m.dataset.day2); setView('week'); return; }
   const c = e.target.closest('[data-id]'); if (c) openEvent(c.dataset.id, c.dataset.date);
 };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('#hmask').hidden) $('#hmask').hidden = true; else if (!$('#mask').hidden) $('#mask').hidden = true; } });
