@@ -79,7 +79,7 @@
   .cal td.holiday { background:rgba(239,68,68,.07); } .cal td.holiday .dn { color:#f87171; }
   .pr { font-size:10px; border-radius:4px; padding:0 4px; font-weight:700; margin-right:3px; flex:none; }
   .pr.hi { background:#f59e0b; color:#0f172a; } .pr.ur { background:#ef4444; color:#fff; }
-  .pr.team { background:#64748b; color:#fff; } .pr.mine { background:#e2ece9; color:#54706a; }
+  .pr.team { background:#0284c7; color:#fff; }   /* 팀 공유 표시 */ .pr.mine { background:#e2ece9; color:#54706a; }
   /* 할 일 보기 */
   .todo { display:grid; grid-template-columns:minmax(320px,1fr) minmax(320px,1.15fr); gap:14px; align-items:start; }
   @media (max-width:900px) { .todo { grid-template-columns:1fr; } }
@@ -420,8 +420,8 @@ function renderKpis() {
 function chip(o, day) {
   const done = o.status === '완료';
   const cont = o.date < day ? '↳ ' : '';
-  return `<div class="chip ${done ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}" title="${esc(o.ev.title)}${o.ev.owner ? ' · ' + esc(o.ev.owner) : ''} · ${o.status}">
-    <span class="st" style="color:${ST_COLOR[o.status]}">●</span>${prioTag(o.ev.prio)}${o.ev.time ? `<span class="hm">${o.ev.time}</span>` : ''}<span class="t">${cont}${esc(o.ev.title)}</span></div>`;
+  return `<div class="chip ${done ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}" title="${esc(o.ev.title)}${o.ev.owner ? ' · ' + esc(o.ev.owner) : ''} · ${o.status}${(o.ev.share || 'team') === 'team' ? ' · 팀 공유' : ''}">
+    <span class="st" style="color:${ST_COLOR[o.status]}">●</span>${shareTag(o.ev)}${prioTag(o.ev.prio)}${o.ev.time ? `<span class="hm">${o.ev.time}</span>` : ''}<span class="t">${cont}${esc(o.ev.title)}</span></div>`;
 }
 function renderMonth(from, to) {
   const map = byDay(from, to);
@@ -450,7 +450,7 @@ function renderWeek(from) {
     h += `<div class="wd ${k === TODAY ? 'today' : ''}"><h3><span class="${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}" style="${hol || i === 0 ? 'color:#f87171' : i === 6 ? 'color:#7dd3fc' : ''}">${d.getMonth() + 1}/${d.getDate()} (${WD[i]})</span><small>${hol ? `<span class="hol">${esc(hol)}</span>` : list.length ? list.length + '건' : ''}</small></h3>
       <div class="plus" data-new="${k}" style="color:var(--muted);cursor:pointer;font-size:12px;margin-bottom:6px">＋ 일정 추가</div>` +
       (list.map((o) => `<div class="wc ${o.status === '완료' ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}">
-        <div class="t">${prioTag(o.ev.prio)}${esc(o.ev.title)}</div>
+        <div class="t">${shareTag(o.ev)}${prioTag(o.ev.prio)}${esc(o.ev.title)}</div>
         <div class="m"><span style="color:${ST_COLOR[o.status]}">●</span> ${o.status}${o.ev.time ? ' · ' + o.ev.time : ''}</div>
         <div class="m">${esc(o.ev.owner || '담당자 없음')} · ${esc(o.ev.dept || '-')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:12px">-</div>') + '</div>';
   }
@@ -479,7 +479,7 @@ function renderTimeline() {
     }
     r++;
     const done = row.occs.every((o) => o.status === '완료');
-    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> ${prioTag(row.ev.prio)}<b>${esc(row.ev.title)}</b><small>${esc(row.ev.dept || '')}</small></div>`;
+    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> ${shareTag(row.ev)}${prioTag(row.ev.prio)}<b>${esc(row.ev.title)}</b><small>${esc(row.ev.dept || '')}</small></div>`;
     for (const d of dayInfo) h += `<div class="tlc ${d.w === 0 || d.w === 6 ? 'we' : ''} ${HOL(d.k) ? 'hol' : ''} ${d.k === TODAY ? 'today' : ''}" style="grid-row:${r};grid-column:${d.i + 1}"></div>`;
     for (const o of row.occs) {
       const st = D(o.date) < s ? 1 : D(o.date).getDate();
@@ -505,7 +505,7 @@ function todoCard(o, showDate) {
   const done = o.status === '완료';
   const multi = o.end !== o.date;
   return `<div class="tc ${done ? 'done' : ''}" style="--c:${deptColor(o.ev.dept)}" data-id="${o.id}" data-date="${o.date}">
-    <div class="h1">${o.ev.time ? `<span class="tm">${o.ev.time}</span>` : ''}${prioTag(o.ev.prio)}${shareTag(o.ev)}<b>${esc(o.ev.title)}</b></div>
+    <div class="h1">${o.ev.time ? `<span class="tm">${o.ev.time}</span>` : ''}${shareTag(o.ev)}${prioTag(o.ev.prio)}<b>${esc(o.ev.title)}</b></div>
     <div class="h2l"><span style="color:${ST_COLOR[o.status]}">●</span> ${o.status}${showDate ? ' · ' + o.date.slice(5).replace('-', '/') : ''}${multi ? ` (${o.date.slice(5).replace('-', '/')}~${o.end.slice(5).replace('-', '/')})` : ''} · ${esc(o.ev.owner || '담당자 없음')}${o.ev.dept ? ' · ' + esc(o.ev.dept) : ''}</div>
     ${o.ev.desc ? `<div class="dsc">${esc(o.ev.desc)}</div>` : ''}
     ${notes.slice(0, 3).map((n) => `<div class="nt"><i>${esc(n.by)} · ${fmtAt(n.at)}</i>${esc(n.text)}</div>`).join('')}
@@ -569,7 +569,7 @@ function renderYear() {
       for (let m = D(o.date).getMonth(); m <= end.getMonth(); m++) if (!cnt[m]) cnt[m] = 0.1;   // 걸쳐만 있는 달도 칠한다
     }
     const months = Object.keys(cnt).map(Number).sort((a, b) => a - b);
-    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> ${prioTag(row.ev.prio)}<b>${esc(row.ev.title)}</b><small>${esc(row.ev.owner || '')}${row.ev.dept ? ' · ' + esc(row.ev.dept) : ''}</small></div>`;
+    h += `<div class="tln" style="grid-row:${r};grid-column:1" title="${esc(row.ev.title)}"><span style="color:${ST_COLOR[row.occs[row.occs.length - 1].status]}">●</span> ${shareTag(row.ev)}${prioTag(row.ev.prio)}<b>${esc(row.ev.title)}</b><small>${esc(row.ev.owner || '')}${row.ev.dept ? ' · ' + esc(row.ev.dept) : ''}</small></div>`;
     for (let m = 0; m < 12; m++) h += `<div class="tlc ${m === thisMon ? 'today' : ''}" style="grid-row:${r};grid-column:${m + 2}"></div>`;
     // 이어지는 달끼리 묶어서 막대 하나로
     let i = 0;

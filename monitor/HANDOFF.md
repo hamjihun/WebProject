@@ -47,6 +47,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-09-29 (11): 일정 **팀 공유 표시** (1.39.6) — 할 일 보기에만 있던 `shareTag()`(파란 `팀` 꼬리표, `.pr.team` #0284c7)를 월 달력 칸(`chip`, 마우스 설명에도 `· 팀 공유`)·주 보기·타임라인·연간 줄에도 붙임. 순서는 `팀` → 중요도 → 제목. 개인 일정(`share:'me'`)은 표시 없음.
 - 2026-09-29 (10): 일정 ⚙ 에 **달력 가로 폭**(월·주 보기, 40~100%, 10% 단위, `--calw`)과 **달력 글자 크기**(월 보기, 9~20px, `--calfs` — `table.cal` 에 font-size 를 주고 날짜·일정·공휴일·더 보기는 em 으로 따라감) 추가 (1.39.5). `imsSchedLook` 에 함께 기억. 폭 70%·글자 15px 확인.
 - 2026-09-29 (9): 일정 ⚙ 에 **화면 설정** 추가 (1.39.4) — ① **위 요약 칸**(진행 중·완료 …) `보통 / 작게(한 줄 칩) / 숨기기`(`body.kpi-sm` / `body.kpi-off`), ② **달력 칸 높이**(월 보기) `－ 72px ＋ 기본`, 50~220px, 20px 단위(`--cellh`, 기본 112). 둘 다 이 PC 브라우저 `localStorage.imsSchedLook` 에 기억. 요약 작게 + 칸 72px 이면 달력 끝이 779 → 538px.
 - 2026-09-29 (8): 메모·일정 상단바 — `메모` 글자 탭을 **`📝 메모` 단추**로 바꿔 `📅 일정` 단추 왼쪽에 나란히 (1.39.3). auth.js APPS 의 메모 쪽 `pages` 에 `['memo.html', '📝 메모', 'right']`. 메모 화면의 `mountBar()` 는 예전처럼 메모 탭을 지우지 않고 메모판 탭(`#bds`)만 왼쪽에 붙인다. 지금 보고 있는 쪽 단추가 강조(`a.alt.on`).
