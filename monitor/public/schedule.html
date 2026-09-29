@@ -735,7 +735,11 @@ function setView(v) {
   $('#vlist').hidden = true;
   render();
 }
-$('#vsel').onclick = (e) => { e.stopPropagation(); $('#vlist').hidden = !$('#vlist').hidden; };
+$('#vsel').onclick = (e) => {                          // 할 일 보기에서 누르면 달력으로, 달력에서 한 번 더 누르면 목록
+  e.stopPropagation();
+  if (view === 'todo') { setView(calView); return; }
+  $('#vlist').hidden = !$('#vlist').hidden;
+};
 $('#vlist').onclick = (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); };
 $('#vtodo').onclick = () => setView('todo');
 document.addEventListener('click', (e) => { if (!e.target.closest('.vdd')) $('#vlist').hidden = true; });
