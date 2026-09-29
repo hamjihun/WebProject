@@ -226,6 +226,16 @@
   #fmt button b { font-weight:800; } #fmt button i { font-style:italic; } #fmt button u { text-decoration:underline; }
   #fmt button s { text-decoration:line-through; }
   .note img { flex:1; min-height:0; width:100%; object-fit:contain; background:rgba(0,0,0,.06); user-select:none; }
+  /* 사진 메모: 제목 줄 없이 사진만. 마우스를 올리면 오른쪽 위 ✕, 고르고 Del 키로도 지운다 */
+  .note.photo { background:transparent; outline:none; box-shadow:0 2px 10px rgba(20,52,46,.25); }
+  .note.photo img { width:100%; height:100%; background:transparent; }
+  .note.photo.sel { outline:2px solid var(--accent); outline-offset:1px; box-shadow:0 8px 22px rgba(20,52,46,.35); }
+  .note.photo .x.px { position:absolute; top:5px; right:5px; margin:0; width:26px; height:26px; border-radius:50%; padding:0;
+    display:none; align-items:center; justify-content:center; background:rgba(15,23,42,.7); color:#fff; font-size:13px; z-index:3; }
+  .note.photo:hover .x.px { display:flex; }
+  .note.photo .rz::after { display:none; }                  /* 모서리 표시는 마우스를 올렸을 때만 */
+  .note.photo:hover .rz::after { display:block; border-color:rgba(255,255,255,.9); filter:drop-shadow(0 0 1px rgba(0,0,0,.8)); }
+  .note.photo .x.px:hover { background:#dc2626; color:#fff; }
   /* 그림 메모 (그림판) */
   .note canvas.dw { flex:1; min-height:0; width:100%; display:block; background:#fff; cursor:crosshair; touch-action:none; user-select:none; }
   #pen:not([hidden]) { display:flex; }                 /* [hidden] 이 이기도록 :not() 으로 */
@@ -412,7 +422,9 @@ const cur = () => {                                                             
   return g;
 };
 
-const body = (n) => (n.html ? n.html : esc(n.text || '').replace(/\n/g, '<br>'));   // 예전 메모(글자만)도 그대로 보인다
+const body = (n) => (n.html ? n.html : esc(n.text || '').replace(/\n/g, '<br>'));
+// 사진: 새 방식은 "m:<파일>" (서버에 원본 그대로), 예전 것은 data URL
+const imgSrc = (v) => (typeof v === 'string' && v.startsWith('m:') ? 'api/memo/img/' + v.slice(2) : v);   // 예전 메모(글자만)도 그대로 보인다
 
 // ---- 그리기 ----
 function render() {
@@ -434,7 +446,13 @@ function render() {
       ${icoHtml(l)}<span class="lb">${esc(l.name || '이름 없음')}</span>
       <button class="x" title="링크 지우기">✕</button>
     </div>`).join('') +
-    b.notes.map((n) => `
+    b.notes.map((n) => n.img ? `
+    <div class="note photo ${sel === n.id ? 'sel' : ''}" data-k="n" data-id="${n.id}" title="끌어서 옮기기 · 두 번 누르면 원본 보기 · Del 로 지우기"
+      style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)}">
+      <img src="${imgSrc(n.img)}" draggable="false" alt="">
+      <button class="x px" title="사진 지우기 (Del)">✕</button>
+      <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
+    </div>` : `
     <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
       <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><button class="hb plus" title="옆에 새 메모">＋</button>
         <span class="nt ${n.title ? '' : 'no'}">${esc(n.title || '제목 없음')}</span>
@@ -446,6 +464,15 @@ function render() {
       <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>`).join('') +
     '';
+  for (const im of cv.querySelectorAll('.note.photo img')) {      // 사진 비율에 맞춰 상자 크기 맞추기 (예전 제목 줄 자리 등)
+    const fit = () => {
+      const o = find('n', im.closest('[data-id]').dataset.id);
+      if (!o || !im.naturalWidth || !im.naturalHeight) return;
+      const h = Math.round(o.w * im.naturalHeight / im.naturalWidth);
+      if (Math.abs(h - o.h) > 2) { o.h = h; im.closest('.note').style.height = h + 'px'; touch(); }
+    };
+    if (im.complete) fit(); else im.onload = fit;
+  }
   for (const el of cv.querySelectorAll('canvas.dw')) {          // 그림 메모 다시 그리기
     const o = find('n', el.closest('[data-id]').dataset.id);
     if (o && o.draw) paint(el, o.draw);
@@ -811,22 +838,26 @@ $('#pen').onclick = (e) => {
 };
 
 // ---- 사진 붙여넣기 (Ctrl+V) ----
-function shrink(file, max, q) {
-  return new Promise((ok, no) => {
-    const fr = new FileReader();
-    fr.onload = () => {
-      const im = new Image();
-      im.onload = () => {
-        const s = Math.min(1, max / Math.max(im.width, im.height));
-        const w = Math.max(1, Math.round(im.width * s)), h = Math.max(1, Math.round(im.height * s));
-        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-        const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(im, 0, 0, w, h);
-        ok({ url: cv.toDataURL('image/jpeg', q), w, h });
-      };
-      im.onerror = no; im.src = fr.result;
-    };
-    fr.onerror = no; fr.readAsDataURL(file);
-  });
+// 사진은 원본 그대로 서버에 파일로 올리고, 메모에는 "m:파일이름" 만 적는다 (화질이 떨어지지 않게)
+const readUrl = (blob) => new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
+const imgSize = (url) => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok({ w: im.naturalWidth, h: im.naturalHeight }); im.onerror = no; im.src = url; });
+async function uploadImg(url) {
+  const r = await fetch('api/memo/img', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: url }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) throw new Error(j.error || '올리기 실패');
+  return j.ref;
+}
+async function originalUrl(file) {                     // 원본 그대로. PNG·JPG·WEBP·GIF 가 아니거나 15MB 를 넘을 때만 다시 만든다
+  let url = await readUrl(file);
+  const okType = /^data:image\/(png|jpeg|webp|gif);/.test(url);
+  if (okType && file.size <= 15 * 1024 * 1024) return url;
+  const im = await imgSize(url), s = Math.min(1, 4096 / Math.max(im.w, im.h));
+  const el = new Image(); el.src = url; await new Promise((ok) => { el.onload = ok; if (el.complete) ok(); });
+  const cv = document.createElement('canvas'); cv.width = Math.round(im.w * s); cv.height = Math.round(im.h * s);
+  cv.getContext('2d').drawImage(el, 0, 0, cv.width, cv.height);
+  url = cv.toDataURL('image/png');
+  if (url.length > 19 * 1024 * 1024) url = cv.toDataURL('image/jpeg', 0.95);
+  return url;
 }
 document.addEventListener('paste', async (e) => {
   const items = e.clipboardData && e.clipboardData.items ? [...e.clipboardData.items] : [];
@@ -836,15 +867,40 @@ document.addEventListener('paste', async (e) => {
   const file = it.getAsFile(); if (!file) return;
   $('#st').textContent = '사진 넣는 중';
   try {
-    const im = await shrink(file, 1000, 0.82);
-    const used = JSON.stringify(boards).length;
-    if (used + im.url.length > 34 * 1024 * 1024) { alert('사진이 너무 많습니다. 오래된 사진 메모를 지운 뒤 다시 붙여넣어 주세요.'); $('#st').textContent = ''; return; }
+    const url = await originalUrl(file);
+    const dim = await imgSize(url);
+    const ref = await uploadImg(url);
+    const dpr = window.devicePixelRatio || 1;          // 화면 캡처는 배율만큼 크게 찍히므로 실제 보이던 크기로
+    const s = Math.min(1 / dpr, 560 / dim.w, 420 / dim.h);
+    const w = Math.max(40, Math.round(dim.w * s)), h = Math.max(30, Math.round(dim.h * s));
     const c = viewCenter();
-    const s = Math.min(1, 320 / Math.max(im.w, im.h));
-    const w = Math.max(80, snap(im.w * s)), h = Math.max(60, snap(im.h * s) + 22);
-    cur().notes.push({ id: uid(), x: Math.max(0, snap(c.x - w / 2)), y: Math.max(0, snap(c.y - h / 2)), w, h, title: '', text: '', img: im.url, color: 'white', z: topZ() + 1, fs: 13 });
+    const n = { id: uid(), x: Math.max(0, snap(c.x - w / 2)), y: Math.max(0, snap(c.y - h / 2)), w, h, title: '', text: '', img: ref, color: 'white', z: topZ() + 1, fs: 13 };
+    cur().notes.push(n); unstack(n, 'n'); sel = n.id;
     touch(); render();
+    $('#st').textContent = `사진 ${dim.w}×${dim.h}`;
   } catch (err) { alert('사진을 넣지 못했습니다: ' + err.message); $('#st').textContent = ''; }
+});
+
+// ---- 지우기 (휴지통으로) ----
+function toTrash(k, id) {
+  const o = find(k, id); if (!o) return;
+  if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
+  else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
+  else cur().areas = cur().areas.filter((x) => x.id !== id);
+  const B = curB(), G = cur();
+  trash.unshift({ k, del: Date.now(), b: B.id, p: G.id, bn: (boards.length > 1 ? B.name + ' · ' : '') + G.name, o });
+  trash.splice(50);
+  sel = null; touch(); render();
+}
+// 사진을 고른 상태에서 Del = 지우기 (글자 칸에 커서가 있을 때는 평소대로)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Delete' || !sel) return;
+  const a = document.activeElement;
+  if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+  const o = find('n', sel); if (!o || !o.img) return;
+  e.preventDefault();
+  toTrash('n', o.id);
+  $('#st').textContent = '사진을 휴지통으로 옮김';
 });
 
 // ---- 클릭 ----
@@ -863,13 +919,7 @@ $('#canvas').addEventListener('click', (e) => {
       : ((o.title || '').trim() || '이름 없는 범위');
     const more = k === 'a' ? '\n(안에 있는 메모는 그대로 남습니다)' : '';
     if (!confirm(`"${nm}" ${kind}를 지울까요?${more}\n\n휴지통에서 다시 살릴 수 있습니다.`)) return;
-    if (k === 'n') cur().notes = cur().notes.filter((x) => x.id !== id);
-    else if (k === 'l') cur().links = cur().links.filter((x) => x.id !== id);
-    else cur().areas = cur().areas.filter((x) => x.id !== id);
-    const B = curB(), G = cur();
-    trash.unshift({ k, del: Date.now(), b: B.id, p: G.id, bn: (boards.length > 1 ? B.name + ' · ' : '') + G.name, o });
-    trash.splice(50);
-    sel = null; touch(); render(); return;
+    toTrash(k, id); return;
   }
   if (k === 'l') {                                // 링크 아이콘 = 눌러서 열기
     if (moved) return;
@@ -891,6 +941,7 @@ $('#canvas').addEventListener('click', (e) => {
 });
 $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추 → 설정 창
   const box = e.target.closest('[data-k]'); if (!box) return;
+  if (box.classList.contains('photo')) return;                // 사진은 브라우저 기본 메뉴 (이미지 복사·저장)
   e.preventDefault();
   if (box.dataset.k === 'l') { openLnkEd({ left: e.clientX, bottom: e.clientY }, box.dataset.id); return; }
   const tx = e.target.closest('.tx');
@@ -911,6 +962,9 @@ $('#canvas').addEventListener('contextmenu', (e) => {        // 오른쪽 단추
     return;
   }
   openPal({ left: e.clientX, bottom: e.clientY }, box.dataset.k, box.dataset.id, true);
+});
+$('#canvas').addEventListener('dblclick', (e) => {          // 사진 두 번 누르면 원본을 새 탭으로
+  const im = e.target.closest('.note.photo img'); if (im) window.open(im.src, '_blank', 'noopener');
 });
 $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 번 누르면 접었다 폈다
   const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.target.dataset.pal) return;
@@ -1022,6 +1076,8 @@ $('#canvas').addEventListener('mousedown', (e) => {
   if (rz) {
     const dir = ['se', 'sw', 'e', 'w', 's'].find((c) => t.classList.contains(c)) || 'se';
     e.preventDefault(); drag = { ...base, mode: 'rz', dir }; document.body.style.userSelect = 'none';
+    const im = box.classList.contains('photo') && box.querySelector('img');
+    if (im && im.naturalWidth && im.naturalHeight) drag.ar = im.naturalWidth / im.naturalHeight;   // 사진은 비율 고정
   }
   else pend = { ...base, mode: 'mv' };
   moved = false;
@@ -1057,6 +1113,10 @@ document.addEventListener('mousemove', (e) => {
     if (d === 'se' || d === 'sw' || d === 's') {       // 아래쪽
       drag.o.h = Math.max(min[1], snap(drag.h + dy));
       drag.box.style.height = drag.o.h + 'px';
+    }
+    if (drag.ar) {                                      // 사진: 한쪽을 늘리면 다른 쪽도 비율대로
+      if (d === 's') { drag.o.w = Math.max(40, Math.round(drag.o.h * drag.ar)); drag.box.style.width = drag.o.w + 'px'; }
+      else { drag.o.h = Math.max(30, Math.round(drag.o.w / drag.ar)); drag.box.style.height = drag.o.h + 'px'; }
     }
   }
 });
@@ -1262,7 +1322,7 @@ function binPv(t) {                                  // 어떤 내용이었는�
   const o = t.o || {};
   if (t.k === 'n') {
     const bg = COLORS[o.color] ? COLORS[o.color].bg : '#fde68a';
-    if (o.img) return `<div class="pv" style="--pv:${bg}"><img src="${o.img}" alt=""></div>`;
+    if (o.img) return `<div class="pv" style="--pv:${bg}"><img src="${imgSrc(o.img)}" alt=""></div>`;
     if (o.draw) return `<div class="pv" style="--pv:#fff"><img src="${drawPng(o.draw, 264, 156)}" alt=""></div>`;
     const txt = (o.text || '').slice(0, 160);
     return `<div class="pv" style="--pv:${bg}">${txt ? esc(txt) : '<span style="opacity:.45">(빈 메모)</span>'}</div>`;
@@ -1331,11 +1391,25 @@ $('#binMask').onclick = (e) => {
 
 
 // ---- 백업 · 복원 ----
-function backupDown() {
+// 백업·복원할 때 사진 메모를 모두 훑는다 (메모판 + 휴지통)
+function photoNotes(bs, tr) {
+  const out = [];
+  for (const b of bs || []) for (const g of b.pages || []) for (const n of g.notes || []) if (n && n.img) out.push(n);
+  for (const t of tr || []) if (t && t.k === 'n' && t.o && t.o.img) out.push(t.o);
+  return out;
+}
+async function backupDown() {
   const pad = (n) => String(n).padStart(2, '0');
   const d = new Date();
   const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards, trash, prefs, alarms };
+  // 서버에 파일로 둔 사진은 백업 파일 안에 원본 그대로 넣는다 (그 파일 하나로 어디서든 복원되게)
+  const copy = JSON.parse(JSON.stringify({ boards, trash }));
+  const ph = photoNotes(copy.boards, copy.trash).filter((n) => String(n.img).startsWith('m:'));
+  for (let i = 0; i < ph.length; i++) {
+    $('#st').textContent = `백업 사진 ${i + 1}/${ph.length}`;
+    try { ph[i].img = await readUrl(await (await fetch(imgSrc(ph[i].img))).blob()); } catch (e) {}
+  }
+  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards: copy.boards, trash: copy.trash, prefs, alarms };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1353,6 +1427,12 @@ $('#upfile').onchange = async (e) => {
     const n = j.boards.reduce((m, b) => m + (b.pages || []).reduce((q, g) => q + (g.notes || []).length + (g.areas || []).length + (g.links || []).length, 0), 0);
     const when = j.saved ? new Date(j.saved).toLocaleString('ko-KR') : '시각 모름';
     if (!confirm(`${when} 에 받은 백업입니다.\n메모판 ${j.boards.length}개 · 내용 ${n}개.\n\n지금 메모는 모두 이 백업으로 바뀝니다. 되돌릴 수 없습니다. 계속할까요?`)) return;
+    // 백업 안의 사진(원본)은 서버에 파일로 다시 올린다
+    const ph = photoNotes(j.boards, j.trash).filter((n) => String(n.img).startsWith('data:image/'));
+    for (let i = 0; i < ph.length; i++) {
+      $('#st').textContent = `사진 올리는 중 ${i + 1}/${ph.length}`;
+      try { ph[i].img = await uploadImg(ph[i].img); } catch (e) {}
+    }
     boards = j.boards;
     active = j.boards.some((b) => b.id === j.active) ? j.active : j.boards[0].id;
     trash = Array.isArray(j.trash) ? j.trash : [];
@@ -1368,7 +1448,9 @@ const HELP = `
   <h4>메모 만들기</h4>
   <ul><li>위쪽 <b>＋ 새 메모</b> 를 누르면 화면 가운데에 붙습니다.</li>
     <li>제목 줄 <b>맨 왼쪽의 ＋</b> 를 누르면 그 메모 바로 옆에 새 메모가 붙습니다.</li>
-    <li><b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다 (한 장 3MB까지).</li></ul>
+    <li><b>사진은 복사한 뒤 Ctrl+V</b> 로 바로 붙습니다 — <b>원본 화질 그대로</b> 저장됩니다 (한 장 15MB, 한 사람 400MB 까지).</li>
+    <li>사진은 제목 줄 없이 사진만 보입니다. 사진을 끌어서 옮기고, 모서리·가장자리로 크기를 바꾸면 <b>비율대로</b> 커집니다.
+      마우스를 올리면 오른쪽 위에 <b>✕</b>, 사진을 누른 뒤 <b>Del</b> 키로도 지웁니다(휴지통으로). 두 번 누르면 원본이 새 탭에 열립니다.</li></ul>
   <h4>메모 다루기</h4>
   <ul><li><b>제목 줄을 끌어서</b> 옮깁니다. 내용 글자 위에서 끌면 글자가 선택됩니다.</li>
     <li><b>아래 두 모서리</b>나 <b>좌·우·아래 가장자리</b>를 끌어 크기를 바꿉니다.</li>
@@ -1421,7 +1503,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.36.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.38.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {

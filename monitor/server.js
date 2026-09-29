@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.37.2';
+const VERSION = '1.38.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -609,6 +609,23 @@ const server = http.createServer(async (req, res) => {
         const act = raw.action === 'snooze' ? 'snooze' : 'ok';
         const list = memo.ackAlarm(me.id, String(raw.id || '').slice(0, 32), act);
         return json(res, 200, { ok: true, alarms: list, now: Date.now() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
+  // ---- 메모 사진 (원본 그대로 파일로 보관, 본인만 볼 수 있다) ----
+  if (url.pathname === '/api/memo/img' || url.pathname.startsWith('/api/memo/img/')) {
+    if (!me || !auth.can(me, 'memo.html')) return json(res, 403, { ok: false, error: '메모 화면 권한이 없습니다' });
+    try {
+      if (req.method === 'POST' && url.pathname === '/api/memo/img') {
+        const raw = JSON.parse((await readBody(req, 22)) || '{}');       // base64 라 원본보다 1/3 크다 (15MB → 약 20MB)
+        return json(res, 200, { ok: true, ref: memo.saveImg(me.id, raw.data) });
+      }
+      if (req.method === 'GET') {
+        const f = memo.imgFile(me.id, decodeURIComponent(url.pathname.slice('/api/memo/img/'.length)));
+        if (!f) { res.writeHead(404); return res.end('not found'); }
+        res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+        return fs.createReadStream(f.file).pipe(res);
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }

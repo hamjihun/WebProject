@@ -8,7 +8,13 @@ const path = require('path');
 const MAX_BOARDS = 20, MAX_PAGES = 50, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
 const MAX_STROKES = 600, MAX_PTS = 2000;   // 그림 메모: 선 개수 · 선 하나의 점 개수
 const MAX_ALARMS = 100;                    // 알림판에 담아 둘 수 있는 알림 개수
-const MAX_IMG = 3 * 1024 * 1024;          // 사진 한 장 (data URL 글자 수)
+const MAX_IMG = 3 * 1024 * 1024;          // 예전 방식(메모 안에 넣은 data URL) 사진 한 장 글자 수
+// 새 방식: 사진은 원본 그대로 data/memo-img/<계정>/<id>.<확장자> 파일로 따로 두고 메모에는 "m:<id>.<확장자>" 만 적는다
+const IMG_ONE = 15 * 1024 * 1024;         // 사진 파일 한 장
+const IMG_USER = 400 * 1024 * 1024;       // 한 사람 사진 파일 합계
+const IMG_REF = /^m:[a-f0-9]{24}\.(png|jpg|webp|gif)$/;
+const IMG_TYPE = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+const crypto = require('crypto');
 const MAX_USER = 40 * 1024 * 1024;        // 한 사람이 쓸 수 있는 총 용량
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : d; };
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -93,18 +99,44 @@ function create(opts) {
   }
   load();
 
+  // ---- 사진 파일 ----
+  const IMG_ROOT = path.join(path.dirname(FILE), 'memo-img');
+  const userDir = (uid) => {
+    const u = String(uid || '');
+    if (!/^[a-z0-9_.-]{1,40}$/i.test(u) || u.includes('..')) throw new Error('잘못된 계정');
+    return path.join(IMG_ROOT, u);
+  };
+  const dirSize = (d) => { let n = 0; try { for (const f of fs.readdirSync(d)) { try { n += fs.statSync(path.join(d, f)).size; } catch (e) {} } } catch (e) {} return n; };
+  function refsOf(u) {                              // 이 사람이 아직 쓰고 있는 사진 (메모판 + 휴지통)
+    const set = new Set();
+    const take = (n) => { if (n && typeof n.img === 'string' && IMG_REF.test(n.img)) set.add(n.img.slice(2)); };
+    for (const b of (u && u.boards) || []) for (const g of b.pages || []) for (const n of g.notes || []) take(n);
+    for (const t of (u && u.trash) || []) if (t && t.k === 'n') take(t.o);
+    return set;
+  }
+  function gcImgs(uid) {                            // 어디에도 안 쓰는 사진 파일 정리 (막 올린 것은 1시간 둔다)
+    let d; try { d = userDir(uid); } catch (e) { return; }
+    if (!fs.existsSync(d)) return;
+    const keep = refsOf(all[uid]), old = Date.now() - 3600e3;
+    for (const f of fs.readdirSync(d)) {
+      if (keep.has(f)) continue;
+      try { const st = fs.statSync(path.join(d, f)); if (st.mtimeMs < old) fs.unlinkSync(path.join(d, f)); } catch (e) {}
+    }
+  }
+
   const note = (n) => {
     const o = {
       id: str(n.id, 32) || rid(),
       x: clamp(num(n.x), 0, 20000), y: clamp(num(n.y), 0, 20000),
-      w: clamp(num(n.w, 200), 80, 1600), h: clamp(num(n.h, 200), 60, 1600),
+      w: clamp(num(n.w, 200), 40, 4000), h: clamp(num(n.h, 200), 30, 4000),     // 사진은 비율대로 크게·납작하게도 된다
       title: str(n.title, 60), text: str(n.text, MAX_TEXT), color: color(n.color, 'yellow'), z: num(n.z, 1),
       html: safeHtml(n.html, MAX_TEXT * 3),
       fs: clamp(num(n.fs, 13), 8, 72), min: !!n.min, updated: num(n.updated, Date.now()),
     };
     const dr = drawing(n.draw);
     if (dr) o.draw = dr;
-    if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {
+    if (typeof n.img === 'string' && IMG_REF.test(n.img)) o.img = n.img;          // 파일로 둔 사진
+    else if (typeof n.img === 'string' && n.img.startsWith('data:image/')) {          // 예전 방식
       if (n.img.length > MAX_IMG) throw new Error('사진 한 장이 너무 큽니다 (3MB 넘음)');
       o.img = n.img;
     }
@@ -200,6 +232,7 @@ function create(opts) {
       if (size > MAX_USER) throw new Error('사진이 너무 많습니다. 오래된 사진 메모를 지운 뒤 다시 저장해 주세요');
       all[uid] = next;
       save();
+      try { gcImgs(uid); } catch (e) {}
       return { boards: list, active, trash, prefs: next.prefs, alarms };
     },
     // ---- 알림 (모든 화면에서 쓰는 가벼운 창구) ----
@@ -218,7 +251,30 @@ function create(opts) {
       }
       return this.getAlarms(uid);
     },
-    removeUser(uid) { if (all[uid]) { delete all[uid]; save(); } },
+    // 사진 올리기: data URL(원본 그대로) → 파일. 돌려주는 값 "m:<id>.<확장자>" 를 메모의 img 에 넣는다
+    saveImg(uid, dataUrl) {
+      const m = /^data:image\/(png|jpeg|jpg|webp|gif);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+      if (!m) throw new Error('사진 형식이 아닙니다 (PNG·JPG·WEBP·GIF)');
+      const buf = Buffer.from(m[2], 'base64');
+      if (!buf.length) throw new Error('빈 사진입니다');
+      if (buf.length > IMG_ONE) throw new Error('사진 한 장이 너무 큽니다 (15MB 넘음)');
+      const d = userDir(uid);
+      fs.mkdirSync(d, { recursive: true });
+      if (dirSize(d) + buf.length > IMG_USER) throw new Error('사진을 너무 많이 넣었습니다 (400MB). 안 쓰는 사진 메모를 휴지통에서 완전히 지워 주세요');
+      const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+      const name = crypto.randomBytes(12).toString('hex') + '.' + ext;
+      fs.writeFileSync(path.join(d, name), buf);
+      return 'm:' + name;
+    },
+    imgFile(uid, name) {                            // 보여 줄 사진 파일 경로 (없거나 이상한 이름이면 null)
+      if (!IMG_REF.test('m:' + name)) return null;
+      const f = path.join(userDir(uid), name);
+      return fs.existsSync(f) ? { file: f, type: IMG_TYPE[name.split('.').pop()] } : null;
+    },
+    removeUser(uid) {
+      if (all[uid]) { delete all[uid]; save(); }
+      try { fs.rmSync(userDir(uid), { recursive: true, force: true }); } catch (e) {}
+    },
   };
 }
 
