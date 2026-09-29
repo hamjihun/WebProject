@@ -166,7 +166,7 @@ function create(opts) {
   };
   // 기본값 (새 메모·새 범위를 만들 때 쓰는 설정)
   const prefs = (p) => ({
-    color: color(p && p.color, 'yellow'),
+    color: color(p && p.color, 'white'),        // 새 메모 색 (새 계정 기본: 연한 회색 white)
     fs: clamp(num(p && p.fs, 13), 8, 72),
     w: clamp(num(p && p.w, 200), 80, 1600),
     h: clamp(num(p && p.h, 200), 60, 1600),

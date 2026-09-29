@@ -396,7 +396,7 @@ const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = 
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
 let alarms = [];                                                  // 알림판 (사람마다 하나)
-let prefs = { color: 'yellow', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4, alarm: true };
+let prefs = { color: 'white', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4, alarm: true };
 // 그림판 펜 (색·굵기는 설정에 저장, 지우개는 그때그때)
 const PENS = ['#1f2937', '#dc2626', '#ea580c', '#eab308', '#16a34a', '#2563eb', '#7c3aed', '#94a3b8'];
 let eraser = false;
@@ -1503,7 +1503,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.38.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.38.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
