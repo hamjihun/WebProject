@@ -60,6 +60,29 @@
   .kpi .l { color:var(--muted); font-size:12px; } .kpi .v { font-size:23px; font-weight:700; margin-top:2px; }
   .kpi.ok .v { color:var(--ok); } .kpi.warn .v { color:var(--warn); } .kpi.bad .v { color:var(--bad); } .kpi.go .v { color:var(--accent); }
 
+  /* 달력 옆 메모 (달력 가로 폭을 줄이면 남는 자리에) */
+  .vrow { display:flex; gap:16px; align-items:flex-start; }
+  #view { flex:1; min-width:0; }
+  body.side-on #view { flex:0 0 calc(var(--calw,100%) - 8px); }
+  body.side-on table.cal, body.side-on .week { width:100%; }
+  #smemo { display:none; }
+  body.side-on #smemo { display:flex; flex-direction:column; gap:8px; flex:1; min-width:180px; }
+  #smemo .sh { display:flex; align-items:center; gap:8px; height:29px; padding:0 2px; border-bottom:1px solid var(--line); }
+  #smemo .sh b { flex:1; font-size:13px; }
+  #smemo .sh button { background:none; border:1px solid var(--line); color:var(--muted); border-radius:var(--r);
+    width:24px; height:22px; padding:0; font:inherit; font-size:14px; line-height:1; cursor:pointer; }
+  #smemo .sh button:hover { color:var(--accent); border-color:var(--accent); }
+  #sList { display:flex; flex-direction:column; gap:8px; }
+  .sn { position:relative; background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:var(--r); padding:8px 26px 6px 10px; }
+  .sn textarea { width:100%; border:0; background:none; color:var(--text); font:inherit; font-size:13px; line-height:1.55;
+    resize:none; overflow:hidden; padding:0; min-height:21px; display:block; }
+  .sn textarea:focus { outline:none; }
+  .sn:focus-within { border-color:var(--accent); }
+  .sn .tm { color:var(--muted); font-size:10.5px; margin-top:3px; }
+  .sn .x { position:absolute; top:5px; right:5px; background:none; border:0; color:var(--muted); cursor:pointer; font-size:13px; padding:0 3px; opacity:0; }
+  .sn:hover .x { opacity:1; } .sn .x:hover { color:var(--bad); }
+  .snone { color:var(--muted); font-size:12px; line-height:1.7; padding:6px 2px; }
+
   /* 월 달력 */
   table.cal { width:var(--calw,100%); border-collapse:collapse; table-layout:fixed; font-size:var(--calfs,12px); }   /* ⚙ 달력 폭 · 글자 크기 */
   .cal th { color:var(--muted); font-weight:400; font-size:1em; padding:6px 4px; border-bottom:1px solid var(--line); }
@@ -220,7 +243,10 @@
     <button id="cfgBtn" title="설정 (테마 · 백업 · 복원)">⚙</button>
   </div>
   <div class="kpis" id="kpis"></div>
-  <div id="view"></div>
+  <div class="vrow">
+    <div id="view"></div>
+    <aside id="smemo"><div class="sh"><b>📝 메모</b><button id="sAdd" title="메모 추가">＋</button></div><div id="sList"></div></aside>
+  </div>
 </div>
 
 <div id="cfg" hidden></div>
@@ -384,6 +410,7 @@ function render() {
     : view === 'week' ? `${D(from).getMonth() + 1}월 ${D(from).getDate()}일 ~ ${D(to).getMonth() + 1}월 ${D(to).getDate()}일`
     : `${cur.getFullYear()}년 ${cur.getMonth() + 1}월`;
   renderKpis();
+  sideLayout();
   if (view === 'todo') renderTodo();
   else if (view === 'month') renderMonth(from, to);
   else if (view === 'week') renderWeek(from);
@@ -766,12 +793,55 @@ function applyLook(save) {
   look.calfs = Math.max(9, Math.min(20, Math.round(Number(look.calfs) || 12)));
   document.documentElement.style.setProperty('--calw', look.calw + '%');
   document.documentElement.style.setProperty('--calfs', look.calfs + 'px');
+  if (typeof sideLayout === 'function' && document.getElementById('smemo')) try { sideLayout(); } catch (e) {}
   document.body.classList.toggle('kpi-sm', look.kpi === 'small');
   document.body.classList.toggle('kpi-off', look.kpi === 'off');
   document.documentElement.style.setProperty('--cellh', look.cellh + 'px');
   if (save) { try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (e) {} }
 }
 applyLook(false);
+
+// ---- 달력 옆 메모: 월·주 보기에서 달력 가로 폭을 줄였을 때 남는 자리에 (⚙ 에서 끄고 켬) ----
+let sideNotes = [], sideTimer = null;
+function sideLayout() {
+  const on = (view === 'month' || view === 'week') && look.calw < 100 && look.side !== false;
+  document.body.classList.toggle('side-on', on);
+}
+const stime = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+function renderSide(focusId) {
+  $('#sList').innerHTML = sideNotes.length ? sideNotes.map((n) => `<div class="sn" data-id="${n.id}">
+      <textarea rows="1" placeholder="메모를 적으세요" maxlength="2000">${esc(n.text)}</textarea>
+      <div class="tm">${stime(n.t)}</div><button class="x" title="지우기">✕</button></div>`).join('')
+    : '<div class="snone">메모가 없습니다.<br>위 <b>＋</b> 로 추가하세요.</div>';
+  for (const ta of $('#sList').querySelectorAll('textarea')) grow(ta);
+  if (focusId) { const t = document.querySelector(`.sn[data-id="${focusId}"] textarea`); if (t) t.focus(); }
+}
+function grow(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+function saveSide() {
+  clearTimeout(sideTimer);
+  sideTimer = setTimeout(async () => {
+    try { await fetch('api/memo/side', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: sideNotes }) }); } catch (e) {}
+  }, 600);
+}
+$('#sAdd').onclick = () => {
+  if (sideNotes.length >= 50) { alert('메모는 50개까지 만들 수 있습니다.'); return; }
+  const n = { id: Math.random().toString(36).slice(2, 10), text: '', t: Date.now() };
+  sideNotes.unshift(n); renderSide(n.id); saveSide();
+};
+$('#sList').addEventListener('input', (e) => {
+  const box = e.target.closest('.sn'); if (!box || e.target.tagName !== 'TEXTAREA') return;
+  const n = sideNotes.find((x) => x.id === box.dataset.id); if (!n) return;
+  n.text = e.target.value; n.t = Date.now(); grow(e.target);
+  box.querySelector('.tm').textContent = stime(n.t);
+  saveSide();
+});
+$('#sList').addEventListener('click', (e) => {
+  if (!e.target.classList.contains('x')) return;
+  const box = e.target.closest('.sn'), n = sideNotes.find((x) => x.id === box.dataset.id); if (!n) return;
+  if (n.text.trim() && !confirm('이 메모를 지울까요?')) return;
+  sideNotes = sideNotes.filter((x) => x !== n); renderSide(); saveSide();
+});
+(async () => { try { const j = await (await fetch('api/memo/side')).json(); sideNotes = j.notes || []; } catch (e) {} renderSide(); })();
 
 // ---- ⚙ 설정: 화면 테마 · 일정 백업 · 복원 ----
 function curTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
@@ -785,6 +855,8 @@ function openCfg() {
     <div class="row"><button data-ch="-20" title="작게">－</button><span class="v">${look.cellh}px</span><button data-ch="20" title="크게">＋</button><button data-ch="0" title="처음 크기(112px)로">기본</button></div>
     <div class="sec">달력 가로 폭 (월 · 주 보기)</div>
     <div class="row"><button data-cw="-10" title="좁게">－</button><span class="v">${look.calw}%</span><button data-cw="10" title="넓게">＋</button><button data-cw="0" title="화면 가득(100%)">기본</button></div>
+    <div class="sec">달력 옆 메모 (가로 폭을 줄이면 남는 자리에)</div>
+    <div class="row"><button data-sd="1" class="${look.side !== false ? 'on' : ''}">보이기</button><button data-sd="0" class="${look.side === false ? 'on' : ''}">숨기기</button></div>
     <div class="sec">달력 글자 크기 (월 보기)</div>
     <div class="row"><button data-cf="-1" title="작게">－</button><span class="v">${look.calfs}px</span><button data-cf="1" title="크게">＋</button><button data-cf="0" title="처음 크기(12px)로">기본</button></div>
     <div class="sec">일정 백업</div>
@@ -804,6 +876,7 @@ $('#cfg').onclick = async (e) => {
   if (bt.dataset.kpi) { look.kpi = bt.dataset.kpi; applyLook(true); openCfg(); return; }
   if (bt.dataset.ch) { const d = Number(bt.dataset.ch); look.cellh = d ? look.cellh + d : 112; applyLook(true); openCfg(); return; }
   if (bt.dataset.cw) { const d = Number(bt.dataset.cw); look.calw = d ? look.calw + d : 100; applyLook(true); openCfg(); return; }
+  if (bt.dataset.sd) { look.side = bt.dataset.sd === '1'; if (look.side && look.calw >= 100) look.calw = 75; applyLook(true); openCfg(); return; }
   if (bt.dataset.cf) { const d = Number(bt.dataset.cf); look.calfs = d ? look.calfs + d : 12; applyLook(true); openCfg(); return; }
   const c = bt.dataset.c; if (!c) return;
   if (c === 'light' || c === 'dark') {

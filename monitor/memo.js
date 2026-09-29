@@ -72,6 +72,10 @@ const alarm = (a) => ({
   rep: REP_OK[a && a.rep] ? a.rep : 'none',
   done: !!(a && a.done),
 });
+// 일정 화면 옆 메모 (사람마다, 글자만)
+const MAX_SIDE = 50;
+const sideNote = (n) => ({ id: str(n && n.id, 32) || rid(), text: str(n && n.text, 2000), t: num(n && n.t, Date.now()) });
+const sideList = (v) => (Array.isArray(v) ? v : []).slice(0, MAX_SIDE).map(sideNote);
 // 반복 알림의 다음 차례 (화면 쪽 nextAt() 과 같은 규칙)
 function nextAt(at, rep) {
   if (!REP_OK[rep] || rep === 'none') return 0;
@@ -219,7 +223,7 @@ function create(opts) {
       if (!list.length) list.push({ id: rid(), name: '메모 1', color: 'yellow', pages: [{ id: rid(), name: '메모 1', notes: [], areas: [], links: [] }] });
       const act = list.some((b) => b.id === active) ? active : list[0].id;
       const al = (Array.isArray(all[uid] && all[uid].alarms) ? all[uid].alarms : []).slice(0, MAX_ALARMS).map(alarm);
-      return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs), alarms: al };
+      return { boards: list, active: act, trash: trashOf(all[uid], boards), prefs: prefs(all[uid] && all[uid].prefs), alarms: al, side: sideList(all[uid] && all[uid].side) };
     },
     set(uid, data) {
       const list = (Array.isArray(data && data.boards) ? data.boards : []).slice(0, MAX_BOARDS).map(board);
@@ -227,13 +231,23 @@ function create(opts) {
       const active = list.some((b) => b.id === data.active) ? data.active : list[0].id;
       const trash = (Array.isArray(data && data.trash) ? data.trash : []).slice(0, MAX_TRASH).map(trashItem);
       const alarms = (Array.isArray(data && data.alarms) ? data.alarms : []).slice(0, MAX_ALARMS).map(alarm);
-      const next = { active, boards: list, trash, prefs: prefs(data && data.prefs), alarms };
+      // 옆 메모는 메모 화면이 보내지 않으면(평소) 그대로 둔다 — 백업 복원 때만 함께 온다
+      const side = Array.isArray(data && data.side) ? sideList(data.side) : sideList(all[uid] && all[uid].side);
+      const next = { active, boards: list, trash, prefs: prefs(data && data.prefs), alarms, side };
       const size = JSON.stringify(next).length;
       if (size > MAX_USER) throw new Error('사진이 너무 많습니다. 오래된 사진 메모를 지운 뒤 다시 저장해 주세요');
       all[uid] = next;
       save();
       try { gcImgs(uid); } catch (e) {}
       return { boards: list, active, trash, prefs: next.prefs, alarms };
+    },
+    // 일정 화면 옆 메모
+    getSide(uid) { return sideList(all[uid] && all[uid].side); },
+    setSide(uid, list) {
+      if (!all[uid]) all[uid] = { active: '', boards: [], trash: [], prefs: {} };
+      all[uid].side = sideList(list);
+      save();
+      return all[uid].side;
     },
     // 화면 테마만 바꾸기 (일정 화면 ⚙ 에서 — 메모 화면과 같은 값을 쓴다)
     setTheme(uid, theme) {

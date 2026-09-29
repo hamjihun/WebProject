@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.39.6';
+const VERSION = '1.40.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -598,6 +598,14 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
+  // ---- 일정 화면 옆 메모 (사람마다) ----
+  if (url.pathname === '/api/memo/side') {
+    if (!me || !auth.can(me, 'schedule.html')) return json(res, 403, { ok: false, error: '일정 화면 권한이 없습니다' });
+    try {
+      if (req.method === 'GET') return json(res, 200, { ok: true, notes: memo.getSide(me.id) });
+      if (req.method === 'PUT') { const raw = JSON.parse((await readBody(req, 2)) || '{}'); return json(res, 200, { ok: true, notes: memo.setSide(me.id, raw.notes) }); }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
   // ---- 화면 테마 (메모·일정 공용, 사람마다) ----
   if (req.method === 'PUT' && url.pathname === '/api/memo/theme') {
     if (!me) return json(res, 401, { ok: false, error: 'login' });
@@ -640,7 +648,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/memo') {
     if (!me || !auth.can(me, 'memo.html')) return json(res, 403, { ok: false, error: '메모 화면 권한이 없습니다' });
     try {
-      if (req.method === 'GET') { const g = memo.get(me.id); return json(res, 200, { ok: true, boards: g.boards, active: g.active, trash: g.trash, prefs: g.prefs, alarms: g.alarms, me: me.name || me.id }); }
+      if (req.method === 'GET') { const g = memo.get(me.id); return json(res, 200, { ok: true, boards: g.boards, active: g.active, trash: g.trash, prefs: g.prefs, alarms: g.alarms, side: g.side, me: me.name || me.id }); }
       if (req.method === 'PUT') {
         const raw = JSON.parse((await readBody(req, 48)) || '{}');   // 사진이 들어가므로 넉넉히
         const g = memo.set(me.id, raw);

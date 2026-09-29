@@ -395,7 +395,8 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 const tint = (c) => { const h = COLORS[c] ? COLORS[c].bd : '#64748b'; const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.10)`; };
 let boards = [], active = '', sel = null;
 let trash = [];                                                   // 휴지통 (메모판 공용, 사람마다 하나)
-let alarms = [];                                                  // 알림판 (사람마다 하나)
+let alarms = [];
+let sideKeep = null;                                              // 일정 화면 옆 메모 (백업에 함께 넣으려고 들고만 있다)                                                  // 알림판 (사람마다 하나)
 let prefs = { color: 'white', fs: 13, w: 200, h: 200, acolor: 'green', magnet: true, side: true, theme: 'light', pc: '#1f2937', pw: 4, alarm: true };
 // 그림판 펜 (색·굵기는 설정에 저장, 지우개는 그때그때)
 const PENS = ['#1f2937', '#dc2626', '#ea580c', '#eab308', '#16a34a', '#2563eb', '#7c3aed', '#94a3b8'];
@@ -1409,7 +1410,8 @@ async function backupDown() {
     $('#st').textContent = `백업 사진 ${i + 1}/${ph.length}`;
     try { ph[i].img = await readUrl(await (await fetch(imgSrc(ph[i].img))).blob()); } catch (e) {}
   }
-  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards: copy.boards, trash: copy.trash, prefs, alarms };
+  let side = sideKeep; try { side = (await (await fetch('api/memo/side')).json()).notes || side; } catch (e) {}
+  const data = { app: 'ims-memo', ver: 1, saved: d.toISOString(), active, boards: copy.boards, trash: copy.trash, prefs, alarms, side };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1438,6 +1440,7 @@ $('#upfile').onchange = async (e) => {
     trash = Array.isArray(j.trash) ? j.trash : [];
     if (j.prefs) prefs = { ...prefs, ...j.prefs };
     alarms = Array.isArray(j.alarms) ? j.alarms : [];
+    if (Array.isArray(j.side)) { try { await fetch('api/memo/side', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: j.side }) }); } catch (e) {} }
     sel = null; touch(); render(); renderAlarms(); await saveNow();
     alert('복원했습니다.');
   } catch (err) { alert('복원하지 못했습니다: ' + err.message); }
@@ -1503,7 +1506,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.39.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.40.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1743,6 +1746,7 @@ $('#board').addEventListener('scroll', posPen);
   boards = j.boards || []; active = j.active || (boards[0] && boards[0].id) || '';
   trash = j.trash || []; if (j.prefs) prefs = { ...prefs, ...j.prefs };
   alarms = Array.isArray(j.alarms) ? j.alarms : [];
+  sideKeep = Array.isArray(j.side) ? j.side : null;
   render(); renderAlarms(); MON.alarms.poll();
 })();
 </script>
