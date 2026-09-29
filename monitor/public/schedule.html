@@ -61,14 +61,14 @@
   .kpi.ok .v { color:var(--ok); } .kpi.warn .v { color:var(--warn); } .kpi.bad .v { color:var(--bad); } .kpi.go .v { color:var(--accent); }
 
   /* 월 달력 */
-  table.cal { width:100%; border-collapse:collapse; table-layout:fixed; }
-  .cal th { color:var(--muted); font-weight:400; font-size:12px; padding:6px 4px; border-bottom:1px solid var(--line); }
+  table.cal { width:var(--calw,100%); border-collapse:collapse; table-layout:fixed; font-size:var(--calfs,12px); }   /* ⚙ 달력 폭 · 글자 크기 */
+  .cal th { color:var(--muted); font-weight:400; font-size:1em; padding:6px 4px; border-bottom:1px solid var(--line); }
   .cal th.sun, .cal td.sun .dn { color:#f87171; } .cal th.sat, .cal td.sat .dn { color:#7dd3fc; }
   .cal td { border:1px solid var(--line); vertical-align:top; height:var(--cellh,112px); padding:4px; background:var(--card); }   /* ⚙ 달력 칸 높이 */
   .cal td.out { background:transparent; } .cal td.out .dn { opacity:.35; }
   .cal td.today { outline:2px solid var(--accent); outline-offset:-2px; }
-  .cal .dn { font-size:13px; font-weight:700; padding:1px 3px; display:flex; justify-content:space-between; align-items:center; }
-  .cal .dn .plus { opacity:0; color:var(--muted); font-weight:400; cursor:pointer; font-size:15px; }
+  .cal .dn { font-size:1.08em; font-weight:700; padding:1px 3px; display:flex; justify-content:space-between; align-items:center; }
+  .cal .dn .plus { opacity:0; color:var(--muted); font-weight:400; cursor:pointer; font-size:1.15em; }
   .cal td:hover .dn .plus { opacity:1; } .cal .dn .plus:hover { color:var(--accent); }
   .chip { display:flex; align-items:center; gap:5px; padding:3px 5px; border-radius:var(--r); margin-top:2px; cursor:pointer; font-size:12px; background:rgba(20,52,46,.05); border-left:3px solid var(--c,#38bdf8); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .chip:hover { background:var(--soft); }
@@ -106,9 +106,10 @@
   .tnone { color:var(--muted); font-size:12px; padding:14px 0; }
   .tlh.hol { color:#f87171; } .tlc.hol { background:rgba(239,68,68,.07); }
   .more { font-size:11px; color:var(--muted); cursor:pointer; padding:2px 5px; } .more:hover { color:var(--accent); }
+  .cal .chip { font-size:1em; } .cal .hol { font-size:.92em; } .cal .more { font-size:.92em; }
 
   /* 주 보기 */
-  .week { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+  .week { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; width:var(--calw,100%); }
   .wd { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:8px; min-height:160px; }
   .wd.today { border-color:var(--accent); }
   .wd h3 { font-size:13px; margin:0 0 8px; display:flex; justify-content:space-between; }
@@ -757,10 +758,14 @@ $('#add').onclick = () => openForm(null);
 
 // ---- 화면 설정 (이 PC 브라우저에 기억): 위 요약 칸, 달력 칸 높이 ----
 const LOOK_KEY = 'imsSchedLook';
-let look = { kpi: 'normal', cellh: 112 };
+let look = { kpi: 'normal', cellh: 112, calw: 100, calfs: 12 };
 try { look = { ...look, ...(JSON.parse(localStorage.getItem(LOOK_KEY) || '{}') || {}) }; } catch (e) {}
 function applyLook(save) {
   look.cellh = Math.max(50, Math.min(220, Math.round(Number(look.cellh) || 112)));
+  look.calw = Math.max(40, Math.min(100, Math.round(Number(look.calw) || 100)));
+  look.calfs = Math.max(9, Math.min(20, Math.round(Number(look.calfs) || 12)));
+  document.documentElement.style.setProperty('--calw', look.calw + '%');
+  document.documentElement.style.setProperty('--calfs', look.calfs + 'px');
   document.body.classList.toggle('kpi-sm', look.kpi === 'small');
   document.body.classList.toggle('kpi-off', look.kpi === 'off');
   document.documentElement.style.setProperty('--cellh', look.cellh + 'px');
@@ -778,6 +783,10 @@ function openCfg() {
     <div class="row">${[['normal', '보통'], ['small', '작게'], ['off', '숨기기']].map(([k, n]) => `<button data-kpi="${k}" class="${look.kpi === k ? 'on' : ''}">${n}</button>`).join('')}</div>
     <div class="sec">달력 칸 높이 (월 보기)</div>
     <div class="row"><button data-ch="-20" title="작게">－</button><span class="v">${look.cellh}px</span><button data-ch="20" title="크게">＋</button><button data-ch="0" title="처음 크기(112px)로">기본</button></div>
+    <div class="sec">달력 가로 폭 (월 · 주 보기)</div>
+    <div class="row"><button data-cw="-10" title="좁게">－</button><span class="v">${look.calw}%</span><button data-cw="10" title="넓게">＋</button><button data-cw="0" title="화면 가득(100%)">기본</button></div>
+    <div class="sec">달력 글자 크기 (월 보기)</div>
+    <div class="row"><button data-cf="-1" title="작게">－</button><span class="v">${look.calfs}px</span><button data-cf="1" title="크게">＋</button><button data-cf="0" title="처음 크기(12px)로">기본</button></div>
     <div class="sec">일정 백업</div>
     <div class="row"><button data-c="dl"${ad ? '' : ' disabled'}>💾 백업 받기</button><button data-c="up"${ad ? '' : ' disabled'}>📂 복원</button></div>
     <div class="tip">${ad ? '모든 사람의 일정·부서·공휴일을 파일 하나로 받습니다. 복원하면 지금 일정이 <b>모두</b> 그 파일 내용으로 바뀝니다 (복원 전 파일은 서버에 따로 남겨 둡니다).'
@@ -794,6 +803,8 @@ $('#cfg').onclick = async (e) => {
   const bt = e.target.closest('button'); if (!bt) return;
   if (bt.dataset.kpi) { look.kpi = bt.dataset.kpi; applyLook(true); openCfg(); return; }
   if (bt.dataset.ch) { const d = Number(bt.dataset.ch); look.cellh = d ? look.cellh + d : 112; applyLook(true); openCfg(); return; }
+  if (bt.dataset.cw) { const d = Number(bt.dataset.cw); look.calw = d ? look.calw + d : 100; applyLook(true); openCfg(); return; }
+  if (bt.dataset.cf) { const d = Number(bt.dataset.cf); look.calfs = d ? look.calfs + d : 12; applyLook(true); openCfg(); return; }
   const c = bt.dataset.c; if (!c) return;
   if (c === 'light' || c === 'dark') {
     document.documentElement.dataset.theme = c;
