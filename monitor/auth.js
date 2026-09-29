@@ -14,7 +14,7 @@ const APPS = [
   },
   {
     key: 'schedule', name: '메모 · 일정', desc: '메모 보드 · 부서 업무 일정', icon: '📝', ready: true, home: 'memo.html',
-    pages: [['memo.html', '메모'], ['schedule.html', '📅 일정', 'right']],   // 세 번째 값 'right' = 상단 탭 오른쪽 끝에 다른 모양으로
+    pages: [['memo.html', '📝 메모', 'right'], ['schedule.html', '📅 일정', 'right']],   // 세 번째 값 'right' = 상단 탭 오른쪽에 아이콘 단추 모양으로 (메모 · 일정 나란히)
   },
 ];
 const ALL_PAGES = APPS.reduce((a, app) => a.concat(app.pages.map((p) => p[0])), []);

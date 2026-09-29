@@ -1728,8 +1728,7 @@ $('#board').addEventListener('scroll', posPen);
   const t = setInterval(() => {
     const tabs = document.getElementById('navtabs');
     const my = tabs && tabs.querySelector('a[data-page="memo.html"]');
-    if (my) {
-      my.remove();
+    if (my) {                                    // 오른쪽 "📝 메모 · 📅 일정" 단추는 그대로 두고, 왼쪽에 메모판 탭을 붙인다
       tabs.appendChild($('#bds'));
       clearInterval(t); render();
     } else if (++tries > 60) clearInterval(t);   // 상단바가 없으면(창 안에 끼워 쓸 때) 그대로 둔다
