@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.38.3';
+const VERSION = '1.39.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -598,6 +598,12 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
+  // ---- 화면 테마 (메모·일정 공용, 사람마다) ----
+  if (req.method === 'PUT' && url.pathname === '/api/memo/theme') {
+    if (!me) return json(res, 401, { ok: false, error: 'login' });
+    try { const raw = JSON.parse((await readBody(req)) || '{}'); return json(res, 200, { ok: true, theme: memo.setTheme(me.id, raw.theme) }); }
+    catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
   // ---- 메모 알림 (모든 화면에서 씀. 메모 본문 없이 알림만 주고받는다) ----
   if (url.pathname === '/api/alarms') {
     if (!me) return json(res, 200, { ok: true, alarms: [], now: Date.now() });        // 로그인 전이면 조용히 빈 목록
@@ -644,6 +650,27 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- 일정 관리 ----
+  // ---- 일정 백업 · 복원 (관리자만 — 모든 사람의 일정·부서·공휴일 전체) ----
+  if (url.pathname === '/api/schedule/backup' || url.pathname === '/api/schedule/restore') {
+    if (!me || !auth.can(me, 'schedule.html')) return json(res, 403, { ok: false, error: '일정 화면 권한이 없습니다' });
+    if (!me.admin) return json(res, 403, { ok: false, error: '백업·복원은 관리자만 할 수 있습니다' });
+    try {
+      if (req.method === 'GET' && url.pathname === '/api/schedule/backup') {
+        const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+        const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+        const body = JSON.stringify({ app: 'ims-schedule', ver: 1, saved: d.toISOString(), by: me.name || me.id, ...sched.exportAll() });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="IMS-schedule-backup-${stamp}.json"`, 'Cache-Control': 'no-store' });
+        return res.end(body);
+      }
+      if (req.method === 'POST' && url.pathname === '/api/schedule/restore') {
+        const raw = JSON.parse((await readBody(req, 30)) || '{}');
+        if (raw.app !== 'ims-schedule') throw new Error('일정 백업 파일이 아닙니다');
+        const r = sched.importAll(raw);
+        console.log(`[${new Date().toLocaleTimeString()}] 일정 복원: ${me.id} 일정 ${r.events}건`);
+        return json(res, 200, { ok: true, ...r });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
   if (url.pathname === '/api/schedule' || url.pathname === '/api/schedule/depts' || url.pathname === '/api/schedule/holidays' || url.pathname === '/api/schedule/todo') {
     if (!me || !auth.can(me, 'schedule.html')) return json(res, 403, { ok: false, error: '일정 화면 권한이 없습니다' });
     const who = me.name || me.id;

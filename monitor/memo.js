@@ -235,6 +235,14 @@ function create(opts) {
       try { gcImgs(uid); } catch (e) {}
       return { boards: list, active, trash, prefs: next.prefs, alarms };
     },
+    // 화면 테마만 바꾸기 (일정 화면 ⚙ 에서 — 메모 화면과 같은 값을 쓴다)
+    setTheme(uid, theme) {
+      const t = theme === 'dark' ? 'dark' : 'light';
+      if (!all[uid]) all[uid] = { active: '', boards: [], trash: [], prefs: {} };
+      all[uid].prefs = { ...(all[uid].prefs || {}), theme: t };
+      save();
+      return t;
+    },
     // ---- 알림 (모든 화면에서 쓰는 가벼운 창구) ----
     getAlarms(uid) { return (Array.isArray(all[uid] && all[uid].alarms) ? all[uid].alarms : []).slice(0, MAX_ALARMS).map(alarm); },
     // 확인 / 10분 뒤 다시 — 서버에서 바로 처리한다 (여러 화면에서 눌러도 어긋나지 않게)

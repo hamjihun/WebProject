@@ -98,6 +98,28 @@ function create(opts) {
 
   return {
     STATUS, REPEATS, PRIOS,
+    // ---- 백업 · 복원 (관리자) ----
+    exportAll() { return JSON.parse(JSON.stringify({ events, depts, holidays })); },
+    importAll(o) {
+      if (!o || typeof o !== 'object') throw new Error('일정 백업 파일이 아닙니다');
+      const list = Array.isArray(o.events) ? o.events : Object.values(o.events || {});
+      const ev = {};
+      for (const e of list.slice(0, MAX_EVENTS)) {
+        if (!e || typeof e !== 'object' || !isDay(e.start) || !str(e.title, 100)) continue;
+        const id = /^[a-z0-9]{4,32}$/i.test(String(e.id || '')) ? String(e.id) : crypto.randomBytes(6).toString('hex');
+        ev[id] = { ...e, id, title: str(e.title, 100), notes: Array.isArray(e.notes) ? e.notes : [], occ: e.occ && typeof e.occ === 'object' ? e.occ : {} };
+      }
+      const dp = (Array.isArray(o.depts) ? o.depts : []).map((d) => str(d, 20)).filter(Boolean).slice(0, 30);
+      const hol = {};
+      for (const [k, v] of Object.entries(o.holidays && typeof o.holidays === 'object' ? o.holidays : {})) if (isDay(k) && str(v, 20)) hol[k] = str(v, 20);
+      // 덮어쓰기 전 지금 파일을 옆에 남겨 둔다 (잘못 복원했을 때 되살릴 수 있게)
+      try { if (fs.existsSync(FILE)) fs.copyFileSync(FILE, FILE.replace(/\.json$/, '') + '.before-restore-' + S(new Date()) + '-' + Date.now() + '.json'); } catch (e) {}
+      events = ev;
+      if (dp.length) depts = dp;
+      if (Object.keys(hol).length) holidays = hol;
+      save();
+      return { events: Object.keys(ev).length, depts: depts.length, holidays: Object.keys(holidays).length };
+    },
     holidays() { return Object.assign({}, holidays); },
     setHolidays(map) {
       if (!map || typeof map !== 'object') throw new Error('공휴일 목록이 올바르지 않습니다');

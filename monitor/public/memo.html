@@ -1503,7 +1503,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.38.2';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.39.0';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
@@ -1714,6 +1714,11 @@ window.addEventListener('beforeunload', () => {
   try { fetch('api/memo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boards, active, trash, prefs, alarms }), keepalive: true }); } catch (e) {}
 });
 window.addEventListener('resize', render);
+document.addEventListener('visibilitychange', () => {   // 일정 화면에서 테마를 바꾸고 돌아왔으면 따라간다
+  if (document.hidden) return;
+  let t = null; try { t = localStorage.getItem('imsMemoTheme'); } catch (e) {}
+  if ((t === 'dark' || t === 'light') && t !== prefs.theme) { prefs.theme = t; applyTheme(); }
+});
 $('#board').addEventListener('scroll', posPen);
 
 // ---- 메모판 탭·도구를 맨 위 탭줄 안으로 (공통 상단바가 그려진 뒤) ----
