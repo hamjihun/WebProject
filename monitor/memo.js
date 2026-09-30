@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_BOARDS = 20, MAX_PAGES = 50, MAX_NOTES = 500, MAX_AREAS = 60, MAX_LINKS = 200, MAX_TEXT = 5000, MAX_TRASH = 50;
-const MAX_STROKES = 600, MAX_PTS = 2000;   // 그림 메모: 선 개수 · 선 하나의 점 개수
+const MAX_STROKES = 600, MAX_PTS = 6000;   // 그림 메모: 선 개수 · 선 하나의 좌표 개수(x,y 합쳐서)
 const MAX_ALARMS = 100;                    // 알림판에 담아 둘 수 있는 알림 개수
 const MAX_IMG = 3 * 1024 * 1024;          // 예전 방식(메모 안에 넣은 data URL) 사진 한 장 글자 수
 // 새 방식: 사진은 원본 그대로 data/memo-img/<계정>/<id>.<확장자> 파일로 따로 두고 메모에는 "m:<id>.<확장자>" 만 적는다
@@ -58,7 +58,7 @@ function drawing(d) {
     c: hex(k && k.c, '#1f2937'),
     w: clamp(num(k && k.w, 4), 1, 200),
     e: (k && k.e) ? 1 : 0,
-    p: (Array.isArray(k && k.p) ? k.p : []).slice(0, MAX_PTS).map((v) => clamp(num(v), -8000, 8000)),
+    p: (Array.isArray(k && k.p) ? k.p : []).slice(0, MAX_PTS).map((v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(clamp(n, -8000, 8000) * 10) / 10 : 0; }),
   })).filter((k) => k.p.length >= 2);
   return { w: clamp(num(d.w, 320), 40, 4000), h: clamp(num(d.h, 232), 40, 4000), s };
 }
