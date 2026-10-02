@@ -156,7 +156,7 @@ function autoIcon(s, id) { const t = ((s && s.os) || '') + ' ' + id; if (/esxi|v
 const hexA = (h, a) => { const v = /^#([0-9a-f]{6})$/i.exec(h || ''); if (!v) return 'transparent'; const n = parseInt(v[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
 // ---------- 상태 ----------
-let topo = { nodes: {}, links: [], groups: [], notes: [] }, servers = [], active = [], edit = false, linkMode = false, linkFrom = null, sel = null, zoom = 1, dirty = false, grid = true;
+let topo = { nodes: {}, links: [], groups: [], notes: [] }, servers = [], devs = [], active = [], edit = false, linkMode = false, linkFrom = null, sel = null, zoom = 1, dirty = false, grid = true;
 const undo = [];
 const $c = document.getElementById('canvas'), $svg = document.getElementById('links'), $defs = document.getElementById('defs'), $msg = document.getElementById('msg'), $side = document.getElementById('side'), $stage = document.getElementById('stage');
 const msg = (t) => { $msg.textContent = t; };
@@ -168,7 +168,7 @@ function setDirty() { dirty = true; document.getElementById('bSave').classList.a
 // ---------- 데이터 ----------
 async function load() {
   const [t, s, a] = await Promise.all([fetch('api/topology').then(r => r.json()), fetch('api/servers').then(r => r.json()), fetch('api/alerts').then(r => r.json())]);
-  topo = { nodes: {}, links: [], groups: [], notes: [], ...t }; servers = s.servers; active = a.active || []; MON.setVersion(s.version);
+  topo = { nodes: {}, links: [], groups: [], notes: [], ...t }; servers = s.servers; devs = s.devices || []; active = a.active || []; MON.setVersion(s.version);
   for (const g of topo.groups) { g.kind = g.kind || 'rect'; g.id = g.id || uid('g'); }
   for (const l of topo.links) { l.style = l.style || 'solid'; }
   let i = 0; const ys = Object.values(topo.nodes).map(n => n.y + 140); const baseY = ys.length ? Math.max(...ys) : 120;
@@ -177,7 +177,7 @@ async function load() {
 }
 async function refreshLive() {
   if (edit) return;
-  try { const [s, a] = await Promise.all([fetch('api/servers').then(r => r.json()), fetch('api/alerts').then(r => r.json())]); servers = s.servers; active = a.active || []; render(); } catch (e) {}
+  try { const [s, a] = await Promise.all([fetch('api/servers').then(r => r.json()), fetch('api/alerts').then(r => r.json())]); servers = s.servers; devs = s.devices || []; active = a.active || []; render(); } catch (e) {}
 }
 async function save() {
   try { const r = await fetch('api/topology', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(topo) }); if (!r.ok) throw new Error('HTTP ' + r.status); dirty = false; document.getElementById('bSave').classList.remove('dirty'); msg('저장했습니다. 모든 PC 에서 같은 구성도가 보입니다'); }
@@ -185,6 +185,8 @@ async function save() {
 }
 
 // ---------- 렌더 ----------
+// 외부 장비 노드 ↔ 감시 장비(서버 현황의 네트워크 장비) 연결: 직접 고른 것 우선, 없으면 부제가 주소와 같은 장비
+function devOf(n) { if (!n || !n.custom) return null; if (n.dev) return devs.find(d => d.id === n.dev) || null; const h = (n.sub || '').trim(); return h ? devs.find(d => d.host === h) || null : null; }
 function nodeLabel(id, n, s) { return n.label || (s ? label(s) : id); }
 function render() {
   for (const el of $c.querySelectorAll('.node,.shape,.note')) el.remove();
@@ -206,19 +208,20 @@ function render() {
   for (const [id, n] of Object.entries(topo.nodes)) {
     const s = servers.find(x => x.host === id);
     const el = document.createElement('div'); el.dataset.id = id;
-    const gr = n.custom ? 'custom' : s ? grade(s, active) : 'none';
+    const dv = devOf(n);
+    const gr = n.custom ? (dv && dv.up === true ? 'ok' : dv && dv.up === false ? 'off' : 'custom') : s ? grade(s, active) : 'none';
     el.className = `node sz-${n.size || 'm'} ${n.custom ? 'custom' : ''} ${gr === 'off' ? 'off' : ''} ${sel && sel.type === 'node' && sel.id === id ? 'sel' : ''}`;
     Object.assign(el.style, { left: n.x + 'px', top: n.y + 'px', borderColor: n.color || '' });
     const icon = n.icon || autoIcon(s, id);
     let sub = '', met = '';
-    if (n.custom) sub = n.sub || DEV.find(d => d[0] === icon)?.[1] || '외부 장비';
+    if (n.custom) { sub = n.sub || (dv && dv.host) || DEV.find(d => d[0] === icon)?.[1] || '외부 장비'; if (dv && dv.up === false) sub = '응답 없음'; else if (dv && dv.up && dv.ms != null) sub += ` · ${dv.ms}ms`; }
     else if (!s) sub = '데이터 없음';
     else {
       sub = n.label || s.name ? s.host : shortOs(s.os);
       const md = Math.max(0, ...(s.disks || []).map(d => d.pct || 0)); const c = (v) => v >= 90 ? 'b' : v >= 75 ? 'w' : '';
       met = n.nometric ? '' : `<div class="m"><span>C <i class="${c(s.cpu)}">${s.cpu}%</i></span><span>M <i class="${c(s.mem_pct)}">${s.mem_pct}%</i></span><span>D <i class="${c(md)}">${md}%</i></span></div>`;
     }
-    el.innerHTML = `<span class="led ${gr}" title="${gr === 'ok' ? '정상' : gr === 'warn' ? '주의' : gr === 'off' ? '오프라인' : gr === 'bad' ? '위험/경고' : ''}"></span>${svgIcon(icon, 'ic')}<div class="t">${esc(nodeLabel(id, n, s))}</div><div class="h">${esc(sub)}</div>${met}`;
+    el.innerHTML = `<span class="led ${gr}" title="${gr === 'ok' ? '정상' : gr === 'warn' ? '주의' : gr === 'off' ? (dv ? '응답 없음' : '오프라인') : gr === 'bad' ? '위험/경고' : ''}"></span>${svgIcon(icon, 'ic')}<div class="t">${esc(nodeLabel(id, n, s))}</div><div class="h">${esc(sub)}</div>${met}`;
     $c.appendChild(el); bindDrag(el, n, 'node', id);
   }
   drawLinks();
@@ -232,7 +235,8 @@ function drawLinks() {
     const ra = rectOf(l.a), rb = rectOf(l.b); if (!ra || !rb) return;
     const ca = { x: ra.x + ra.w / 2, y: ra.y + ra.h / 2 }, cb = { x: rb.x + rb.w / 2, y: rb.y + rb.h / 2 };
     const sa = servers.find(x => x.host === l.a), sb = servers.find(x => x.host === l.b);
-    const down = (sa && !sa.online) || (sb && !sb.online);
+    const da = devOf(topo.nodes[l.a]), db = devOf(topo.nodes[l.b]);
+    const down = (sa && !sa.online) || (sb && !sb.online) || (da && da.up === false) || (db && db.up === false);
     const color = down ? '#ef4444' : (l.color || '#64748b'), w = l.width || 2.5, style = down ? 'dashed' : (l.style || 'solid');
     let d, mid;
     if (l.route && l.route.startsWith('elbow')) {
@@ -269,7 +273,9 @@ function showProps() {
     const s = servers.find(x => x.host === sel.id);
     h = `<h3>${o.custom ? '장비' : '서버'}</h3><div class="sub">${esc(sel.id)}${s ? ' · ' + esc(shortOs(s.os)) : ''}</div>` +
       field('이름', `<input type="text" data-k="label" value="${esc(o.label || '')}" placeholder="${esc(s ? label(s) : '')}">`) +
-      (o.custom ? field('부제', `<input type="text" data-k="sub" value="${esc(o.sub || '')}" placeholder="예: 192.168.0.1">`) : '') +
+      (o.custom ? field('부제', `<input type="text" data-k="sub" value="${esc(o.sub || '')}" placeholder="예: 192.168.0.1">`) +
+        field('감시 장비', `<select data-k="dev"><option value="">자동 (부제 = 장비 주소)</option>${devs.map(d => `<option value="${esc(d.id)}" ${o.dev === d.id ? 'selected' : ''}>${esc(d.name)} (${esc(d.host)})</option>`).join('')}</select>`) +
+        `<div class="hint">서버 현황의 "네트워크 장비"와 연결하면 응답 없을 때 빨간 불·빨간 선으로 표시됩니다.</div>` : '') +
       `<h4>아이콘</h4><div class="icg">${DEV.map(([k, t]) => `<button data-k="icon" data-v="${k}" class="${(o.icon || autoIcon(s, sel.id)) === k ? 'on' : ''}" title="${t}">${svgIcon(k)}</button>`).join('')}</div>` +
       field('크기', seg('size', o.size || 'm', [['s', '작게'], ['m', '보통'], ['l', '크게']])) +
       field('테두리 색', swatches('color', o.color, true)) +
@@ -315,6 +321,15 @@ function showProps() {
 }
 function showSide(id) {
   const s = servers.find(x => x.host === id), n = topo.nodes[id] || {};
+  const dv = devOf(n);
+  if (!s && dv) {
+    $side.innerHTML = `<h3>${esc(nodeLabel(id, n))}</h3><div class="sub">${esc(dv.name)} · ${esc(dv.host)}${dv.mode === 'tcp' ? ':' + dv.port : ''}</div>
+      <div class="row"><span>상태</span><span style="color:var(--${dv.up === true ? 'ok' : dv.up === false ? 'bad' : 'muted'})">${dv.up === true ? '정상' : dv.up === false ? '응답 없음' : '확인 중'}</span></div>
+      ${dv.up && dv.ms != null ? `<div class="row"><span>응답 시간</span><span>${dv.ms} ms</span></div>` : ''}${dv.err && dv.err !== '응답 없음' ? `<div class="row"><span>오류</span><span>${esc(dv.err)}</span></div>` : ''}
+      ${dv.avail != null ? `<div class="row"><span>24시간 가용률</span><span>${dv.avail}%</span></div>` : ''}${dv.memo ? `<div class="row"><span>메모</span><span>${esc(dv.memo)}</span></div>` : ''}
+      <button class="w" onclick="location.href='index.html'">서버 현황에서 자세히 보기</button>`;
+    $side.classList.add('open'); return;
+  }
   if (!s) { $side.innerHTML = `<h3>${esc(nodeLabel(id, n))}</h3><div class="sub">${esc(n.sub || '외부 장비 (모니터링 대상 아님)')}</div>`; $side.classList.add('open'); return; }
   const md = Math.max(0, ...(s.disks || []).map(d => d.pct || 0)); const gr = grade(s, active);
   $side.innerHTML = `<h3>${esc(label(s))}</h3><div class="sub">${esc(s.host)} · ${esc(s.ip || '')}<br>${esc(shortOs(s.os))}</div>

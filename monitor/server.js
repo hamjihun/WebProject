@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.40.3';
+const VERSION = '1.41.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -27,6 +27,8 @@ const auth = require('./auth').create({ file: USERS_FILE, log: console.log });
 const SCHEDULE_FILE = process.env.SCHEDULE_FILE || path.join(__dirname, 'data', 'schedule.json');   // 일정 관리
 const sched = require('./schedule').create({ file: SCHEDULE_FILE, log: console.log });
 const MEMO_FILE = process.env.MEMO_FILE || path.join(__dirname, 'data', 'memo.json');             // 메모 보드 (사람별)
+const DEVICES_FILE = process.env.DEVICES_FILE || path.join(__dirname, 'data', 'devices.json');     // 에이전트 없는 장비 (Ping·포트 감시)
+const devices = require('./devices').create({ file: DEVICES_FILE, log: console.log });
 const memo = require('./memo').create({ file: MEMO_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
@@ -884,7 +886,30 @@ const server = http.createServer(async (req, res) => {
     try { return json(res, 200, { ok: true, chats: await alerter.discoverChats() }); } catch (e) { return json(res, 502, { ok: false, error: String(e.message || e) }); }
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView(), active_alerts: alerter.getActive(), self_backup: selfBackup() });
+  if (req.method === 'GET' && url.pathname === '/api/servers') return json(res, 200, { now: Date.now(), version: VERSION, servers: serversView(), devices: devices.list(), active_alerts: alerter.getActive(), self_backup: selfBackup() });
+  // ---- 에이전트 없는 장비 (Ping·포트) ----
+  if (url.pathname === '/api/devices' || url.pathname === '/api/devices/check') {
+    try {
+      if (req.method === 'GET') return json(res, 200, { ok: true, devices: devices.list(), kinds: devices.KINDS });
+      if (req.method === 'PUT' && url.pathname === '/api/devices') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const d = devices.upsert(raw);
+        console.log(`[${new Date().toLocaleTimeString()}] 장비 ${raw.id ? '수정' : '등록'}: ${d.name} (${d.host})`);
+        return json(res, 200, { ok: true, device: d, devices: devices.list() });
+      }
+      if (req.method === 'DELETE' && url.pathname === '/api/devices') {
+        devices.remove(String(url.searchParams.get('id') || ''));
+        alerter.evaluateDevices(devices.list());
+        return json(res, 200, { ok: true, devices: devices.list() });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/devices/check') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const d = await devices.checkNow(String(raw.id || ''));
+        alerter.evaluateDevices(devices.list());
+        return json(res, 200, { ok: true, device: d, devices: devices.list() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, version: VERSION, servers: store.size, uptime: Math.round(process.uptime()) });
 
   if (req.method === 'GET' && url.pathname === '/api/history') {
@@ -910,6 +935,10 @@ setInterval(() => {
   try { alerter.evaluate(view); } catch (e) { console.error('알림 평가 오류:', e.message); }
   for (const s of view) if (!s.online) { hourBucket(s.host, Date.now()).off += 10; hourlyDirty = true; }   // 오프라인 시간 누적 (가동률 통계용)
 }, 10000).unref();
+// 에이전트 없는 장비: 30초마다 Ping·포트 확인 → 응답 없음 알림
+const runDevices = () => devices.checkAll().then(() => { try { alerter.evaluateDevices(devices.list()); } catch (e) { console.error('장비 알림 판단 오류:', e.message); } }).catch(() => {});
+setTimeout(runDevices, 3000).unref();
+setInterval(runDevices, 30000).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); saveHourly(true); process.exit(0); });
 
 server.on('error', (e) => {

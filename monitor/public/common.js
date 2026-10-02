@@ -1,6 +1,6 @@
 // 공통: 상단 탭, 포맷 함수. 각 페이지에서 <script src="common.js"></script> 로 불러온다.
 (function () {
-  const UI_VERSION = '1.40.3';
+  const UI_VERSION = '1.41.0';
   const PAGES = [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']];
   const here = (location.pathname.split('/').pop() || 'index.html');
   const params = new URLSearchParams(location.search);
@@ -11,7 +11,7 @@
   //  ① 본문(서버 카드·대시보드 칸 등)만 여기서 정한 크기(want)로 키우고 줄인다 — 상단바·팝업은 그대로
   //  ② 메모에서 브라우저 확대를 바꿔도 모니터링 화면 전체가 정할 때(dpr)와 같은 크기로 보이게 되돌려 맞춘다
   const ZKEY = 'imsMonZoom';
-  const Z_TARGET = { 'index.html': '#main', 'dashboard.html': 'body > .wrap', 'stats.html': 'main.wrap', 'backup.html': 'main.wrap' };
+  const Z_TARGET = { 'index.html': '#mainwrap', 'dashboard.html': 'body > .wrap', 'stats.html': 'main.wrap', 'backup.html': 'main.wrap' };
   const zOn = !!Z_TARGET[here] && params.get('embed') !== '1';
   let zNow = 1;                                            // 화면 전체에 걸린 배율 (마우스 좌표 보정용)
   function zGet() { try { const o = JSON.parse(localStorage.getItem(ZKEY) || 'null'); if (o && o.want > 0 && o.dpr > 0) return o; } catch (e) {} return null; }

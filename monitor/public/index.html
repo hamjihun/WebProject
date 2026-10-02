@@ -119,6 +119,47 @@
   .empty code { color:var(--accent); }
   /* 상세 팝업 */
   #overlay[hidden] { display:none; }
+  /* 에이전트 없는 장비 (Ping·포트) */
+  #devwrap { padding:2px 14px 16px; }
+  #devwrap .dh { display:flex; align-items:center; gap:10px; margin:4px 2px 8px; }
+  #devwrap .dh b { font-size:14px; }
+  #devwrap .dh .dim { font-size:12px; }
+  #devwrap .dh button { margin-left:auto; background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; font-size:12.5px; }
+  #devwrap .dh button:hover { border-color:var(--accent); color:var(--accent); }
+  #devs { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:8px; }
+  .dv { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--ok); border-radius:8px; padding:7px 10px 6px; cursor:pointer; min-width:0; }
+  .dv:hover { border-color:var(--accent); }
+  .dv.dvoff { border-color:var(--bad); border-left-color:var(--bad); background:rgba(239,68,68,.12); }
+  .dv.wait { border-left-color:var(--muted); }
+  .dv .r1 { display:flex; align-items:center; gap:6px; font-size:13px; }
+  .dv .r1 .k { flex:none; font-size:14px; width:18px; text-align:center; }
+  .dv .r1 b { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dv .r1 .ms { flex:none; font-size:12px; font-variant-numeric:tabular-nums; color:var(--ok); }
+  .dv.dvoff .r1 .ms { color:var(--bad); font-weight:700; } .dv.wait .r1 .ms { color:var(--muted); }
+  .dv .r2 { display:flex; justify-content:space-between; gap:6px; color:var(--muted); font-size:11px; margin-top:2px; }
+  .dv .r2 span:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dv .hb { display:flex; gap:1px; height:5px; margin-top:5px; }
+  .dv .hb i { flex:1; background:var(--barbg); border-radius:1px; }
+  .dv .hb i.o { background:var(--ok); opacity:.65; } .dv .hb i.p { background:var(--warn); } .dv .hb i.x { background:var(--bad); }
+  .devnone { color:var(--muted); font-size:12.5px; line-height:1.7; padding:10px 2px; }
+  #devmask { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:20; }
+  #devmask[hidden] { display:none; }
+  #devbox { background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:18px 20px 16px; width:min(440px,100%); box-shadow:0 20px 60px rgba(0,0,0,.4); }
+  #devbox h3 { margin:0 0 12px; font-size:16px; }
+  #devbox .f { display:flex; align-items:center; gap:10px; margin:8px 0; font-size:13px; }
+  #devbox .f[hidden] { display:none; }                /* display:flex 가 [hidden] 을 이기지 않게 */
+  #devbox .f > span:first-child { width:70px; color:var(--muted); flex:none; }
+  #devbox input[type=text], #devbox input[type=number], #devbox select { flex:1; min-width:0; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:6px 8px; font:inherit; }
+  #devbox .seg { display:flex; gap:4px; flex:1; }
+  #devbox .seg button { flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:6px 0; cursor:pointer; font:inherit; font-size:12.5px; }
+  #devbox .seg button.on { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; }
+  #devbox .tip { color:var(--muted); font-size:11.5px; line-height:1.6; margin:4px 0 0 80px; }
+  #devbox .st { margin:10px 0 0; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:12.5px; }
+  #devbox .bt { display:flex; gap:6px; margin-top:14px; }
+  #devbox .bt button { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:7px 12px; cursor:pointer; font:inherit; font-size:13px; }
+  #devbox .bt button.go { background:var(--accent); color:#0f172a; border-color:var(--accent); font-weight:700; margin-left:auto; }
+  #devbox .bt button.del { color:var(--bad); border-color:var(--bad); }
+  #devbox .msg { color:var(--bad); font-size:12px; min-height:16px; margin-top:6px; }
   #overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:10; }
   #detail { background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:18px; width:min(1100px,100%); max-height:92vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.4); }
   .dtop { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
@@ -153,7 +194,15 @@
 </header>
 <div id="vermismatch" hidden></div>
 <div id="banner" hidden></div>
+<div id="mainwrap">
 <main id="main"></main>
+<section id="devwrap">
+  <div class="dh"><b>🔌 네트워크 장비</b><span class="dim" id="devsum"></span>
+    <button id="devAdd" title="스위치·방화벽·프린터·CCTV·UPS 처럼 에이전트를 깔 수 없는 장비를 Ping·포트로 감시">＋ 장비 추가</button></div>
+  <div id="devs"></div>
+</section>
+</div>
+<div id="devmask" hidden><div id="devbox"></div></div>
 <div id="aoverlay" hidden>
   <div id="apanel">
     <div class="dtop"><h2>알림</h2><button class="close" id="aclose">닫기 ✕</button></div>
@@ -218,6 +267,7 @@
     <h3>서버실 온습도 <span class="dim" style="font-weight:400;font-size:12px">(온습도 센서를 꽂은 서버만 판단합니다)</span></h3>
     <div class="form">
       <label class="chk"><input type="checkbox" id="rEnvOn"> 온습도 알림 사용</label>
+      <label class="chk"><input type="checkbox" id="rDevOn"> 네트워크 장비(Ping·포트) 응답 없음 알림</label>
       <label>온도 상한 (℃)<input type="number" id="rTempHi" min="-40" max="80" step="0.5"></label>
       <label>온도 하한 (℃)<input type="number" id="rTempLo" min="-40" max="80" step="0.5"></label>
       <label>습도 상한 (%)<input type="number" id="rHumHi" min="0" max="100"></label>
@@ -281,7 +331,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.40.3';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.41.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -565,7 +615,7 @@ window.addEventListener('resize', () => { if (selected) loadDetail(); });
 
 // ---------- 알림 ----------
 const $aoverlay = document.getElementById('aoverlay');
-const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인', backup: '백업' };
+const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인', backup: '백업', device: '장비 응답 없음' };
 // Veeam 백업 요약/표
 const BK_RES = { Success: ['성공', 'ok'], Warning: ['경고', 'warn'], Failed: ['실패', 'bad'], Running: ['실행 중', 'run'], None: ['기록 없음', ''] };
 const ageTxt = (t) => { if (!t) return '없음'; const h = (Date.now() - t) / 3600000; return h < 1 ? '방금' : h < 48 ? Math.round(h) + '시간 전' : Math.round(h / 24) + '일 전'; };
@@ -637,7 +687,7 @@ function renderBanner() {
   $c.hidden = !activeAlerts.length; $c.textContent = activeAlerts.length;
   if (!activeAlerts.length) { $b.hidden = true; return; }
   $b.hidden = false;
-  $b.innerHTML = activeAlerts.map(a => `<span><b>⚠ ${esc(hostLabel(a.host))}</b> ${esc(a.msg || RULE_KO[a.rule] || a.rule)}</span>`).join('');
+  $b.innerHTML = activeAlerts.map(a => `<span><b>⚠ ${esc(a.name ? `${a.name} (${a.host})` : hostLabel(a.host))}</b> ${esc(a.msg || RULE_KO[a.rule] || a.rule)}</span>`).join('');
 }
 
 async function loadAlerts() {
@@ -666,7 +716,7 @@ function notify(title, body) {
 function renderAlertLists(j) {
   const $a = document.getElementById('activeList'), $r = document.getElementById('recentList');
   $a.innerHTML = (j.active || []).length
-    ? `<table class="ev">${j.active.map(a => `<tr><td class="t">${fmtTime(a.since)}부터</td><td><b>${esc(hostLabel(a.host))}</b></td><td>${esc(a.msg || RULE_KO[a.rule])}</td></tr>`).join('')}</table>`
+    ? `<table class="ev">${j.active.map(a => `<tr><td class="t">${fmtTime(a.since)}부터</td><td><b>${esc(a.name ? `${a.name} (${a.host})` : hostLabel(a.host))}</b></td><td>${esc(a.msg || RULE_KO[a.rule])}</td></tr>`).join('')}</table>`
     : '없음';
   const dl = (ev) => ev.delivery === 'telegram' ? '텔레그램 전송' : ev.delivery === 'quiet' ? '방해 금지 시간(미전송)' : ev.delivery === 'error' ? `전송 실패: ${esc(ev.error || '')}` : ev.delivery === 'off' ? '텔레그램 꺼짐' : ev.delivery === 'skipped' ? '이력만 기록' : ev.delivery === 'held' ? '유예 중 (복구되면 미전송)' : '';
   const $sel = document.getElementById('logMonth');
@@ -691,7 +741,7 @@ async function loadSettings() {
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
-  F('rEnvOn').checked = c.rules.env_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 28 : c.rules.temp_high;
+  F('rEnvOn').checked = c.rules.env_on !== false; F('rDevOn').checked = c.rules.device_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 28 : c.rules.temp_high;
   F('rTempLo').value = c.rules.temp_low == null ? 15 : c.rules.temp_low; F('rHumHi').value = c.rules.hum_high == null ? 80 : c.rules.hum_high;
   F('rHumLo').value = c.rules.hum_low == null ? 20 : c.rules.hum_low; F('rEnvMin').value = c.rules.env_minutes == null ? 3 : c.rules.env_minutes;
   F('qEnabled').checked = !!c.quiet.enabled; F('qFrom').value = c.quiet.from; F('qTo').value = c.quiet.to;
@@ -705,7 +755,7 @@ function collectSettings() {
     enabled: F('aEnabled').checked,
     rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), usb_window: (F('rUsbFrom').value && F('rUsbTo').value) ? F('rUsbFrom').value + '-' + F('rUsbTo').value : '', backup_skip_weekend: F('rSkipWeekend').checked, backup_hide: F('rBackupHide').value.trim(),
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '',
-             env_on: F('rEnvOn').checked, temp_high: num('rTempHi', 28), temp_low: num('rTempLo', 15), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
+             env_on: F('rEnvOn').checked, device_on: F('rDevOn').checked, temp_high: num('rTempHi', 28), temp_low: num('rTempLo', 15), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
   };
@@ -767,12 +817,92 @@ $aoverlay.addEventListener('click', (e) => { if (e.target === $aoverlay) closeAl
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$aoverlay.hidden) closeAlerts(); });
 
 // ---------- 갱신 ----------
+// ---------- 에이전트 없는 장비 (Ping·포트) ----------
+let devs = [], devEdit = null;
+const DKIND = [['switch', '🔀', '스위치'], ['firewall', '🛡️', '방화벽'], ['router', '📡', '라우터·공유기'], ['wifi', '📶', '무선 AP'], ['printer', '🖨️', '프린터·복합기'],
+  ['camera', '📹', 'CCTV·녹화기'], ['nas', '🗄️', 'NAS'], ['ups', '🔋', 'UPS'], ['server', '🖥️', '서버'], ['pc', '💻', 'PC'], ['storage', '💽', '스토리지'], ['etc', '🔌', '기타']];
+const dIcon = (k) => (DKIND.find((x) => x[0] === k) || DKIND[DKIND.length - 1])[1];
+function agoTxt(t) { if (!t) return ''; const m = Math.floor((Date.now() - t) / 60000); if (m < 1) return '방금'; if (m < 60) return m + '분'; const h = Math.floor(m / 60); if (h < 24) return h + '시간'; return Math.floor(h / 24) + '일'; }
+const durTxt = (t) => { const a = agoTxt(t); return a === '방금' ? '방금부터' : a + '째'; };
+function renderDevs() {
+  const box = document.getElementById('devs'); if (!box) return;
+  const down = devs.filter((d) => d.up === false).length, up = devs.filter((d) => d.up === true).length;
+  document.getElementById('devsum').innerHTML = devs.length ? `정상 ${up}${down ? ` · <b style="color:var(--bad)">응답 없음 ${down}</b>` : ''}${devs.length - up - down ? ` · 확인 중 ${devs.length - up - down}` : ''} · 30초마다 확인` : '';
+  const order = devs.slice().sort((a, b) => (a.up === false ? 0 : 1) - (b.up === false ? 0 : 1));   // 응답 없는 장비를 앞으로
+  box.innerHTML = order.length ? order.map((d) => {
+    const cls = d.up === false ? 'dvoff' : d.up === true ? '' : 'wait';
+    const right = d.up === false ? `응답 없음 ${agoTxt(d.since)}` : d.up === true ? (d.ms != null ? `${d.ms} ms` : '응답') : '확인 중';
+    const bars = (d.bins || []).map((v) => `<i class="${v == null ? '' : v >= 100 ? 'o' : v > 0 ? 'p' : 'x'}"></i>`).join('');
+    return `<div class="dv ${cls}" data-dev="${esc(d.id)}" title="${esc(d.name)} · ${esc(d.host)}${d.mode === 'tcp' ? ':' + d.port : ''}${d.memo ? '\n' + esc(d.memo) : ''}\n최근 1시간 응답 (왼쪽이 오래된 것)">
+      <div class="r1"><span class="k">${dIcon(d.kind)}</span><b>${esc(d.name)}</b><span class="ms">${right}</span></div>
+      <div class="r2"><span>${esc(d.host)}${d.mode === 'tcp' ? ' · 포트 ' + d.port : ''}${d.alert === false ? ' · 🔕' : ''}</span><span>${d.avail != null ? `24시간 ${d.avail}%` : ''}</span></div>
+      <div class="hb">${bars}</div></div>`;
+  }).join('') : '<div class="devnone">등록한 장비가 없습니다. 오른쪽 위 <b>＋ 장비 추가</b> 로 스위치·방화벽·공유기·프린터·CCTV·UPS·ipTIME NAS 처럼 에이전트를 깔 수 없는 장비를 등록하면, 30초마다 응답을 확인하고 끊기면 텔레그램으로 알려 줍니다.</div>';
+}
+function openDev(id) {
+  const d = id ? devs.find((x) => x.id === id) : null;
+  devEdit = d ? { ...d } : { name: '', host: '', mode: 'ping', port: '', kind: 'switch', alert: true, memo: '' };
+  const e = devEdit;
+  document.getElementById('devbox').innerHTML = `<h3>${d ? '장비 고치기' : '장비 추가'}</h3>
+    <div class="f"><span>이름</span><input type="text" id="dName" maxlength="40" placeholder="예: 2층 스위치" value="${esc(e.name)}"></div>
+    <div class="f"><span>주소</span><input type="text" id="dHost" maxlength="100" placeholder="예: 192.168.0.2" value="${esc(e.host)}"></div>
+    <div class="f"><span>확인 방식</span><div class="seg"><button data-m="ping" class="${e.mode !== 'tcp' ? 'on' : ''}">Ping</button><button data-m="tcp" class="${e.mode === 'tcp' ? 'on' : ''}">포트 연결</button></div></div>
+    <div class="f" id="dPortRow" ${e.mode === 'tcp' ? '' : 'hidden'}><span>포트</span><input type="number" id="dPort" min="1" max="65535" placeholder="예: 443" value="${e.port || ''}"></div>
+    <div class="tip">Ping 을 막아 둔 장비(방화벽 등)는 <b>포트 연결</b>로 관리 화면 포트(80·443 등)를 확인하세요.</div>
+    <div class="f"><span>종류</span><select id="dKind">${DKIND.map(([k, ic, t]) => `<option value="${k}" ${e.kind === k ? 'selected' : ''}>${ic} ${t}</option>`).join('')}</select></div>
+    <div class="f"><span>알림</span><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="dAlert" ${e.alert !== false ? 'checked' : ''}> 응답이 없으면 텔레그램으로 알림</label></div>
+    <div class="f"><span>메모</span><input type="text" id="dMemo" maxlength="200" placeholder="예: 서버실 랙 2번, 관리자 비번은 장부 참고" value="${esc(e.memo || '')}"></div>
+    ${d ? `<div class="st">${d.up === false ? `<b style="color:var(--bad)">● 응답 없음</b> · ${durTxt(d.since)}${d.err ? ' · ' + esc(d.err) : ''}` : d.up === true ? `<b style="color:var(--ok)">● 정상</b> · ${d.ms != null ? d.ms + ' ms' : ''} · ${durTxt(d.since)} 정상` : '확인 중…'}${d.avail != null ? ` · 24시간 응답률 ${d.avail}%` : ''}</div>` : ''}
+    <div class="msg" id="dMsg"></div>
+    <div class="bt">${d ? '<button class="del" data-a="del">삭제</button><button data-a="now">지금 확인</button>' : ''}<button data-a="close">닫기</button><button class="go" data-a="save">${d ? '저장' : '추가'}</button></div>`;
+  document.getElementById('devmask').hidden = false;
+  document.getElementById(d ? 'dName' : 'dHost').focus();
+}
+async function devApi(method, url, body) {
+  const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json(); if (!r.ok || !j.ok) throw new Error(j.error || '저장하지 못했습니다');
+  devs = j.devices || devs; renderDevs(); return j;
+}
+document.getElementById('devAdd').onclick = () => openDev(null);
+document.getElementById('devs').onclick = (e) => { const t = e.target.closest('[data-dev]'); if (t) openDev(t.dataset.dev); };
+document.getElementById('devmask').onclick = async (e) => {
+  const M = document.getElementById('dMsg');
+  if (e.target.id === 'devmask') { document.getElementById('devmask').hidden = true; return; }
+  const m = e.target.dataset.m;
+  if (m) { devEdit.mode = m; for (const b of document.querySelectorAll('#devbox .seg button')) b.classList.toggle('on', b.dataset.m === m); document.getElementById('dPortRow').hidden = m !== 'tcp'; return; }
+  const a = e.target.dataset.a; if (!a) return;
+  if (a === 'close') { document.getElementById('devmask').hidden = true; return; }
+  try {
+    if (a === 'save') {
+      const body = { id: devEdit.id, name: document.getElementById('dName').value, host: document.getElementById('dHost').value.trim(), mode: devEdit.mode,
+        port: Number(document.getElementById('dPort').value) || 0, kind: document.getElementById('dKind').value, alert: document.getElementById('dAlert').checked, memo: document.getElementById('dMemo').value };
+      if (!body.host) { M.textContent = '주소(IP)를 적어 주세요.'; return; }
+      await devApi('PUT', 'api/devices', body);
+      document.getElementById('devmask').hidden = true;
+    } else if (a === 'del') {
+      if (!confirm(`"${devEdit.name}" 장비를 감시 목록에서 지울까요?`)) return;
+      await devApi('DELETE', 'api/devices?id=' + encodeURIComponent(devEdit.id));
+      document.getElementById('devmask').hidden = true;
+    } else if (a === 'now') {
+      M.textContent = ''; e.target.textContent = '확인 중…';
+      await devApi('POST', 'api/devices/check', { id: devEdit.id });
+      openDev(devEdit.id);
+    }
+  } catch (err) { M.textContent = err.message; }
+};
+document.addEventListener('keydown', (e) => {
+  if (document.getElementById('devmask').hidden) return;
+  if (e.key === 'Escape') document.getElementById('devmask').hidden = true;
+  else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { const b = document.querySelector('#devbox [data-a="save"]'); if (b) b.click(); }
+});
+
 async function refresh() {
   try {
     const r = await fetch('api/servers');
     const j = await r.json();
     if (dragging) return;              // 드래그 중에는 갱신 보류
     servers = j.servers;
+    devs = j.devices || [];
     activeAlerts = j.active_alerts || activeAlerts;
     document.getElementById('ver').textContent = '수집기 v' + (j.version || '구버전');
     const $vm = document.getElementById('vermismatch');
@@ -780,7 +910,7 @@ async function refresh() {
       $vm.hidden = false;
       $vm.textContent = `⚠ 수집기 프로그램이 ${j.version ? 'v' + j.version : '구버전'} 이고 화면 파일은 v${UI_VERSION} 입니다. 예전 수집기 프로세스가 남아 있는 상태입니다. IMS 서버에서 deploy\\setup-collector.cmd 를 다시 실행하세요 (안 되면 작업 관리자에서 node.exe 종료 후 재실행).`;
     } else $vm.hidden = true;
-    render();
+    render(); renderDevs();
     if (selected) { loadDetail(); updateActionButtons(); }
   } catch (e) {
     $sum.textContent = '수집 서버에 연결할 수 없습니다: ' + e.message;

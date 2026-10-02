@@ -137,6 +137,7 @@ function donut(counts) {
   document.getElementById('dLegend').innerHTML = Object.entries(counts).map(([k, v], i) => `<div class="li"><span class="sw" style="background:var(${SERIES[i % 6]})"></span><span class="nm">${esc(k)}</span><span class="ct">${v}대</span></div>`).join('');
 }
 
+let devs = [];                                         // 에이전트 없는 장비 (Ping·포트)
 let settings = null;                                   // 알림 기준 (온습도 색 표시에 사용)
 async function loadSettings() { try { settings = await (await fetch('api/settings')).json(); } catch (e) {} }
 async function refresh() {
@@ -144,15 +145,22 @@ async function refresh() {
     const [sr, ar] = await Promise.all([fetch('api/servers'), fetch('api/alerts?n=12')]);
     const sj = await sr.json(), aj = await ar.json();
     const servers = sj.servers, active = aj.active || [], recent = aj.recent || [];
+    devs = sj.devices || [];
     if (MON.sound) MON.sound.check(recent);
     MON.setVersion(sj.version);
     const byHost = {}; for (const s of servers) byHost[s.host] = s;
     const g = {}; for (const s of servers) g[s.host] = grade(s, active);
     const cnt = { ok: 0, warn: 0, bad: 0, off: 0 }; for (const s of servers) cnt[g[s.host]]++;
     document.body.classList.toggle('alarm', cnt.off > 0 || cnt.bad > 0);
-    document.getElementById('chips').innerHTML = `<span class="chip">전체<b>${servers.length}</b></span><span class="chip ok">정상<b>${cnt.ok}</b></span><span class="chip warn">주의<b>${cnt.warn}</b></span><span class="chip bad">위험<b>${cnt.bad}</b></span><span class="chip bad">오프라인<b>${cnt.off}</b></span>` + envChips();
+    document.getElementById('chips').innerHTML = `<span class="chip">전체<b>${servers.length}</b></span><span class="chip ok">정상<b>${cnt.ok}</b></span><span class="chip warn">주의<b>${cnt.warn}</b></span><span class="chip bad">위험<b>${cnt.bad}</b></span><span class="chip bad">오프라인<b>${cnt.off}</b></span>` + devChip() + envChips();
 
     // 서버실 온습도 (센서 달린 서버만)
+    // 에이전트 없는 장비 (Ping·포트): 등록돼 있으면 한 칸, 응답 없는 장비가 있으면 빨갛게
+    function devChip() {
+      if (!devs.length) return '';
+      const down = devs.filter(d => d.up === false);
+      return `<span class="chip ${down.length ? 'bad' : 'ok'}" title="${down.length ? '응답 없음: ' + esc(down.map(d => d.name).join(', ')) : '네트워크 장비 모두 응답'}">장비<b>${devs.filter(d => d.up === true).length}/${devs.length}</b>${down.length ? ` · 응답 없음 ${down.length}` : ''}</span>`;
+    }
     function envChips() {
       const r = (settings && settings.rules) || {};
       const th = r.temp_high == null ? 28 : r.temp_high, tl = r.temp_low == null ? 15 : r.temp_low;

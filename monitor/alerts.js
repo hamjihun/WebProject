@@ -28,6 +28,7 @@ const DEFAULTS = {
     temp_high: 28, temp_low: 15,                // 온도 상한 / 하한 (℃)
     hum_high: 80, hum_low: 20,                  // 습도 상한 / 하한 (%)
     env_minutes: 3,                             // 이 시간 이상 지속되면 알림 (순간 튀는 값 무시)
+    device_on: true,                            // 에이전트 없는 장비(Ping·포트) 응답 없음 알림
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
@@ -184,6 +185,7 @@ function create({ settingsFile, logDir, log = console.log }) {
     const now = Date.now();
     let st = states.get(key);
     if (!st) { st = { since: null, active: false, notified: false, lastSent: 0 }; states.set(key, st); }
+    st.host = host; st.name = name;
     const thresholdChanged = opts.threshold !== undefined && st.threshold !== undefined && st.threshold !== opts.threshold;
     st.threshold = opts.threshold;
     if (thresholdChanged && st.active && !cond) {
@@ -368,11 +370,29 @@ function create({ settingsFile, logDir, log = console.log }) {
         }
       }
     }
-    for (const key of [...states.keys()]) if (!live.has(key.split('|')[0])) states.delete(key);
+    for (const key of [...states.keys()]) if (!key.startsWith('dev:') && !live.has(key.split('|')[0])) states.delete(key);
+  }
+
+  // 에이전트 없는 장비 (Ping·포트). 스위치·방화벽처럼 중요한 장비는 조용한 시간에도 보낸다
+  const DEV_CRITICAL = ['switch', 'firewall', 'router', 'ups', 'nas', 'server', 'storage'];
+  function evaluateDevices(devs) {
+    const on = settings.enabled && settings.rules.device_on !== false;
+    const keep = new Set();
+    for (const d of devs || []) {
+      const key = `dev:${d.id}|dev`;
+      if (!on || d.alert === false) continue;
+      keep.add(key);
+      if (d.up === null) continue;                        // 아직 판단 전
+      const how = d.mode === 'tcp' ? `포트 ${d.port}` : 'Ping';
+      check(key, d.host, d.name, d.up === false, () => `장비 응답 없음 (${how}${d.err ? ' · ' + d.err : ''})`,
+        { rule: 'device', critical: DEV_CRITICAL.includes(d.kind), recoverMsg: () => `장비 응답 복구 (${how}${d.ms != null ? ' ' + d.ms + 'ms' : ''})` });
+    }
+    for (const key of [...states.keys()]) if (key.startsWith('dev:') && !keep.has(key)) states.delete(key);
   }
 
   return {
     evaluate,
+    evaluateDevices,
     forget(host) {
       for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key);
       let changed = false;
@@ -438,7 +458,15 @@ function create({ settingsFile, logDir, log = console.log }) {
       saveSettings();
       return this.isMuted(host);
     },
-    getActive() { const out = []; for (const [key, st] of states) if (st.active) { const [host, rule, mount] = key.split('|'); out.push({ host, rule, mount, since: st.since, msg: st.msg }); } return out; },
+    getActive() {
+      const out = [];
+      for (const [key, st] of states) if (st.active) {
+        const [host, rule, mount] = key.split('|');
+        if (key.startsWith('dev:')) out.push({ host: st.host, name: st.name, dev: host.slice(4), rule, since: st.since, msg: st.msg });   // 장비는 주소·이름으로
+        else out.push({ host, rule, mount, since: st.since, msg: st.msg });
+      }
+      return out;
+    },
     getRecent(n = 100) { return recent.slice(0, n); },
     getSettings(masked = true) {
       const s = JSON.parse(JSON.stringify(settings));
