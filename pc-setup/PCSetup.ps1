@@ -341,9 +341,14 @@ $Worker = {
     #               이 체크박스를 한 번도 못 찾았으면 click 버튼을 누르지 않음 (체크된 채로 설치되는 것 방지)
     #   optional  : true 면 못 찾아도 실패로 보지 않고 다음 단계로
     #   timeout   : 이 단계를 기다릴 시간(초)
+    #   process   : 설치 프로그램이 아닌 다른 프로그램의 창에서 찾기 (예: "OpenWith" 기본 앱 선택 창, "msedge")
+    #               설치를 시작한 뒤에 실행된 그 이름의 프로그램 창만 대상
+    #   select    : click 전에 목록에서 고를 항목 (예: "*Adobe*Acrobat*")
+    #   close     : true 면 찾은 창을 닫음
     function Move-AutoStep($Job) {
         $Job.StepIdx++
         $Job.UncheckSeen = $false
+        $Job.Selected = $false
         $Job.LastAlso = [datetime]::MinValue
         $Job.PauseUntil = (Get-Date).AddSeconds(1)
         $steps = @($Job.P.auto)
@@ -354,12 +359,56 @@ $Worker = {
         else { Write-Log "$($Job.P.name): 설치 화면 자동 진행 완료" 'OK' }
     }
 
-    function Step-AutoJob($Job, $Windows) {
+    # 목록에서 이름이 맞는 항목 선택 (기본 앱 선택 창의 'Adobe Acrobat' 등)
+    function Select-UIItem($Window, [string]$Patterns) {
+        $types = @([System.Windows.Automation.ControlType]::ListItem, [System.Windows.Automation.ControlType]::DataItem,
+                   [System.Windows.Automation.ControlType]::TreeItem, [System.Windows.Automation.ControlType]::Button)
+        foreach ($ct in $types) {
+            foreach ($it in (Find-UIControl $Window $ct)) {
+                $label = ($it.Current.Name -replace '&', '').Trim()
+                if (-not $label -or -not (Test-LikeAny $label $Patterns)) { continue }
+                $sp = $null
+                if ($it.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$sp)) { $sp.Select(); return $label }
+                $ip = $null
+                if ($it.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$ip)) { $ip.Invoke(); return $label }
+            }
+        }
+        return $null
+    }
+
+    function Step-AutoJob($Job, $Windows, $AllWindows, $Procs) {
         $steps = @($Job.P.auto)
         if ($Job.Manual -or $Job.StepIdx -ge $steps.Count) { return }
         if ((Get-Date) -lt $Job.PauseUntil) { return }
         $st = $steps[$Job.StepIdx]
         $name = $Job.P.name
+
+        # 다른 프로그램(기본 앱 선택 창, 엣지 등)의 창에서 찾는 단계
+        if ($st.process) {
+            $ids = New-Object 'System.Collections.Generic.HashSet[int]'
+            foreach ($pr in $Procs) {
+                $pn = [IO.Path]::GetFileNameWithoutExtension([string]$pr.Name)
+                if ($pn -and (Test-LikeAny $pn $st.process) -and $pr.CreationDate -ge $Job.Since) { [void]$ids.Add([int]$pr.ProcessId) }
+            }
+            $Windows = @(foreach ($w in $AllWindows) { try { if ($ids.Contains([int]$w.Current.ProcessId)) { $w } } catch { } })
+        }
+
+        if ($st.close) {
+            $closed = 0
+            foreach ($w in $Windows) {
+                try {
+                    if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
+                    $wp = $null
+                    if ($w.TryGetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern, [ref]$wp)) { $wp.Close(); $closed++ }
+                }
+                catch { }
+            }
+            if ($closed -gt 0) {
+                Write-Log "${name}: $($st.process) 창 $closed 개 닫기" 'OK'
+                Move-AutoStep $Job
+                return
+            }
+        }
 
         if ((Get-Date) -gt $Job.Deadline) {
             if ($st.optional) {
@@ -373,9 +422,17 @@ $Worker = {
             return
         }
 
+        if ($st.close) { return }
         foreach ($w in $Windows) {
             try {
                 if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
+                if ($st.select -and -not $Job.Selected) {
+                    $picked = Select-UIItem $w $st.select
+                    if (-not $picked) { continue }
+                    $Job.Selected = $true
+                    Write-Log "${name}: '$picked' 선택" 'OK'
+                    Start-Sleep -Milliseconds 500
+                }
                 if ($st.uncheck -and (Clear-UICheckBoxes $w $st.uncheck $name $Job) -gt 0) { $Job.UncheckSeen = $true }
                 $btn = $null
                 if ($st.click -and ($Job.UncheckSeen -or -not $st.uncheck)) { $btn = Find-UIButton $w $st.click }
@@ -490,7 +547,7 @@ $Worker = {
             P = $P; Path = $Path; State = 'pending'; Proc = $null; Tree = $null; Since = $null; Code = $null
             StepIdx = 0; Deadline = [datetime]::MaxValue; PauseUntil = [datetime]::MinValue; LastAlso = [datetime]::MinValue
             UncheckSeen = $false; Manual = $false; Alive = $true; Failed = $false; Retried = $false; LastDismiss = [datetime]::MinValue
-            Toggled = (New-Object 'System.Collections.Generic.HashSet[string]')
+            Toggled = (New-Object 'System.Collections.Generic.HashSet[string]'); Selected = $false; DeadSince = $null
         }
     }
 
@@ -568,6 +625,7 @@ $Worker = {
     function Update-InstallJob($Job, $Procs, $AliveIds, $Windows) {
         Update-JobTree $Job $Procs $AliveIds
         if ($Job.State -eq 'running' -and ($Job.P.auto -or $Job.P.dismiss)) {
+            # (설치 프로그램이 끝난 뒤에도 다른 프로그램 창을 처리하는 단계가 남아 있을 수 있음)
             $mine = @(foreach ($w in $Windows) { try { if ($Job.Tree.Contains([int]$w.Current.ProcessId)) { $w } } catch { } })
             # 중간에 뜨는 팝업 닫기 (예: 반디집 '새 버전 홈페이지 방문?' → 아니요)
             if ($Job.P.dismiss -and ((Get-Date) - $Job.LastDismiss).TotalSeconds -ge 1) {
@@ -585,15 +643,28 @@ $Worker = {
                     catch { }
                 }
             }
-            if ($Job.P.auto) { Step-AutoJob $Job $mine }
+            if ($Job.P.auto) { Step-AutoJob $Job $mine $Windows $Procs }
         }
         if (-not $Job.Proc.HasExited) { return }
 
         $steps = @($Job.P.auto)
         $autoPending = $Job.P.auto -and -not $Job.Manual -and $Job.StepIdx -lt $steps.Count
         if ($autoPending) {
+            # 설치 창이 모두 닫힌 지 20초가 지났는데 설치 창에서 버튼을 누를 단계가 남아 있으면
+            # (사용자가 직접 마침을 누른 경우 등) 그 단계는 끝난 것으로 보고 넘어감
+            # 입력칸 채우기(ERP 서버 주소)와 다른 프로그램 창 단계는 건너뛰지 않음
+            $cur = $steps[$Job.StepIdx]
+            if ($Job.Alive) { $Job.DeadSince = $null }
+            elseif (-not $Job.DeadSince) { $Job.DeadSince = Get-Date }
+            elseif (((Get-Date) - $Job.DeadSince).TotalSeconds -ge 20 -and -not $cur.process -and -not $cur.setText) {
+                Write-Log "$($Job.P.name): 설치 창이 닫혀 $($Job.StepIdx + 1) 단계를 건너뜁니다."
+                Move-AutoStep $Job
+                $Job.DeadSince = $null
+                return
+            }
             # 남은 단계가 모두 '없어도 되는' 단계이고 관련 프로그램이 모두 끝났으면 완료
-            $rest = @($steps | Select-Object -Skip $Job.StepIdx | Where-Object { -not $_.optional })
+            # 단, 다른 프로그램 창(기본 앱 선택, 엣지)을 처리하는 단계는 설치 프로그램이 끝난 뒤에 뜨므로 기다림
+            $rest = @($steps | Select-Object -Skip $Job.StepIdx | Where-Object { -not $_.optional -or $_.process })
             if ($rest.Count -eq 0 -and -not $Job.Alive) { Complete-InstallJob $Job }
             return   # 아니면 다음 화면(Client Update 등)을 기다림 (제한시간이 지나면 직접 진행으로 전환)
         }
@@ -628,7 +699,7 @@ $Worker = {
                 $next = (Get-Date).AddSeconds($Gap)
             }
 
-            $procs = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, CreationDate -ErrorAction SilentlyContinue)
+            $procs = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, CreationDate, Name -ErrorAction SilentlyContinue)
             $aliveIds = New-Object 'System.Collections.Generic.HashSet[int]'
             foreach ($pr in $procs) { [void]$aliveIds.Add([int]$pr.ProcessId) }
             $windows = if ($needUia) { Get-TopWindows } else { @() }
@@ -675,9 +746,22 @@ $Worker = {
         return $jobs
     }
 
+    # 엣지 첫 실행 화면(데이터 없이 시작 / Google 데이터 / 허용 안 함)이 뜨지 않도록 정책 설정
+    function Disable-EdgeFirstRun {
+        $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+        try {
+            Set-Reg $key 'HideFirstRunExperience' 1            # 첫 실행 화면 숨김
+            Set-Reg $key 'PersonalizationReportingEnabled' 0   # 'Microsoft 환경을 더 유용하게' → 허용 안 함
+            Set-Reg $key 'AutoImportAtFirstRun' 4              # Google 등 다른 브라우저 데이터 가져오지 않음
+            Write-Log '엣지 첫 실행 화면 끄기 (데이터 없이 시작, 허용 안 함)' 'OK'
+        }
+        catch { Write-Log "엣지 첫 실행 화면 설정 실패 - $($_.Exception.Message)" 'WARN' }
+    }
+
     function Install-Programs {
         $list = @($Plan.Programs)
         if ($list.Count -eq 0) { Write-Log '선택된 프로그램이 없습니다.'; return }
+        if ($Cfg.browser.hideEdgeFirstRun -ne $false) { Disable-EdgeFirstRun }
         $files = Get-AppFiles $AppRoot
         $jobs = @()
         foreach ($p in $list) {
