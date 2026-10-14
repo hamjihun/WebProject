@@ -498,6 +498,16 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         }
     }
 
+    # 작업표시줄에 최소화된 창을 원래 크기로 (예: 반디집 설치 후 '환경 설정' 창)
+    function Restore-UIWindow($Window) {
+        $wp = $null
+        if ($Window.TryGetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern, [ref]$wp) -and
+            $wp.Current.WindowVisualState -eq [System.Windows.Automation.WindowVisualState]::Minimized) {
+            $wp.SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Normal)
+            Start-Sleep -Milliseconds 600
+        }
+    }
+
     function Step-AutoJob($Job, $Windows, $AllWindows, $Procs) {
         $steps = @($Job.P.auto)
         if ($Job.Manual -or $Job.StepIdx -ge $steps.Count) { return }
@@ -510,7 +520,8 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             $ids = New-Object 'System.Collections.Generic.HashSet[int]'
             foreach ($pr in $Procs) {
                 $pn = [IO.Path]::GetFileNameWithoutExtension([string]$pr.Name)
-                if ($pn -and (Test-LikeAny $pn $st.process) -and $pr.CreationDate -ge $Job.Since) { [void]$ids.Add([int]$pr.ProcessId) }
+                # anyAge: 설치 전부터 실행 중이던 프로그램도 포함 (예: 뒤에서 미리 실행돼 있던 엣지)
+                if ($pn -and (Test-LikeAny $pn $st.process) -and ($st.anyAge -or $pr.CreationDate -ge $Job.Since)) { [void]$ids.Add([int]$pr.ProcessId) }
             }
             $Windows = @(foreach ($w in $AllWindows) { try { if ($ids.Contains([int]$w.Current.ProcessId)) { $w } } catch { } })
         }
@@ -576,6 +587,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             try {
                 if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
                 if ($st.windowText -and -not (Test-WindowText $w $st.windowText)) { continue }
+                if ($st.restore) { Restore-UIWindow $w }
                 if ($st.radio) { Select-UIRadio $w $st.radio $name }
                 if ($st.select -and -not $Job.Selected) {
                     $picked = Select-UIItem $w $st.select
@@ -927,7 +939,11 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             Set-Reg $key 'HideFirstRunExperience' 1            # 첫 실행 화면 숨김
             Set-Reg $key 'PersonalizationReportingEnabled' 0   # 'Microsoft 환경을 더 유용하게' → 허용 안 함
             Set-Reg $key 'AutoImportAtFirstRun' 4              # Google 등 다른 브라우저 데이터 가져오지 않음
-            Write-Log '엣지 첫 실행 화면 끄기 (데이터 없이 시작, 허용 안 함)' 'OK'
+            Set-Reg $key 'StartupBoostEnabled' 0               # 뒤에서 미리 실행되지 않도록 (설정이 바로 적용되게)
+            Set-Reg $key 'BackgroundModeEnabled' 0
+            # 이미 뒤에서 실행 중인 엣지는 위 설정을 아직 모르므로 종료 → 다음에 열 때 설정 적용
+            Get-Process -Name msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Write-Log '엣지 첫 실행 화면 끄기 (데이터 없이 시작, 허용 안 함, 시작 부스트 끔)' 'OK'
         }
         catch { Write-Log "엣지 첫 실행 화면 설정 실패 - $($_.Exception.Message)" 'WARN' }
     }

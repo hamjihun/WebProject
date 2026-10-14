@@ -47,7 +47,7 @@
       "installed": [
         "%ProgramFiles%\\Bandizip\\Bandizip.exe"
       ],
-      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  '새 버전 홈페이지 방문?' → [아니요]\n  '사용 통계 및 오류 보고서 자동 전송' 체크 해제 (마우스 클릭)\n  → [동의 및 설치] → 설치 끝나면 [닫기]\n  → [지금 적용] → [확인]\n\n자동 진행이 멈추면 위 순서대로 직접 진행한 뒤\n이 창의 [완료] 를 누르세요.",
+      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  '새 버전 홈페이지 방문?' → [아니요]\n  '사용 통계 및 오류 보고서 자동 전송' 체크 해제 (마우스 클릭)\n  → [동의 및 설치] → 설치 끝나면 [닫기]\n  → 작업표시줄의 '환경 설정' 창: [지금 적용] → [확인]\n  → 열린 '반디집' 창 닫기\n\n자동 진행이 멈추면 위 순서대로 직접 진행한 뒤\n이 창의 [완료] 를 누르세요.",
       "auto": [
         {
           "window": "*설치*|*Setup*",
@@ -78,11 +78,23 @@
           "timeout": 600
         },
         {
-          "click": "지금 적용*",
+          "process": "Bandizip",
+          "window": "*환경 설정*|*Settings*|*Options*",
+          "restore": true,
+          "click": "지금 적용*|Apply*",
+          "timeout": 180
+        },
+        {
+          "process": "Bandizip",
+          "window": "*환경 설정*|*Settings*|*Options*",
+          "restore": true,
+          "click": "확인*|OK",
           "timeout": 60
         },
         {
-          "click": "확인*|OK",
+          "process": "Bandizip",
+          "window": "*반디집*|*Bandizip*",
+          "close": true,
           "timeout": 60,
           "optional": true
         }
@@ -147,7 +159,7 @@
         "%ProgramFiles(x86)%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
         "%ProgramFiles%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe"
       ],
-      "guide": "설치는 자동으로 진행합니다. (인터넷으로 내려받아 몇 분 걸릴 수 있습니다)\n끝나면 자동으로:\n  [마침] → PDF 기본 앱 'Adobe Acrobat' 선택 → [확인]\n  → 열린 엣지 창 닫기\n\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.",
+      "guide": "설치는 자동으로 진행합니다. (인터넷으로 내려받아 몇 분 걸릴 수 있습니다)\n끝나면 자동으로:\n  [마침] → PDF 기본 앱 'Adobe Acrobat' 선택 → [확인]\n  → Adobe 가 연 엣지 창 닫기\n\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.",
       "auto": [
         {
           "click": "마침*|Finish*|닫기*|Close*",
@@ -162,8 +174,9 @@
         },
         {
           "process": "msedge",
+          "anyAge": true,
           "close": true,
-          "timeout": 60,
+          "timeout": 90,
           "optional": true
         }
       ]
