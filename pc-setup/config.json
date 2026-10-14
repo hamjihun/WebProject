@@ -12,10 +12,8 @@
     {
       "name": "오피스",
       "find": [
-        "*오피스*\\setup.exe",
-        "*office*\\setup.exe",
-        "*오피스*.exe",
-        "*office*.exe"
+        "1.OfficeSetup.exe",
+        "*OfficeSetup*.exe"
       ],
       "args": "",
       "installed": [
@@ -29,6 +27,7 @@
     {
       "name": "반디집",
       "find": [
+        "*BANDIZIP*SETUP*.exe",
         "*bandizip*.exe",
         "*반디집*.exe"
       ],
@@ -42,10 +41,9 @@
     {
       "name": "크롬",
       "find": [
+        "*ChromeSetup*.exe",
         "*chrome*.msi",
-        "*chrome*.exe",
-        "*크롬*.msi",
-        "*크롬*.exe"
+        "*chrome*.exe"
       ],
       "args": "/silent /install",
       "installed": [
@@ -56,9 +54,9 @@
     {
       "name": "카카오톡",
       "find": [
+        "*KakaoTalk*Setup*.exe",
         "*kakaotalk*.exe",
-        "*카카오톡*.exe",
-        "*카톡*.exe"
+        "*카카오톡*.exe"
       ],
       "args": "",
       "installed": [
@@ -70,40 +68,53 @@
     {
       "name": "Adobe Reader",
       "find": [
-        "*reader*.exe",
-        "*acro*.exe",
-        "*adobe*.exe",
-        "*아크로뱃*.exe"
+        "Reader_kr_install.exe",
+        "*Reader*install*.exe",
+        "*acro*.exe"
       ],
-      "args": "/sAll /rs /msi EULA_ACCEPT=YES",
+      "args": "",
       "installed": [
         "%ProgramFiles%\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
         "%ProgramFiles(x86)%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
         "%ProgramFiles%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe"
-      ]
+      ],
+      "guide": "설치 창이 뜨면 그대로 진행하세요.\n(인터넷으로 내려받아 설치하므로 몇 분 걸릴 수 있습니다)"
     },
     {
       "name": "V3",
       "find": [
+        "*EPP_AgentSetup*.exe",
+        "*EPP*Agent*.exe",
         "*v3*.exe",
-        "*ahnlab*.exe",
-        "*안랩*.exe"
+        "*ahnlab*.exe"
       ],
       "args": "",
       "installed": [
-        "%ProgramFiles%\\AhnLab\\V3*",
-        "%ProgramFiles(x86)%\\AhnLab\\V3*"
+        "%ProgramFiles%\\AhnLab\\*",
+        "%ProgramFiles(x86)%\\AhnLab\\*"
       ],
       "guide": "설치 창이 뜨면 그대로 진행하세요."
     },
     {
       "name": "ERP",
       "find": [
-        "*erp*.exe",
-        "*erp*.msi"
+        "*ERP*KSystem*.exe",
+        "*ERP*.exe"
       ],
       "args": "",
-      "guide": "1) [다음] → [Finish]\n2) 'Client Update' 창이 뜨면 서버 주소에\n    {erpServer}\n    입력 (이미 복사되어 있으니 Ctrl+V)\n3) [다음]\n\n모두 끝나면 이 창의 [완료] 를 누르세요.",
+      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  [다음] → [Finish] → Client Update 에 {erpServer} 입력 → [다음]\n\n자동 진행이 멈추면 직접 진행하세요.\n(서버 주소는 복사되어 있으니 Ctrl+V)\n모두 끝나면 이 창의 [완료] 를 누르세요.",
+      "auto": [
+        {
+          "click": "Finish*|마침*|완료*",
+          "alsoClick": "다음*|Next*",
+          "timeout": 300
+        },
+        {
+          "setText": "{erpServer}",
+          "click": "다음*|Next*",
+          "timeout": 180
+        }
+      ],
       "confirmAfter": true,
       "clipboard": "{erpServer}"
     }
@@ -169,9 +180,10 @@
     ]
   },
   "docCentral": {
-    "folder": "8.문서중앙화",
-    "search": "*문서중앙화*",
-    "file": "",
+    "path": "8.문서중앙화.exe",
+    "find": [
+      "*문서중앙화*.exe"
+    ],
     "args": "",
     "guide": "설치 창이 뜨면 그대로 진행하세요.\n재부팅하라고 뜨면 [확인(OK)] 을 누르세요.\n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다."
   },

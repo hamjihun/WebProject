@@ -61,15 +61,17 @@ $Common = {
     }
 
     # 프로그램 항목의 설치파일 경로 찾기 (path 지정 > find 패턴 순서)
-    function Find-Installer([string]$AppRoot, $Files, $P) {
+    # find 패턴의 {site} 는 지점 이름으로 바뀜 (예: *ERP*{site}*.exe → *ERP*부산*.exe)
+    function Find-Installer([string]$AppRoot, $Files, $P, [string]$SiteName) {
         if ($P.path) {
             $full = $P.path
             if (-not [IO.Path]::IsPathRooted($full) -and $AppRoot) { $full = Join-Path $AppRoot $full }
             if (Test-Path -LiteralPath $full) { return $full }
         }
         if (-not $AppRoot) { return $null }
-        foreach ($pattern in @($P.find)) {
-            if (-not $pattern) { continue }
+        foreach ($raw in @($P.find)) {
+            if (-not $raw) { continue }
+            $pattern = $raw.Replace('{site}', $(if ($SiteName) { $SiteName } else { '*' }))
             $hits = @($Files | Where-Object { $_ -like $pattern })
             if ($hits.Count -gt 0) {
                 $best = $hits | Sort-Object Length | Select-Object -First 1
@@ -199,7 +201,7 @@ $Worker = {
     }
 
     # 설치파일 실행. 설치 프로그램이 띄운 다른 프로그램(카톡 실행 등)은 기다리지 않음
-    function Start-Installer([string]$Path, [string]$Arguments) {
+    function Start-InstallerProcess([string]$Path, [string]$Arguments) {
         if ($Path -like '*.msi') {
             $msiArgs = "/i `"$Path`" /qn /norestart"
             if ($Arguments) { $msiArgs += " $Arguments" }
@@ -210,8 +212,141 @@ $Worker = {
             if ($Arguments) { $sp.ArgumentList = $Arguments.Replace('{dir}', (Split-Path $Path)) }
             $proc = Start-Process @sp
         }
+        return $proc
+    }
+
+    function Start-Installer([string]$Path, [string]$Arguments) {
+        $proc = Start-InstallerProcess $Path $Arguments
         $proc.WaitForExit()
         return $proc.ExitCode
+    }
+
+    # --- 설치 화면 자동 조작 (버튼 클릭, 입력칸 채우기) ------------------------
+    function Initialize-UIA {
+        if (-not ('System.Windows.Automation.AutomationElement' -as [type])) {
+            Add-Type -AssemblyName UIAutomationClient
+            Add-Type -AssemblyName UIAutomationTypes
+        }
+    }
+
+    function Test-LikeAny([string]$Text, [string]$Patterns) {
+        foreach ($pt in $Patterns.Split('|')) { if ($Text -like $pt.Trim()) { return $true } }
+        return $false
+    }
+
+    # 설치를 시작한 뒤에 새로 실행된 프로그램들의 창 (설치 프로그램, Client Update 등)
+    function Get-NewWindows([datetime]$Since) {
+        $pids = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.Id -ne $PID -and $(try { $_.StartTime -ge $Since } catch { $false })
+        } | ForEach-Object { $_.Id })
+        if ($pids.Count -eq 0) { return @() }
+        $root = [System.Windows.Automation.AutomationElement]::RootElement
+        $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+        return @($wins | Where-Object { $pids -contains $_.Current.ProcessId })
+    }
+
+    function Find-UIControl($Window, $ControlType) {
+        $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ControlType)
+        return @($Window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond))
+    }
+
+    function Find-UIButton($Window, [string]$Patterns) {
+        foreach ($b in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::Button))) {
+            $name = ($b.Current.Name -replace '&', '').Trim()
+            if ($name -and $b.Current.IsEnabled -and (Test-LikeAny $name $Patterns)) { return $b }
+        }
+        return $null
+    }
+
+    function Invoke-UIButton($Button) {
+        $pattern = $null
+        if ($Button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke(); return }
+        $Button.SetFocus()
+        [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    }
+
+    # 입력칸이 여러 개면 비어 있거나 IP 처럼 생긴 칸을 고름
+    function Set-UIText($Window, [string]$Text) {
+        $edits = Find-UIControl $Window ([System.Windows.Automation.ControlType]::Edit)
+        if ($edits.Count -eq 0) { return $false }
+        $target = $edits[0]
+        foreach ($ed in $edits) {
+            $vp = $null
+            if ($ed.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
+                $v = $vp.Current.Value
+                if (-not $v -or $v -match '^\d{1,3}(\.\d{1,3}){1,3}(:\d+)?') { $target = $ed; break }
+            }
+        }
+        $vp = $null
+        if ($target.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp) -and -not $vp.Current.IsReadOnly) {
+            $vp.SetValue($Text)
+        }
+        else {
+            $target.SetFocus()
+            [System.Windows.Forms.SendKeys]::SendWait('^a')
+            [System.Windows.Forms.SendKeys]::SendWait($Text)
+        }
+        return $true
+    }
+
+    # config 의 auto 단계를 순서대로 실행. 단계를 못 찾으면 $false (직접 진행으로 전환)
+    #   click     : 누를 버튼 이름 (예: "Finish*|마침*")
+    #   alsoClick : click 버튼이 나올 때까지 계속 누를 버튼 (예: "다음*|Next*")
+    #   setText   : 입력칸에 넣을 값 (예: "{erpServer}"), 넣은 뒤 click 버튼을 누름
+    #   window    : 창 제목 패턴 (생략하면 새로 뜬 모든 창)
+    function Invoke-AutoSteps([datetime]$Since, $Steps, [string]$Name) {
+        Initialize-UIA
+        $n = 0
+        foreach ($st in @($Steps)) {
+            $n++
+            $timeout = if ($st.timeout) { [int]$st.timeout } else { 180 }
+            $deadline = (Get-Date).AddSeconds($timeout)
+            $lastAlso = [datetime]::MinValue
+            $done = $false
+            while (-not $done -and (Get-Date) -lt $deadline) {
+                Start-Sleep -Milliseconds 700
+                foreach ($w in (Get-NewWindows $Since)) {
+                    try {
+                        if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
+                        $btn = $null
+                        if ($st.click) { $btn = Find-UIButton $w $st.click }
+
+                        if ($st.setText) {
+                            if ($st.click -and -not $btn) { continue }
+                            $text = Expand-SiteText $st.setText
+                            if (-not (Set-UIText $w $text)) { continue }
+                            Write-Log "${Name}: '$text' 자동 입력" 'OK'
+                            Start-Sleep -Milliseconds 600
+                            if ($btn) { Invoke-UIButton $btn; Write-Log "${Name}: [$($btn.Current.Name)] 자동 클릭" 'OK' }
+                            $done = $true
+                            break
+                        }
+                        if ($btn) {
+                            Invoke-UIButton $btn
+                            Write-Log "${Name}: [$($btn.Current.Name)] 자동 클릭" 'OK'
+                            $done = $true
+                            break
+                        }
+                        if ($st.alsoClick -and ((Get-Date) - $lastAlso).TotalSeconds -ge 2) {
+                            $b2 = Find-UIButton $w $st.alsoClick
+                            if ($b2) {
+                                Invoke-UIButton $b2
+                                Write-Log "${Name}: [$($b2.Current.Name)] 자동 클릭"
+                                $lastAlso = Get-Date
+                                break
+                            }
+                        }
+                    }
+                    catch { }   # 읽는 도중 창이 닫힌 경우
+                }
+            }
+            if (-not $done) {
+                Write-Log "${Name}: 자동 진행 $n 단계에서 화면을 찾지 못했습니다. 안내창을 보고 직접 진행해 주세요." 'WARN'
+                return $false
+            }
+            Start-Sleep -Seconds 1
+        }
+        return $true
     }
 
     function Restart-Explorer {
@@ -282,7 +417,7 @@ $Worker = {
                     $code = $LASTEXITCODE
                 }
                 else {
-                    $path = Find-Installer $AppRoot $files $p
+                    $path = Find-Installer $AppRoot $files $p $Plan.Site.name
                     if (-not $path) { throw '설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요.' }
                     if ($p.clipboard) {
                         $clip = Expand-SiteText $p.clipboard
@@ -296,8 +431,20 @@ $Worker = {
                     }
                     if ($p.guide) { Show-Guide "$($p.name) 설치 안내" $p.guide }
                     try {
-                        $code = Start-Installer $path $p.args
-                        if ($p.confirmAfter) { Wait-GuideConfirm $p.name }
+                        if ($p.auto) {
+                            Set-Status "$($p.name): 설치 화면을 자동으로 진행하는 중... (마우스/키보드를 건드리지 마세요)"
+                            $since = (Get-Date).AddSeconds(-2)
+                            $proc = Start-InstallerProcess $path $p.args
+                            $autoOk = Invoke-AutoSteps $since $p.auto $p.name
+                            if ($autoOk) { Write-Log "$($p.name): 설치 화면 자동 진행 완료" 'OK' }
+                            elseif ($p.confirmAfter) { Wait-GuideConfirm $p.name }
+                            if (-not $proc.HasExited) { $proc.WaitForExit() }
+                            $code = $proc.ExitCode
+                        }
+                        else {
+                            $code = Start-Installer $path $p.args
+                            if ($p.confirmAfter) { Wait-GuideConfirm $p.name }
+                        }
                     }
                     finally { Hide-Guide }
                 }
@@ -975,19 +1122,19 @@ $Worker = {
     # --- 15. 문서중앙화 --------------------------------------------------------
     function Install-DocCentral {
         $dc = $Cfg.docCentral
-        $folder = Resolve-AppDir $AppRoot $dc.folder $dc.search
-        if (-not $folder) { throw "문서중앙화 폴더를 찾지 못했습니다: $($dc.folder)" }
+        $path = Find-Installer $AppRoot (Get-AppFiles $AppRoot) $dc $null
+        $folder = $null
+        if (-not $path -and ($dc.folder -or $dc.search)) { $folder = Resolve-AppDir $AppRoot $dc.folder $dc.search }
+        if (-not $path -and -not $folder) { throw '문서중앙화 설치파일을 찾지 못했습니다.' }
 
-        $path = $null
-        if ($dc.file) { $path = Join-Path $folder $dc.file }
-        else {
+        if (-not $path) {
             $files = @(Get-ChildItem -LiteralPath $folder -Recurse -File -ErrorAction SilentlyContinue |
                        Where-Object { $_.Extension -in '.exe', '.msi' -and $_.Name -notmatch '^unins' })
             $preferred = @($files | Where-Object { $_.Name -match 'setup|install|설치' })
             if ($preferred.Count) { $files = $preferred }
             $path = ($files | Sort-Object { $_.FullName.Length } | Select-Object -First 1).FullName
         }
-        if (-not $path -or -not (Test-Path -LiteralPath $path)) { throw "문서중앙화 설치파일을 찾지 못했습니다: $folder" }
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { throw '문서중앙화 설치파일을 찾지 못했습니다.' }
 
         Write-Log "문서중앙화 설치 시작: $path (설치 화면에서 직접 진행, 재부팅이 여러 번 될 수 있습니다)"
         Set-Status '문서중앙화: 설치 화면에서 직접 진행해 주세요 (재부팅하라고 뜨면 확인)'
@@ -1254,7 +1401,8 @@ function Update-ProgramList {
         $p = $list[$i]
         if ($p.winget) { $where = "winget: $($p.winget)" }
         else {
-            $path = Find-Installer $script:AppRoot $script:AppFiles $p
+            $siteName = $(if (Get-SelectedSite) { (Get-SelectedSite).name } else { $null })
+            $path = Find-Installer $script:AppRoot $script:AppFiles $p $siteName
             if ($path -and $script:AppRoot -and $path.StartsWith($script:AppRoot)) { $where = $path.Substring($script:AppRoot.Length).TrimStart('\') }
             elseif ($path) { $where = $path }
             else { $where = '⚠ 설치파일을 찾지 못함' }
@@ -1436,6 +1584,7 @@ foreach ($rb in $SiteRadios) {
         $site = Get-SelectedSite
         if (-not $site) { return }
         $lblSite.Text = "ERP 서버 $($site.erpServer)"
+        Update-ProgramList
         # 이 지점의 기본 프린터를 체크 (김해는 2F/1F 를 직접 선택)
         $names = @($site.printers)
         $all = @($script:Config.printer.printers)
