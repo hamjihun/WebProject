@@ -2050,15 +2050,71 @@ $TaskDefs = @(
 )
 
 # --- 왼쪽: 작업 선택 ---
-$grpTasks = New-Group '1. 실행할 작업 (위에서부터 순서대로)' 12 8 330 340
-$clbTasks = New-Control 'CheckedListBox' '' 10 22 310 276
-$clbTasks.CheckOnClick = $true
-foreach ($t in $TaskDefs) { [void]$clbTasks.Items.Add($t.Title, $t.Default) }
+$grpTasks = New-Group '1. 실행할 작업 (분류별)' 12 8 330 340
+# 화면에서는 분류별로 묶어서 보여줌 (실행 순서는 위 $TaskDefs 순서 그대로)
+$TaskCategories = [ordered]@{
+    '윈도우 설정'   = @('uac', 'network', 'taskbar', 'desktop', 'misc', 'power', 'startmenu')
+    '프로그램 설치' = @('update', 'programs', 'fonts', 'printer', 'docCentral', 'drivers')
+    '브라우저'      = @('extensions', 'edge', 'chrome')
+    '기타'          = @('officeLinks', 'activation')
+}
+# 분류에 빠진 작업이 있으면 '기타' 에 넣음
+$listed = @($TaskCategories.Values | ForEach-Object { $_ })
+$TaskCategories['기타'] = @($TaskCategories['기타']) + @($TaskDefs | Where-Object { $listed -notcontains $_.Id } | ForEach-Object { $_.Id })
+
+function Get-TaskCategory([string]$Id) {
+    foreach ($cat in $TaskCategories.Keys) { if (@($TaskCategories[$cat]) -contains $Id) { return $cat } }
+    return '기타'
+}
+
+$tvTasks = New-Control 'TreeView' '' 10 22 310 276
+$tvTasks.CheckBoxes = $true
+$tvTasks.ShowPlusMinus = $false
+$tvTasks.ShowRootLines = $false
+$tvTasks.ItemHeight = 20
+$TaskNodes = @{}
+foreach ($cat in $TaskCategories.Keys) {
+    $parent = $tvTasks.Nodes.Add($cat)
+    $parent.NodeFont = $BoldFont
+    $parent.Text = $cat      # 굵은 글꼴에서 글자가 잘리지 않도록 다시 지정
+    foreach ($id in @($TaskCategories[$cat])) {
+        $def = $TaskDefs | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+        if (-not $def) { continue }
+        $node = $parent.Nodes.Add($def.Title)
+        $node.Tag = $id
+        $node.Checked = [bool]$def.Default
+        $TaskNodes[$id] = $node
+    }
+}
+$tvTasks.ExpandAll()
+
+# 분류 체크 = 아래 작업 전부, 작업 체크 = 분류 체크 상태 갱신
+function Update-CategoryChecks {
+    foreach ($parent in $tvTasks.Nodes) {
+        $all = $true
+        foreach ($n in $parent.Nodes) { if (-not $n.Checked) { $all = $false } }
+        if ($parent.Checked -ne $all) { $parent.Checked = $all }
+    }
+}
+$tvTasks.Add_AfterCheck({
+    param($s, $e)
+    if ($e.Action -eq [System.Windows.Forms.TreeViewAction]::Unknown) { return }   # 코드에서 바꾼 것은 무시
+    if ($e.Node.Nodes.Count -gt 0) { foreach ($n in $e.Node.Nodes) { $n.Checked = $e.Node.Checked } }
+    else { Update-CategoryChecks }
+})
+$tvTasks.Add_BeforeCollapse({ param($s, $e) $e.Cancel = $true })   # 분류는 항상 펼쳐둠
+
+function Test-TaskChecked([string]$Id) { return ($TaskNodes.ContainsKey($Id) -and $TaskNodes[$Id].Checked) }
+function Set-AllTasks([bool]$On) {
+    foreach ($n in $TaskNodes.Values) { $n.Checked = $On }
+    Update-CategoryChecks
+}
+Update-CategoryChecks
 $btnTasksAll  = New-Control 'Button' '전체 선택' 10 302 150 30
 $btnTasksNone = New-Control 'Button' '전체 해제' 170 302 150 30
-$btnTasksAll.Add_Click({  for ($i = 0; $i -lt $clbTasks.Items.Count; $i++) { $clbTasks.SetItemChecked($i, $true) } })
-$btnTasksNone.Add_Click({ for ($i = 0; $i -lt $clbTasks.Items.Count; $i++) { $clbTasks.SetItemChecked($i, $false) } })
-$grpTasks.Controls.AddRange(@($clbTasks, $btnTasksAll, $btnTasksNone))
+$btnTasksAll.Add_Click({ Set-AllTasks $true })
+$btnTasksNone.Add_Click({ Set-AllTasks $false })
+$grpTasks.Controls.AddRange(@($tvTasks, $btnTasksAll, $btnTasksNone))
 
 # 실행 중/끝난 뒤에는 체크 목록 대신 진행 상황 표시판을 보여줌 (✔ 완료 / ▶ 진행 중 / ✖ 실패 ...)
 function New-StatusList([int]$X, [int]$Y, [int]$W, [int]$H, [string]$Col1, [int]$W1) {
@@ -2477,10 +2533,15 @@ function Set-StatusRow($Item, [string]$Value) {
     $Item.BackColor = $style[3]
 }
 
-function Add-StatusRow($List, [string]$Key, [string]$Label) {
+function Add-StatusRow($List, [string]$Key, [string]$Label, [string]$Group = '') {
     $it = New-Object System.Windows.Forms.ListViewItem($Label)
     [void]$it.SubItems.Add('')
     $it.Tag = $Key
+    if ($Group) {
+        $g = $List.Groups[$Group]
+        if (-not $g) { $g = $List.Groups.Add($Group, $Group) }
+        $it.Group = $g
+    }
     [void]$List.Items.Add($it)
     Set-StatusRow $it 'pending|'
 }
@@ -2512,13 +2573,13 @@ function Close-StatusView([string]$Leftover) {
 }
 
 function Show-StatusView([bool]$On) {
-    $clbTasks.Visible = -not $On
+    $tvTasks.Visible = -not $On
     $lvTasks.Visible = $On
     $clbPrograms.Visible = -not $On
     $lvPrograms.Visible = $On
     foreach ($b in @($btnPick, $btnRescan, $btnAdd, $btnRemove, $btnTasksAll, $btnTasksNone)) { $b.Visible = -not $On }
     if (-not $On) {
-        $grpTasks.Text = '1. 실행할 작업 (위에서부터 순서대로)'
+        $grpTasks.Text = '1. 실행할 작업 (분류별)'
         $grpApps.Text = '6. 설치할 프로그램'
         $btnStart.Text = '셋팅 시작'
     }
@@ -2528,7 +2589,7 @@ function Show-StatusView([bool]$On) {
 $script:Running = $false
 $script:ResumeState = $null
 # 진행 상황 표시판이 회색으로 흐려지지 않도록 그룹 대신 개별 컨트롤만 잠금
-$controlsToLock = @($clbTasks, $btnTasksAll, $btnTasksNone, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $clbPrograms, $btnPick, $btnRescan, $btnAdd, $btnRemove, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
+$controlsToLock = @($tvTasks, $btnTasksAll, $btnTasksNone, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $clbPrograms, $btnPick, $btnRescan, $btnAdd, $btnRemove, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
 
 function Start-Setup([bool]$Auto = $false) {
     # 지난 결과를 보고 있는 중이면 먼저 선택 화면으로 돌아감
@@ -2537,7 +2598,7 @@ function Start-Setup([bool]$Auto = $false) {
         $lblStatus.Text = '실행할 작업과 프로그램을 확인한 뒤 [셋팅 시작] 을 누르세요.'
         return
     }
-    $steps = @(for ($i = 0; $i -lt $TaskDefs.Count; $i++) { if ($clbTasks.GetItemChecked($i)) { $TaskDefs[$i] } })
+    $steps = @($TaskDefs | Where-Object { Test-TaskChecked $_.Id })
     $resume = $script:ResumeState
     if ($steps.Count -eq 0 -and -not $resume) { [System.Windows.Forms.MessageBox]::Show('실행할 작업을 하나 이상 선택하세요.') | Out-Null; return }
     $ids = @($steps | ForEach-Object { $_.Id })
@@ -2648,7 +2709,10 @@ function Start-Setup([bool]$Auto = $false) {
 
     # 진행 상황 표시판 준비
     $lvTasks.Items.Clear()
-    foreach ($st in $steps) { Add-StatusRow $lvTasks $st.Id $st.Title }
+    $lvTasks.Groups.Clear()
+    foreach ($cat in $TaskCategories.Keys) {
+        foreach ($st in @($steps | Where-Object { (Get-TaskCategory $_.Id) -eq $cat })) { Add-StatusRow $lvTasks $st.Id $st.Title $cat }
+    }
     $lvPrograms.Items.Clear()
     if ($ids -contains 'programs') { foreach ($p in $selectedPrograms) { Add-StatusRow $lvPrograms $p.name $p.name } }
     Show-StatusView $true
@@ -2770,7 +2834,8 @@ function Read-ResumeState {
 
 function Apply-ResumeState($State) {
     $ids = @($State.Steps)
-    for ($i = 0; $i -lt $TaskDefs.Count; $i++) { $clbTasks.SetItemChecked($i, ($ids -contains $TaskDefs[$i].Id)) }
+    foreach ($id in $TaskNodes.Keys) { $TaskNodes[$id].Checked = ($ids -contains $id) }
+    Update-CategoryChecks
     # 지점을 먼저 고른 뒤(지점 기본 프린터가 체크됨) 저장된 프린터 선택으로 덮어씀
     if ($State.Site) {
         $sites = @($Config.sites)
