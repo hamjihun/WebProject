@@ -1771,7 +1771,7 @@ $TaskDefs = @(
     @{ Id = 'edge';        Title = '엣지 설정';                         Default = $true },
     @{ Id = 'chrome';      Title = '크롬 설정';                         Default = $true },
     @{ Id = 'extensions';  Title = '크롬·엣지 업데이트 + ClouDoc 확장';  Default = $true },
-    @{ Id = 'printer';     Title = '프린터 설치';                       Default = $true },
+    @{ Id = 'printer';     Title = '프린터 설치 (기본 꺼짐, 직접 설치)'; Default = $false },
     @{ Id = 'drivers';     Title = '드라이버 확인 (제조사 도구 등)';     Default = $false },
     @{ Id = 'docCentral';  Title = '문서중앙화 설치 (재부팅 여러 번)';   Default = $true },
     @{ Id = 'activation';  Title = '정품 인증 확인';                    Default = $true }
@@ -1837,7 +1837,7 @@ $lblSite = New-Control 'Label' '' ($x + 4) 22 (390 - $x) 20
 $lblSite.ForeColor = $Gray
 $grpSite.Controls.Add($lblSite)
 
-$grpPrinter = New-Group '4. 설치할 프린터 (네트워크)' 354 252 400 92
+$grpPrinter = New-Group '4. 프린터 (작업에서 체크한 경우만 설치)' 354 252 400 92
 $clbPrinters = New-Control 'CheckedListBox' '' 10 20 380 64
 $clbPrinters.CheckOnClick = $true
 $grpPrinter.Controls.Add($clbPrinters)
