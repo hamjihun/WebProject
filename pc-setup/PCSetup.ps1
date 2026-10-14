@@ -4,7 +4,9 @@
     - Setup.bat 으로 실행하세요. (관리자 권한 자동 요청)
     - 설치할 프로그램, 프린터, 각종 설정 값은 config.json 에서 관리합니다.
     - 설치파일은 USB(이름: 프로그램USB)의 【 Application 】 폴더에서 자동으로 찾습니다.
+    - 재부팅이 필요하면(윈도우 업데이트, 문서중앙화) 로그인 후 -Resume 으로 자동 실행되어 이어서 진행합니다.
 #>
+param([switch]$Resume)
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -14,6 +16,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic
 $Root       = $PSScriptRoot
 $ConfigPath = Join-Path $Root 'config.json'
 $LogDir     = Join-Path $Root 'logs'
+$ResumePath = Join-Path $env:ProgramData 'PCSetup\resume.json'
 
 # ---------------------------------------------------------------------------
 # 관리자 권한 확인
@@ -140,9 +143,10 @@ $Worker = {
 
     . ([scriptblock]::Create($Plan.CommonCode))
 
-    $Cfg     = $Plan.Config
-    $AppRoot = $Plan.AppRoot
-    $State   = @{ Step = 0; RestartExplorer = $false }
+    $Cfg        = $Plan.Config
+    $AppRoot    = $Plan.AppRoot
+    $ResumePath = $Plan.ResumePath
+    $State      = @{ Step = 0; RestartExplorer = $false; ResumeHere = $false; ResumeRound = 0; UpdateReboot = $false }
     $IsWin11 = [Environment]::OSVersion.Version.Build -ge 22000
 
     function Write-Log([string]$Message, [string]$Level = 'INFO') {
@@ -172,6 +176,26 @@ $Worker = {
         if ($LASTEXITCODE -eq 0) { Write-Log $Desc 'OK'; return $true }
         Write-Log "$Desc 실패 (코드 $LASTEXITCODE)" 'ERROR'
         return $false
+    }
+
+    function Expand-SiteText([string]$Text) {
+        if (-not $Text) { return $Text }
+        $server = if ($Plan.Site) { $Plan.Site.erpServer } else { '(지점을 선택하지 않음)' }
+        return $Text.Replace('{erpServer}', $server)
+    }
+
+    # 화면 위에 항상 떠 있는 안내창 (설치 화면에서 직접 고를 것이 있을 때)
+    function Show-Guide([string]$Title, [string]$Text) { $Sync.Guide = "[$Title]`n`n$(Expand-SiteText $Text)" }
+
+    function Hide-Guide { $Sync.GuideWait = $false; $Sync.Guide = '' }
+
+    # 안내창의 [완료] 버튼을 누를 때까지 대기
+    function Wait-GuideConfirm([string]$Name) {
+        $Sync.GuideAck = $false
+        $Sync.GuideWait = $true
+        Set-Status "${Name}: 남은 설정을 마친 뒤 안내창의 [완료] 를 눌러주세요"
+        while (-not $Sync.GuideAck) { Start-Sleep -Milliseconds 500 }
+        $Sync.GuideWait = $false
     }
 
     # 설치파일 실행. 설치 프로그램이 띄운 다른 프로그램(카톡 실행 등)은 기다리지 않음
@@ -260,12 +284,22 @@ $Worker = {
                 else {
                     $path = Find-Installer $AppRoot $files $p
                     if (-not $path) { throw '설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요.' }
+                    if ($p.clipboard) {
+                        $clip = Expand-SiteText $p.clipboard
+                        [System.Windows.Forms.Clipboard]::SetText($clip)
+                        Write-Log "$($p.name): '$clip' 를 클립보드에 복사했습니다. (Ctrl+V 로 붙여넣기)"
+                    }
                     if ($p.args) { Write-Log "$($p.name): 자동 설치 시작 ($path)" }
                     else {
-                        Write-Log "$($p.name): 설치 화면이 뜨면 직접 진행해 주세요. ($path)"
+                        Write-Log "$($p.name): 설치 화면이 뜨면 안내에 따라 진행해 주세요. ($path)"
                         Set-Status "$($p.name): 설치 화면에서 직접 진행해 주세요 (끝나면 자동으로 다음 단계)"
                     }
-                    $code = Start-Installer $path $p.args
+                    if ($p.guide) { Show-Guide "$($p.name) 설치 안내" $p.guide }
+                    try {
+                        $code = Start-Installer $path $p.args
+                        if ($p.confirmAfter) { Wait-GuideConfirm $p.name }
+                    }
+                    finally { Hide-Guide }
                 }
 
                 if ($code -eq 0) { Write-Log "$($p.name): 설치 완료" 'OK' }
@@ -752,16 +786,19 @@ $Worker = {
             $searcher = $session.CreateUpdateSearcher()
             $result   = $searcher.Search($Criteria)
         }
-        catch { Write-Log "${Label} 검색 실패: $($_.Exception.Message)" 'ERROR'; return }
+        catch { Write-Log "${Label} 검색 실패: $($_.Exception.Message)" 'ERROR'; return -1 }
 
+        # 제외: 윈도우 버전 업그레이드, 소프트웨어 '미리 보기' 같은 선택 항목 (선택적 업데이트의 드라이버는 포함)
         $updates = @()
         for ($i = 0; $i -lt $result.Updates.Count; $i++) {
             $u = $result.Updates.Item($i)
             $isUpgrade = $false
             foreach ($c in $u.Categories) { if ($c.Name -eq 'Upgrades') { $isUpgrade = $true } }
-            if ($isUpgrade) { Write-Log "버전 업그레이드는 건너뜀: $($u.Title)" 'WARN' } else { $updates += $u }
+            if ($isUpgrade) { Write-Log "버전 업그레이드는 건너뜀: $($u.Title)" 'WARN' }
+            elseif ($u.BrowseOnly -and $u.Type -ne 2) { Write-Log "선택 항목은 건너뜀: $($u.Title)" }
+            else { $updates += $u }
         }
-        if ($updates.Count -eq 0) { Write-Log "${Label}: 설치할 항목이 없습니다." 'OK'; return }
+        if ($updates.Count -eq 0) { Write-Log "${Label}: 설치할 항목이 없습니다." 'OK'; return 0 }
         Write-Log "${Label}: $($updates.Count)개 발견"
 
         for ($i = 0; $i -lt $updates.Count; $i++) {
@@ -782,9 +819,93 @@ $Worker = {
                 $r = $installer.Install()
                 if ($r.ResultCode -eq 2 -or $r.ResultCode -eq 3) { Write-Log "설치 완료: $($u.Title)" 'OK' }
                 else { Write-Log "설치 실패 (결과 코드 $($r.ResultCode)): $($u.Title)" 'ERROR' }
-                if ($r.RebootRequired) { $Sync.RebootRequired = $true }
+                if ($r.RebootRequired) { $Sync.RebootRequired = $true; $State.UpdateReboot = $true }
             }
             catch { Write-Log "설치 오류: $($u.Title) - $($_.Exception.Message)" 'ERROR' }
+        }
+        return $updates.Count
+    }
+
+    function Test-PendingReboot {
+        return ((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') -or
+                (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'))
+    }
+
+    # 재부팅 전에 설치 중인 프로그램이 없는지 확인 (최대 10분 대기)
+    function Wait-InstallIdle {
+        for ($i = 0; $i -lt 120; $i++) {
+            $busy = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.SessionId -ne 0 -and ($_.ProcessName -eq 'msiexec' -or $_.ProcessName -match 'setup|install')
+            })
+            if ((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\InProgress')) { $busy += 'msi' }
+            if ($busy.Count -eq 0) { return }
+            if ($i -eq 0) { Write-Log "설치 중인 프로그램이 끝나기를 기다립니다: $(($busy | ForEach-Object { if ($_.ProcessName) { $_.ProcessName } else { $_ } }) -join ', ')" 'WARN' }
+            Set-Status '재부팅 전에 설치 중인 프로그램이 끝나기를 기다리는 중...'
+            Start-Sleep -Seconds 5
+        }
+        Write-Log '10분을 기다려도 설치 중인 프로그램이 남아 있습니다.' 'WARN'
+    }
+
+    # 재부팅 후 로그인하면 남은 작업을 이어서 하도록 예약
+    function Register-Resume([string[]]$RemainingIds, [int]$Round) {
+        $base = Split-Path $ResumePath
+        $app  = Join-Path $base 'app'
+        if (-not (Test-Path -LiteralPath $base)) { New-Item -ItemType Directory -Path $base -Force | Out-Null }
+        # USB 드라이브 문자가 바뀌어도 실행되도록 도구를 C: 에 복사
+        if ($Plan.Root.TrimEnd('\') -ne $app) {
+            if (Test-Path -LiteralPath $app) { Remove-Item -LiteralPath $app -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType Directory -Path $app -Force | Out-Null
+            Get-ChildItem -LiteralPath $Plan.Root | Where-Object { $_.Name -ne 'logs' } |
+                ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $app -Recurse -Force }
+        }
+        $state = [ordered]@{
+            Steps       = @($RemainingIds)
+            UpdateRound = $Round
+            Site        = $Plan.Site
+            Printers    = @($Plan.Printers)
+            Notices     = @($Sync.Notices)
+            LogFile     = $Plan.LogFile
+            SavedAt     = (Get-Date).ToString('s')
+        }
+        $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResumePath -Encoding UTF8
+
+        $user      = "$env:USERDOMAIN\$env:USERNAME"
+        $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$app\PCSetup.ps1`" -Resume"
+        $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user
+        $trigger.Delay = 'PT20S'
+        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+        $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+        Register-ScheduledTask -TaskName 'PCSetupResume' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Write-Log "재부팅 후 로그인하면 이어서 진행하도록 예약했습니다. (남은 작업: $($RemainingIds -join ', '))"
+    }
+
+    function Clear-Resume {
+        Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $ResumePath -Force -ErrorAction SilentlyContinue
+    }
+
+    # 윈도우 업데이트(선택적 업데이트의 드라이버 포함)를 '최신 버전' 이 될 때까지 반복
+    function Invoke-UpdateCycle {
+        $max = if ($Cfg.windowsUpdate.maxRounds) { [int]$Cfg.windowsUpdate.maxRounds } else { 6 }
+        $round = [int]$Plan.UpdateRound
+        while ($true) {
+            $round++
+            if ($round -gt $max) {
+                Write-Log "업데이트를 $max 회 반복했지만 남은 항목이 있습니다." 'WARN'
+                Add-Notice '윈도우 업데이트: 남은 항목이 있습니다. 설정 > Windows 업데이트 에서 확인하세요.'
+                return
+            }
+            Write-Log "윈도우 업데이트 $round 회차 (드라이버 포함)"
+            $State.UpdateReboot = $false
+            $n = Invoke-WindowsUpdate 'IsInstalled=0 and IsHidden=0' '윈도우 업데이트'
+            if ($n -lt 0) { Add-Notice '윈도우 업데이트 검색에 실패했습니다. 인터넷 연결을 확인하고 설정 > Windows 업데이트 에서 진행하세요.'; return }
+            if ($State.UpdateReboot -or (Test-PendingReboot)) {
+                Write-Log '업데이트 적용을 위해 재부팅이 필요합니다.' 'WARN'
+                $State.ResumeRound = $round
+                $State.ResumeHere = $true
+                return
+            }
+            if ($n -eq 0) { Write-Log '윈도우 업데이트: 최신 버전입니다.' 'OK'; return }
         }
     }
 
@@ -831,7 +952,7 @@ $Worker = {
             }
         }
 
-        if ($d.windowsUpdate) { Invoke-WindowsUpdate "IsInstalled=0 and IsHidden=0 and Type='Driver'" '드라이버 업데이트' }
+        if ($d.windowsUpdate) { [void](Invoke-WindowsUpdate "IsInstalled=0 and IsHidden=0 and Type='Driver'" '드라이버 업데이트') }
         Write-Log '설치 후 장치 상태 재확인:'
         Write-ProblemDevices
     }
@@ -869,10 +990,11 @@ $Worker = {
         if (-not $path -or -not (Test-Path -LiteralPath $path)) { throw "문서중앙화 설치파일을 찾지 못했습니다: $folder" }
 
         Write-Log "문서중앙화 설치 시작: $path (설치 화면에서 직접 진행, 재부팅이 여러 번 될 수 있습니다)"
-        Set-Status '문서중앙화: 설치 화면에서 직접 진행해 주세요 (재부팅이 여러 번 될 수 있습니다)'
-        $code = Start-Installer $path $dc.args
+        Set-Status '문서중앙화: 설치 화면에서 직접 진행해 주세요 (재부팅하라고 뜨면 확인)'
+        Show-Guide '문서중앙화 설치 안내' $dc.guide
+        try { $code = Start-Installer $path $dc.args }
+        finally { Hide-Guide }
         Write-Log "문서중앙화 설치 프로그램 종료 (코드 $code)" 'OK'
-        Add-Notice '문서중앙화: 설치 중 재부팅이 요청되면 그대로 진행하세요.'
     }
 
     # --- 실행 ----------------------------------------------------------------
@@ -886,7 +1008,12 @@ $Worker = {
             $State.Step = $s
             Set-StepProgress 0 1
             $step = $Plan.Steps[$s]
-            if ($step.Id -eq 'docCentral') { Restart-Explorer }
+            if ($step.Id -eq 'docCentral') {
+                # 문서중앙화 설치가 PC를 재부팅해도 남은 작업(정품 인증 확인 등)을 이어서 하도록 미리 예약
+                Restart-Explorer
+                $after = @($Plan.Steps | Select-Object -Skip ($s + 1) | ForEach-Object { $_.Id })
+                try { Register-Resume $after 0 } catch { Write-Log "이어하기 예약 실패: $($_.Exception.Message)" 'WARN' }
+            }
             Write-Log "===== $($step.Title) ====="
             Set-Status $step.Title
             try {
@@ -905,16 +1032,39 @@ $Worker = {
                     'extensions'  { Install-BrowserExtensions }
                     'printer'     { Install-Printers }
                     'drivers'     { Install-Drivers }
-                    'update'      { Invoke-WindowsUpdate "IsInstalled=0 and IsHidden=0 and Type='Software'" '윈도우 업데이트' }
+                    'update'      { Invoke-UpdateCycle }
                     'activation'  { Test-Activation }
                     'docCentral'  { Install-DocCentral }
                 }
             }
             catch { Write-Log "$($step.Title) 중 오류: $($_.Exception.Message)" 'ERROR' }
+
+            # 윈도우 업데이트 후 재부팅이 필요하면: 설치 중인 프로그램이 없는지 확인 → 이어하기 예약 → 재부팅
+            if ($State.ResumeHere) {
+                Restart-Explorer
+                Wait-InstallIdle
+                $remaining = @($Plan.Steps | Select-Object -Skip $s | ForEach-Object { $_.Id })
+                try {
+                    Register-Resume $remaining $State.ResumeRound
+                    $Sync.ResumeRequested = $true
+                }
+                catch {
+                    Write-Log "이어하기 예약 실패: $($_.Exception.Message)" 'ERROR'
+                    Add-Notice '재부팅 후 Setup.bat 을 다시 실행해서 윈도우 업데이트부터 이어서 진행하세요.'
+                    $Sync.RebootRequired = $true
+                }
+                break
+            }
         }
 
         Restart-Explorer
-        Write-Log '===== 모든 작업 완료 =====' 'OK'
+        if ($Sync.ResumeRequested) {
+            Write-Log '===== 재부팅 후 이어서 진행합니다 =====' 'OK'
+        }
+        else {
+            Clear-Resume
+            Write-Log '===== 모든 작업 완료 =====' 'OK'
+        }
     }
     catch { Write-Log "예상치 못한 오류: $($_.Exception.Message)" 'ERROR' }
     finally {
@@ -955,7 +1105,7 @@ $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
 $form.Font = $Font
 
-# 실행 순서대로 (오래 걸리는 업데이트와 재부팅되는 문서중앙화는 마지막)
+# 실행 순서대로 (재부팅이 필요한 윈도우 업데이트와 문서중앙화는 마지막)
 $TaskDefs = @(
     @{ Id = 'network';     Title = '이더넷 IP 설정';                    Default = $true },
     @{ Id = 'programs';    Title = '프로그램 설치 (USB)';               Default = $true },
@@ -970,10 +1120,10 @@ $TaskDefs = @(
     @{ Id = 'chrome';      Title = '크롬 설정';                         Default = $true },
     @{ Id = 'extensions';  Title = '크롬·엣지 업데이트 + ClouDoc 확장';  Default = $true },
     @{ Id = 'printer';     Title = '프린터 설치';                       Default = $true },
-    @{ Id = 'drivers';     Title = '드라이버 확인 및 설치';             Default = $false },
-    @{ Id = 'update';      Title = '윈도우 업데이트';                   Default = $false },
-    @{ Id = 'activation';  Title = '정품 인증 확인';                    Default = $true },
-    @{ Id = 'docCentral';  Title = '문서중앙화 설치 (재부팅 여러 번)';   Default = $true }
+    @{ Id = 'drivers';     Title = '드라이버 확인 (제조사 도구 등)';     Default = $false },
+    @{ Id = 'update';      Title = '윈도우 업데이트 (최신까지 반복)';    Default = $true },
+    @{ Id = 'docCentral';  Title = '문서중앙화 설치 (재부팅 여러 번)';   Default = $true },
+    @{ Id = 'activation';  Title = '정품 인증 확인';                    Default = $true }
 )
 
 # --- 왼쪽: 작업 선택 ---
@@ -991,8 +1141,8 @@ $btnSaveStart = New-Control 'Button' '시작화면 저장 (Win11)' 12 424 160 30
 $form.Controls.AddRange(@($btnConfig, $btnReload, $btnLogs, $btnDump, $btnSaveStart))
 
 # --- 가운데: 네트워크 / 프린터 / PC 이름 / 정품 인증 ---
-$grpNet = New-Group '2. 이더넷 IP (수동 입력)' 354 8 400 214
-$rows = @('어댑터', 'IP', '서브넷 마스크', '게이트웨이', 'DNS 1', 'DNS 2')
+$grpNet = New-Group '2. 이더넷 IP (수동 입력)' 354 8 400 184
+$rows = @('어댑터', 'IP', '서브넷 마스크', '게이트웨이', 'DNS')
 for ($i = 0; $i -lt $rows.Count; $i++) {
     $grpNet.Controls.Add((New-Control 'Label' $rows[$i] 12 (25 + $i * 30) 90 20))
 }
@@ -1002,17 +1152,30 @@ $txtIp      = New-Control 'TextBox' $Config.network.ip 104 52 160 24
 $txtSubnet  = New-Control 'TextBox' $Config.network.subnet 104 82 160 24
 $txtGateway = New-Control 'TextBox' '192.168.0.1' 104 112 160 24
 $txtDns1    = New-Control 'TextBox' $Config.network.dns1 104 142 160 24
-$txtDns2    = New-Control 'TextBox' $Config.network.dns2 104 172 160 24
 $lblGwHint  = New-Control 'Label' 'IP 입력 시 자동 변경' 270 115 125 20
 $lblGwHint.ForeColor = $Gray
-$grpNet.Controls.AddRange(@($cmbAdapter, $txtIp, $txtSubnet, $txtGateway, $txtDns1, $txtDns2, $lblGwHint))
+$grpNet.Controls.AddRange(@($cmbAdapter, $txtIp, $txtSubnet, $txtGateway, $txtDns1, $lblGwHint))
 
-$grpPrinter = New-Group '3. 설치할 프린터' 354 228 400 112
-$clbPrinters = New-Control 'CheckedListBox' '' 10 22 380 80
+# 지점: ERP 서버 주소와 기본 프린터가 정해짐
+$grpSite = New-Group '3. 지점 (ERP 서버 / 프린터)' 354 198 400 48
+$SiteRadios = @()
+$x = 12
+foreach ($site in @($Config.sites)) {
+    $rb = New-Control 'RadioButton' $site.name $x 20 70 22
+    $grpSite.Controls.Add($rb)
+    $SiteRadios += $rb
+    $x += 76
+}
+$lblSite = New-Control 'Label' '' ($x + 4) 22 (390 - $x) 20
+$lblSite.ForeColor = $Gray
+$grpSite.Controls.Add($lblSite)
+
+$grpPrinter = New-Group '4. 설치할 프린터 (네트워크)' 354 252 400 92
+$clbPrinters = New-Control 'CheckedListBox' '' 10 20 380 64
 $clbPrinters.CheckOnClick = $true
 $grpPrinter.Controls.Add($clbPrinters)
 
-$grpName = New-Group 'PC 이름 변경 (선택)' 354 346 400 56
+$grpName = New-Group 'PC 이름 변경 (선택)' 354 350 400 54
 $txtName = New-Control 'TextBox' '' 10 22 150 24
 $txtName.MaxLength = 15
 $lblName = New-Control 'Label' "현재: $env:COMPUTERNAME  (비워두면 변경 안 함)" 168 25 225 20
@@ -1025,14 +1188,14 @@ $btnAct = New-Control 'Button' '정품 인증 설정' 284 17 108 27
 $grpAct.Controls.AddRange(@($lblAct, $btnAct))
 
 # --- 오른쪽: USB / 프로그램 ---
-$grpUsb = New-Group '4. USB 설치파일 폴더' 766 8 402 84
+$grpUsb = New-Group '5. USB 설치파일 폴더' 766 8 402 84
 $txtUsb = New-Control 'TextBox' '' 10 22 300 24
 $txtUsb.ReadOnly = $true
 $btnUsb = New-Control 'Button' '찾아보기' 316 21 76 26
 $lblUsb = New-Control 'Label' '' 10 54 382 20
 $grpUsb.Controls.AddRange(@($txtUsb, $btnUsb, $lblUsb))
 
-$grpApps = New-Group '5. 설치할 프로그램' 766 98 402 360
+$grpApps = New-Group '6. 설치할 프로그램' 766 98 402 360
 $clbPrograms = New-Control 'CheckedListBox' '' 10 22 382 290
 $clbPrograms.CheckOnClick = $true
 $clbPrograms.HorizontalScrollbar = $true
@@ -1262,12 +1425,71 @@ $btnSaveStart.Add_Click({
 
 $btnAct.Add_Click({ Start-Process 'ms-settings:activation' })
 
-$script:Running = $false
-$controlsToLock = @($grpTasks, $grpNet, $grpPrinter, $grpName, $grpUsb, $grpApps, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
+# --- 지점 선택 ---
+function Get-SelectedSite {
+    for ($i = 0; $i -lt $SiteRadios.Count; $i++) { if ($SiteRadios[$i].Checked) { return @($Config.sites)[$i] } }
+    return $null
+}
 
-$btnStart.Add_Click({
+foreach ($rb in $SiteRadios) {
+    $rb.Add_CheckedChanged({
+        $site = Get-SelectedSite
+        if (-not $site) { return }
+        $lblSite.Text = "ERP 서버 $($site.erpServer)"
+        # 이 지점의 기본 프린터를 체크 (김해는 2F/1F 를 직접 선택)
+        $names = @($site.printers)
+        $all = @($script:Config.printer.printers)
+        for ($j = 0; $j -lt $all.Count; $j++) { $clbPrinters.SetItemChecked($j, ($names -contains $all[$j].name)) }
+    })
+}
+
+# --- 설치 안내창 (항상 위) ---
+$guideForm = New-Object System.Windows.Forms.Form
+$guideForm.Text = 'PC 셋팅 - 설치 안내'
+$guideForm.ClientSize = New-Object System.Drawing.Size(440, 250)
+$guideForm.FormBorderStyle = 'FixedToolWindow'
+$guideForm.TopMost = $true
+$guideForm.ShowInTaskbar = $false
+$guideForm.StartPosition = 'Manual'
+$guideForm.ControlBox = $false
+$guideForm.BackColor = [System.Drawing.Color]::LightYellow
+$lblGuide = New-Object System.Windows.Forms.Label
+$lblGuide.Location = New-Object System.Drawing.Point(14, 12)
+$lblGuide.Size = New-Object System.Drawing.Size(414, 186)
+$lblGuide.Font = New-Object System.Drawing.Font('Malgun Gothic', 11)
+$btnGuideOk = New-Object System.Windows.Forms.Button
+$btnGuideOk.Text = '완료 (다음 단계로)'
+$btnGuideOk.Font = $BoldFont
+$btnGuideOk.Location = New-Object System.Drawing.Point(270, 204)
+$btnGuideOk.Size = New-Object System.Drawing.Size(158, 36)
+$btnGuideOk.Add_Click({ $script:Sync.GuideAck = $true })
+$guideForm.Controls.AddRange(@($lblGuide, $btnGuideOk))
+$script:LastGuide = ''
+
+function Update-GuideWindow {
+    $text = [string]$script:Sync.Guide
+    if ($text -ne $script:LastGuide) {
+        $script:LastGuide = $text
+        if ($text) {
+            $lblGuide.Text = $text
+            $area = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            $guideForm.Location = New-Object System.Drawing.Point(($area.Right - $guideForm.Width - 12), ($area.Top + 12))
+            if (-not $guideForm.Visible) { $guideForm.Show() }
+        }
+        elseif ($guideForm.Visible) { $guideForm.Hide() }
+    }
+    $btnGuideOk.Visible = [bool]$script:Sync.GuideWait
+}
+
+# --- 시작 ---
+$script:Running = $false
+$script:ResumeState = $null
+$controlsToLock = @($grpTasks, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $grpApps, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
+
+function Start-Setup([bool]$Auto = $false) {
     $steps = @(for ($i = 0; $i -lt $TaskDefs.Count; $i++) { if ($clbTasks.GetItemChecked($i)) { $TaskDefs[$i] } })
-    if ($steps.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show('실행할 작업을 하나 이상 선택하세요.') | Out-Null; return }
+    $resume = $script:ResumeState
+    if ($steps.Count -eq 0 -and -not $resume) { [System.Windows.Forms.MessageBox]::Show('실행할 작업을 하나 이상 선택하세요.') | Out-Null; return }
     $ids = @($steps | ForEach-Object { $_.Id })
 
     # 네트워크 입력 확인
@@ -1284,13 +1506,13 @@ $btnStart.Add_Click({
             Subnet  = $txtSubnet.Text.Trim()
             Prefix  = $prefix
             Gateway = $txtGateway.Text.Trim()
-            Dns     = @($txtDns1.Text.Trim(), $txtDns2.Text.Trim()) | Where-Object { Test-IPv4 $_ }
+            Dns     = @($txtDns1.Text.Trim()) | Where-Object { Test-IPv4 $_ }
         }
     }
 
     $needUsb = @('programs', 'fonts', 'printer', 'docCentral') | Where-Object { $ids -contains $_ }
     if ($needUsb -and -not $script:AppRoot) {
-        [System.Windows.Forms.MessageBox]::Show("USB 설치파일 폴더를 찾지 못했습니다.`n'$($Config.usb.label)' USB 를 꽂고 [다시 찾기] 를 누르거나 [찾아보기] 로 폴더를 선택하세요.") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("USB 설치파일 폴더를 찾지 못했습니다.`n'$($Config.usb.label)' USB 를 꽂고 [다시 찾기] 를 누르거나 [찾아보기] 로 폴더를 선택한 뒤 [셋팅 시작] 을 누르세요.") | Out-Null
         return
     }
 
@@ -1305,38 +1527,59 @@ $btnStart.Add_Click({
     $allPrinters = @($script:Config.printer.printers)
     $selectedPrinters = @(foreach ($i in $clbPrinters.CheckedIndices) { $allPrinters[$i] })
 
-    $summary = ($steps | ForEach-Object { " - $($_.Title)" }) -join "`n"
-    $extra = ''
-    if ($network) { $extra += "`nIP: $($network.IP) / 게이트웨이: $($network.Gateway)" }
-    $extra += "`n프로그램: $($selectedPrograms.Count)개 / 프린터: $(($selectedPrinters | ForEach-Object { $_.name }) -join ', ')"
-    $ans = [System.Windows.Forms.MessageBox]::Show("다음 작업을 시작합니다.`n`n$summary`n$extra`n`n진행할까요?", 'PC 셋팅', 'YesNo', 'Question')
-    if ($ans -ne 'Yes') { return }
+    $site = Get-SelectedSite
+    if ($resume -and $resume.Site) { $site = $resume.Site }
+    $needSite = ($ids -contains 'programs' -and @($selectedPrograms | Where-Object { "$($_.clipboard)$($_.guide)" -match '\{erpServer\}' }).Count -gt 0)
+    if ($needSite -and -not $site) {
+        [System.Windows.Forms.MessageBox]::Show('지점(부산/김해)을 선택하세요. ERP 서버 주소가 지점에 따라 다릅니다.') | Out-Null
+        return
+    }
+
+    if (-not $Auto) {
+        $summary = ($steps | ForEach-Object { " - $($_.Title)" }) -join "`n"
+        $extra = ''
+        if ($network) { $extra += "`nIP: $($network.IP) / 게이트웨이: $($network.Gateway)" }
+        if ($site) { $extra += "`n지점: $($site.name) (ERP $($site.erpServer))" }
+        $extra += "`n프로그램: $($selectedPrograms.Count)개 / 프린터: $(($selectedPrinters | ForEach-Object { $_.name }) -join ', ')"
+        $ans = [System.Windows.Forms.MessageBox]::Show("다음 작업을 시작합니다.`n`n$summary`n$extra`n`n진행할까요?", 'PC 셋팅', 'YesNo', 'Question')
+        if ($ans -ne 'Yes') { return }
+    }
 
     if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
     $logFile = Join-Path $LogDir ('setup_{0}_{1}.log' -f $env:COMPUTERNAME, (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    if ($resume -and $resume.LogFile -and (Test-Path -LiteralPath (Split-Path $resume.LogFile))) { $logFile = $resume.LogFile }
 
     $plan = @{
         Root         = $Root
         AppRoot      = $script:AppRoot
         Config       = $script:Config
         CommonCode   = $Common.ToString()
+        ResumePath   = $ResumePath
         Steps        = $steps
         Network      = $network
         Programs     = $selectedPrograms
         Printers     = $selectedPrinters
+        Site         = $site
+        UpdateRound  = $(if ($resume) { [int]$resume.UpdateRound } else { 0 })
         ComputerName = $newName
         LogFile      = $logFile
     }
 
     $script:Sync = [hashtable]::Synchronized(@{
-        Queue          = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
-        Notices        = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
-        Status         = '시작 중...'
-        Percent        = 0
-        StepCount      = 1
-        Done           = $false
-        RebootRequired = $false
+        Queue           = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
+        Notices         = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
+        Status          = '시작 중...'
+        Percent         = 0
+        StepCount       = 1
+        Done            = $false
+        RebootRequired  = $false
+        ResumeRequested = $false
+        Guide           = ''
+        GuideWait       = $false
+        GuideAck        = $false
     })
+    if ($resume) { foreach ($n in @($resume.Notices)) { if ($n) { [void]$script:Sync.Notices.Add($n) } } }
+    $script:ResumeState = $null
 
     $txtLog.Clear()
     foreach ($c in $controlsToLock) { $c.Enabled = $false }
@@ -1350,7 +1593,9 @@ $btnStart.Add_Click({
     [void]$script:PS.AddScript($Worker.ToString()).AddArgument($script:Sync).AddArgument($plan)
     $script:Handle = $script:PS.BeginInvoke()
     $timer.Start()
-})
+}
+
+$btnStart.Add_Click({ Start-Setup $false })
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 300
@@ -1359,10 +1604,13 @@ $timer.Add_Tick({
     while ($script:Sync.Queue.TryDequeue([ref]$line)) { $txtLog.AppendText($line + "`r`n") }
     $progress.Value = [Math]::Min(100, [Math]::Max(0, [int]$script:Sync.Percent))
     $lblStatus.Text = $script:Sync.Status
+    Update-GuideWindow
 
     if (-not $script:Sync.Done) { return }
 
     $timer.Stop()
+    $script:Sync.Guide = ''
+    Update-GuideWindow
     try { $script:PS.EndInvoke($script:Handle) } catch { $txtLog.AppendText("[오류] $($_.Exception.Message)`r`n") }
     foreach ($e in $script:PS.Streams.Error) { $txtLog.AppendText("[오류] $e`r`n") }
     $script:PS.Dispose()
@@ -1373,6 +1621,16 @@ $timer.Add_Tick({
     Update-Activation
 
     $errors = @($txtLog.Lines | Where-Object { $_ -like '*`[ERROR`]*' }).Count
+
+    # 윈도우 업데이트 재부팅: 로그인하면 자동으로 이어서 진행
+    if ($script:Sync.ResumeRequested) {
+        $ans = [System.Windows.Forms.MessageBox]::Show(
+            "윈도우 업데이트를 적용하려면 재부팅해야 합니다.`n설치 중인 프로그램이 없는 것을 확인했습니다.`n`n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다.`n(USB 는 꽂아둔 채로 두세요)`n`n지금 재부팅할까요?",
+            'PC 셋팅 - 재부팅', 'YesNo', 'Question')
+        if ($ans -eq 'Yes') { Restart-Computer -Force }
+        return
+    }
+
     $msg = if ($errors -gt 0) { "셋팅이 끝났습니다. 실패한 항목이 $errors 개 있습니다. 로그를 확인하세요." } else { '셋팅이 모두 끝났습니다.' }
     if ($script:Sync.Notices.Count -gt 0) {
         $msg += "`n`n[확인이 필요한 항목]`n" + (($script:Sync.Notices | ForEach-Object { "• $_" }) -join "`n")
@@ -1395,6 +1653,25 @@ $form.Add_FormClosing({
     }
 })
 
+# 재부팅 전에 저장한 상태 불러오기
+function Read-ResumeState {
+    if (-not (Test-Path -LiteralPath $ResumePath)) { return $null }
+    try { return (Get-Content -LiteralPath $ResumePath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
+function Apply-ResumeState($State) {
+    $ids = @($State.Steps)
+    for ($i = 0; $i -lt $TaskDefs.Count; $i++) { $clbTasks.SetItemChecked($i, ($ids -contains $TaskDefs[$i].Id)) }
+    # 지점을 먼저 고른 뒤(지점 기본 프린터가 체크됨) 저장된 프린터 선택으로 덮어씀
+    if ($State.Site) {
+        $sites = @($Config.sites)
+        for ($i = 0; $i -lt $sites.Count; $i++) { if ($sites[$i].name -eq $State.Site.name) { $SiteRadios[$i].Checked = $true } }
+    }
+    $names = @($State.Printers | ForEach-Object { $_.name })
+    $all = @($script:Config.printer.printers)
+    for ($j = 0; $j -lt $all.Count; $j++) { $clbPrinters.SetItemChecked($j, ($names -contains $all[$j].name)) }
+}
+
 # 창이 뜬 뒤에 USB / 어댑터 / 정품 인증 확인
 $form.Add_Shown({
     $form.Cursor = 'WaitCursor'
@@ -1409,6 +1686,24 @@ $form.Add_Shown({
     $form.Cursor = 'Default'
     $txtIp.Focus()
     $txtIp.SelectionStart = $txtIp.Text.Length
+
+    $state = Read-ResumeState
+    if (-not $state) {
+        if ($Resume) { Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue }
+        return
+    }
+    if (-not $Resume) {
+        $ans = [System.Windows.Forms.MessageBox]::Show("재부팅 전에 진행하던 작업이 남아 있습니다.`n($($state.Steps -join ', '))`n`n이어서 진행할까요?`n[아니요] 를 누르면 처음부터 새로 진행합니다.", 'PC 셋팅', 'YesNo', 'Question')
+        if ($ans -ne 'Yes') {
+            Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $ResumePath -Force -ErrorAction SilentlyContinue
+            return
+        }
+    }
+    $script:ResumeState = $state
+    Apply-ResumeState $state
+    $lblStatus.Text = '재부팅 후 남은 작업을 이어서 진행합니다.'
+    Start-Setup $true
 })
 
 [void]$form.ShowDialog()

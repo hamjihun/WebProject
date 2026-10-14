@@ -6,52 +6,106 @@
   "network": {
     "ip": "192.168.",
     "subnet": "255.255.255.0",
-    "dns1": "168.126.63.1",
-    "dns2": "8.8.8.8"
+    "dns1": "168.126.63.1"
   },
   "programs": [
     {
       "name": "오피스",
-      "find": ["*오피스*\\setup.exe", "*office*\\setup.exe", "*오피스*.exe", "*office*.exe"],
+      "find": [
+        "*오피스*\\setup.exe",
+        "*office*\\setup.exe",
+        "*오피스*.exe",
+        "*office*.exe"
+      ],
       "args": "",
-      "installed": ["%ProgramFiles%\\Microsoft Office\\root\\Office1*\\EXCEL.EXE", "%ProgramFiles(x86)%\\Microsoft Office\\root\\Office1*\\EXCEL.EXE",
-                    "%ProgramFiles%\\Microsoft Office\\Office1*\\EXCEL.EXE", "%ProgramFiles(x86)%\\Microsoft Office\\Office1*\\EXCEL.EXE"]
+      "installed": [
+        "%ProgramFiles%\\Microsoft Office\\root\\Office1*\\EXCEL.EXE",
+        "%ProgramFiles(x86)%\\Microsoft Office\\root\\Office1*\\EXCEL.EXE",
+        "%ProgramFiles%\\Microsoft Office\\Office1*\\EXCEL.EXE",
+        "%ProgramFiles(x86)%\\Microsoft Office\\Office1*\\EXCEL.EXE"
+      ],
+      "guide": "설치 창이 뜨면 그대로 진행하세요.\n설치가 끝날 때까지 기다리면 됩니다."
     },
     {
       "name": "반디집",
-      "find": ["*bandizip*.exe", "*반디집*.exe"],
-      "args": "/S",
-      "installed": ["%ProgramFiles%\\Bandizip\\Bandizip.exe"]
+      "find": [
+        "*bandizip*.exe",
+        "*반디집*.exe"
+      ],
+      "args": "",
+      "installed": [
+        "%ProgramFiles%\\Bandizip\\Bandizip.exe"
+      ],
+      "guide": "1) '사용 통계 및 오류 보고서를 자동으로 전송합니다' 체크 해제\n2) [동의 및 설치]\n3) [닫기]\n4) [지금 적용] → [확인]\n\n모두 끝나면 이 창의 [완료] 를 누르세요.",
+      "confirmAfter": true
     },
     {
       "name": "크롬",
-      "find": ["*chrome*.msi", "*chrome*.exe", "*크롬*.msi", "*크롬*.exe"],
+      "find": [
+        "*chrome*.msi",
+        "*chrome*.exe",
+        "*크롬*.msi",
+        "*크롬*.exe"
+      ],
       "args": "/silent /install",
-      "installed": ["%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe", "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"]
+      "installed": [
+        "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
+        "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+      ]
     },
     {
       "name": "카카오톡",
-      "find": ["*kakaotalk*.exe", "*카카오톡*.exe", "*카톡*.exe"],
-      "args": "/S",
-      "installed": ["%ProgramFiles(x86)%\\Kakao\\KakaoTalk\\KakaoTalk.exe", "%ProgramFiles%\\Kakao\\KakaoTalk\\KakaoTalk.exe"]
+      "find": [
+        "*kakaotalk*.exe",
+        "*카카오톡*.exe",
+        "*카톡*.exe"
+      ],
+      "args": "",
+      "installed": [
+        "%ProgramFiles(x86)%\\Kakao\\KakaoTalk\\KakaoTalk.exe",
+        "%ProgramFiles%\\Kakao\\KakaoTalk\\KakaoTalk.exe"
+      ],
+      "guide": "1) [다음] → [다음]\n2) 'Daum을 시작페이지로 설정' 체크 해제\n3) 설치 진행"
     },
     {
       "name": "Adobe Reader",
-      "find": ["*reader*.exe", "*acro*.exe", "*adobe*.exe", "*아크로뱃*.exe"],
+      "find": [
+        "*reader*.exe",
+        "*acro*.exe",
+        "*adobe*.exe",
+        "*아크로뱃*.exe"
+      ],
       "args": "/sAll /rs /msi EULA_ACCEPT=YES",
-      "installed": ["%ProgramFiles%\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe", "%ProgramFiles(x86)%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
-                    "%ProgramFiles%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe"]
+      "installed": [
+        "%ProgramFiles%\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
+        "%ProgramFiles(x86)%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
+        "%ProgramFiles%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe"
+      ]
     },
     {
       "name": "V3",
-      "find": ["*v3*.exe", "*ahnlab*.exe", "*안랩*.exe"],
+      "find": [
+        "*v3*.exe",
+        "*ahnlab*.exe",
+        "*안랩*.exe"
+      ],
       "args": "",
-      "installed": ["%ProgramFiles%\\AhnLab\\V3*", "%ProgramFiles(x86)%\\AhnLab\\V3*"]
+      "installed": [
+        "%ProgramFiles%\\AhnLab\\V3*",
+        "%ProgramFiles(x86)%\\AhnLab\\V3*"
+      ],
+      "guide": "설치 창이 뜨면 그대로 진행하세요."
     },
     {
       "name": "ERP",
-      "find": ["*erp*.exe", "*erp*.msi"],
-      "args": ""
+      "find": [
+        "*erp*.exe",
+        "*erp*.msi"
+      ],
+      "args": "",
+      "guide": "1) [다음] → [Finish]\n2) 'Client Update' 창이 뜨면 서버 주소에\n    {erpServer}\n    입력 (이미 복사되어 있으니 Ctrl+V)\n3) [다음]\n\n모두 끝나면 이 창의 [완료] 를 누르세요.",
+      "confirmAfter": true,
+      "clipboard": "{erpServer}"
     }
   ],
   "fonts": {
@@ -62,7 +116,13 @@
     "search": "icon",
     "hideWidgets": true
   },
-  "desktopIcons": ["computer", "userFiles", "network", "recycleBin", "controlPanel"],
+  "desktopIcons": [
+    "computer",
+    "userFiles",
+    "network",
+    "recycleBin",
+    "controlPanel"
+  ],
   "misc": {
     "showFileExtensions": true
   },
@@ -79,8 +139,12 @@
   },
   "browser": {
     "updateFirst": true,
-    "chromeExtensions": ["mhocmmnceidnldpneiioaglmmgkhhmgh"],
-    "edgeExtensions": ["nijboebkfeipcfjoohpkloahghaidpaj"],
+    "chromeExtensions": [
+      "mhocmmnceidnldpneiioaglmmgkhhmgh"
+    ],
+    "edgeExtensions": [
+      "nijboebkfeipcfjoohpkloahghaidpaj"
+    ],
     "enforceSettings": false
   },
   "printer": {
@@ -90,20 +154,47 @@
     "driverHint": "C3060",
     "namePrefix": "IV C2263N",
     "printers": [
-      { "name": "부산", "ip": "192.168.0.7" },
-      { "name": "김해 2F", "ip": "192.168.1.133" },
-      { "name": "김해 1F", "ip": "192.168.1.11" }
+      {
+        "name": "부산",
+        "ip": "192.168.0.7"
+      },
+      {
+        "name": "김해 2F",
+        "ip": "192.168.1.133"
+      },
+      {
+        "name": "김해 1F",
+        "ip": "192.168.1.11"
+      }
     ]
   },
   "docCentral": {
     "folder": "8.문서중앙화",
     "search": "*문서중앙화*",
     "file": "",
-    "args": ""
+    "args": "",
+    "guide": "설치 창이 뜨면 그대로 진행하세요.\n재부팅하라고 뜨면 [확인(OK)] 을 누르세요.\n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다."
   },
   "drivers": {
     "localFolder": "drivers",
     "useVendorTool": true,
     "windowsUpdate": true
+  },
+  "sites": [
+    {
+      "name": "부산",
+      "erpServer": "192.168.0.252:8080",
+      "printers": [
+        "부산"
+      ]
+    },
+    {
+      "name": "김해",
+      "erpServer": "192.168.1.250:8080",
+      "printers": []
+    }
+  ],
+  "windowsUpdate": {
+    "maxRounds": 6
   }
 }
