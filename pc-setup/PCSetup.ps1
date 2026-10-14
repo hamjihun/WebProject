@@ -32,6 +32,18 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     exit 1
 }
 
+# 이미 실행 중이면 하나만 (재부팅 후 예약 작업과 시작 항목이 함께 실행되는 경우 등)
+$script:AppMutex = New-Object System.Threading.Mutex($false, 'Global\PCSetupTool')
+$owned = $false
+try { $owned = $script:AppMutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $owned = $true }
+if (-not $owned) {
+    if (-not $Resume) { [System.Windows.Forms.MessageBox]::Show('PC 셋팅 프로그램이 이미 실행 중입니다.', 'PC 셋팅', 'OK', 'Information') | Out-Null }
+    exit 0
+}
+
+$RunOnceKey  = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+$RunOnceName = 'PCSetupResume'
+
 # ---------------------------------------------------------------------------
 # 화면과 작업 쪽에서 함께 쓰는 함수
 # ---------------------------------------------------------------------------
@@ -164,6 +176,8 @@ $Worker = {
     $Cfg        = $Plan.Config
     $AppRoot    = $Plan.AppRoot
     $ResumePath = $Plan.ResumePath
+    $RunOnceKey  = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+    $RunOnceName = 'PCSetupResume'
     $State      = @{ Step = 0; RestartExplorer = $false; ResumeHere = $false; ResumeRound = 0; UpdateReboot = $false }
     $IsWin11 = [Environment]::OSVersion.Version.Build -ge 22000
 
@@ -1528,8 +1542,9 @@ $Worker = {
         $base = Split-Path $ResumePath
         $app  = Join-Path $base 'app'
         if (-not (Test-Path -LiteralPath $base)) { New-Item -ItemType Directory -Path $base -Force | Out-Null }
-        # USB 드라이브 문자가 바뀌어도 실행되도록 도구를 C: 에 복사
-        if ($Plan.Root.TrimEnd('\') -ne $app) {
+        # USB 드라이브 문자가 바뀌어도 실행되도록 도구를 C: 에 복사 (실행마다 한 번만)
+        if ($Plan.Root.TrimEnd('\') -ne $app -and -not $State.AppCopied) {
+            $State.AppCopied = $true
             if (Test-Path -LiteralPath $app) { Remove-Item -LiteralPath $app -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType Directory -Path $app -Force | Out-Null
             # 도구에 필요한 파일만 복사 (exe 를 USB 루트에 둔 경우 USB 전체가 복사되지 않도록)
@@ -1551,24 +1566,47 @@ $Worker = {
         }
         $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResumePath -Encoding UTF8
 
-        $user      = "$env:USERDOMAIN\$env:USERNAME"
+        # 계정 이름 대신 SID 로 예약 (PC 이름을 바꿔도 동작하도록)
+        $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         if ($Plan.LauncherExe) {
             $action = New-ScheduledTaskAction -Execute (Join-Path $app ([IO.Path]::GetFileName($Plan.LauncherExe))) -Argument '-Resume'
         }
         else {
             $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$app\PCSetup.ps1`" -Resume"
         }
-        $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user
+        $trigger   = New-ScheduledTaskTrigger -AtLogOn
         $trigger.Delay = 'PT20S'
-        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+        $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
         $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-        Register-ScheduledTask -TaskName 'PCSetupResume' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
-        Write-Log "재부팅 후 로그인하면 이어서 진행하도록 예약했습니다. (남은 작업: $($RemainingIds -join ', '))"
+        $taskOk = $true
+        try { Register-ScheduledTask -TaskName 'PCSetupResume' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null }
+        catch { $taskOk = $false; Write-Log "이어하기 예약 작업 등록 실패 (시작 항목으로 대신 실행): $($_.Exception.Message)" 'WARN' }
+
+        # 예비: 로그인할 때 한 번 실행되는 시작 항목 (관리자 권한으로 다시 실행)
+        $ps1 = Join-Path $app 'PCSetup.ps1'
+        $cmd = "powershell.exe -NoProfile -WindowStyle Hidden -Command `"Start-Process powershell.exe -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File \`"$ps1\`" -Resume'`""
+        try { Set-Reg $RunOnceKey $RunOnceName $cmd 'String' } catch { Write-Log "시작 항목 등록 실패: $($_.Exception.Message)" 'WARN' }
+        if ($State.LastResume -ne ($RemainingIds -join ',')) {
+            $State.LastResume = ($RemainingIds -join ',')
+            Write-Log "재부팅되면 로그인 후 자동으로 이어서 진행합니다. (남은 작업: $($RemainingIds -join ', '))"
+        }
     }
 
     function Clear-Resume {
         Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $ResumePath -Force -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $RunOnceKey -Name $RunOnceName -ErrorAction SilentlyContinue
+    }
+
+    # 단계마다 '남은 작업' 저장 → 어떤 이유로 재부팅되든 로그인 후 이어서 진행
+    # (IP 설정은 다시 하지 않음, 업데이트가 아직 진행 중이면 업데이트도 포함)
+    function Save-Checkpoint([int]$FromStep) {
+        if ($Plan.Background) { return }
+        $ids = @()
+        if ($State.UpdatePending) { $ids += 'update' }
+        $ids += @($Plan.Steps | Select-Object -Skip $FromStep | ForEach-Object { $_.Id } | Where-Object { $_ -notin 'network', 'update' })
+        if ($ids.Count -eq 0) { return }
+        try { Register-Resume $ids ([int]$Plan.UpdateRound) } catch { Write-Log "이어하기 저장 실패: $($_.Exception.Message)" 'WARN' }
     }
 
     # 윈도우 업데이트(선택적 업데이트의 드라이버 포함)를 '최신 버전' 이 될 때까지 반복
@@ -1618,6 +1656,7 @@ $Worker = {
         $State.Bg = @{ Sync = $bg; PS = $ps; RS = $rs; Handle = $ps.BeginInvoke() }
         $Sync.Bg = $bg
         $Sync.BgPS = $ps
+        $State.UpdatePending = $true
         Write-Log '윈도우 업데이트를 백그라운드에서 시작했습니다. (프로그램 설치와 동시에 진행)'
     }
 
@@ -1646,6 +1685,7 @@ $Worker = {
             if ($bg.RebootRequired) { $Sync.RebootRequired = $true }
             if ([int]$bg.ErrorCount -gt 0) { Set-TaskState 'update' 'warn' '확인 필요 (로그 참고)' }
             else { Set-TaskState 'update' 'done' '최신 버전' }
+            $State.UpdatePending = $false
         }
     }
 
@@ -1781,6 +1821,7 @@ $Worker = {
             $err0 = [int]$Sync.ErrorCount
             $warn0 = [int]$Sync.WarnCount
             Set-TaskState $step.Id 'running'
+            if ($step.Id -notin 'docCentral', 'update') { Save-Checkpoint $s }
             try {
                 switch ($step.Id) {
                     'network'     { Set-Network }
@@ -2601,6 +2642,7 @@ function Stop-Setup {
     try { if ($script:Sync.BgPS) { [void]$script:Sync.BgPS.BeginStop($null, $null) } } catch { }
     Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $ResumePath -Force -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $RunOnceKey -Name $RunOnceName -ErrorAction SilentlyContinue
     $btnStop.Enabled = $false
     $btnStop.Text = '중지하는 중...'
 }
@@ -2651,7 +2693,10 @@ $form.Add_Shown({
 
     $state = Read-ResumeState
     if (-not $state) {
-        if ($Resume) { Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue }
+        if ($Resume) {
+            Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $RunOnceKey -Name $RunOnceName -ErrorAction SilentlyContinue
+        }
         return
     }
     if (-not $Resume) {
@@ -2659,6 +2704,7 @@ $form.Add_Shown({
         if ($ans -ne 'Yes') {
             Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $ResumePath -Force -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $RunOnceKey -Name $RunOnceName -ErrorAction SilentlyContinue
             return
         }
     }
