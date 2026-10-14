@@ -741,7 +741,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             P = $P; Path = $Path; State = 'pending'; Proc = $null; Tree = $null; Since = $null; Code = $null
             StepIdx = 0; Deadline = [datetime]::MaxValue; PauseUntil = [datetime]::MinValue; LastAlso = [datetime]::MinValue
             UncheckSeen = $false; Manual = $false; Alive = $true; Failed = $false; Retried = $false; LastDismiss = [datetime]::MinValue
-            Toggled = (New-Object 'System.Collections.Generic.HashSet[string]'); Selected = $false; DeadSince = $null
+            Toggled = (New-Object 'System.Collections.Generic.HashSet[string]'); Selected = $false; DeadSince = $null; FallbackP = $null
             SeenAt = $null; ClickTries = 0; LastClick = [datetime]::MinValue; KeySince = $null
         }
     }
@@ -1005,11 +1005,24 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         foreach ($p in $list) {
             if ($p.uninstall) { $jobs += New-UninstallJobs $p; continue }
             if (Test-Installed $p) { Write-Log "$($p.name): 이미 설치되어 있어 건너뜀" 'OK'; Set-ProgState $p.name 'skipped' '이미 설치됨'; continue }
+            # winget(Windows 기본 설치 도구)이 있으면 공식 설치 파일을 받아 화면 없이 설치 (다른 설치와 동시에 진행)
+            # 실패하면 USB 설치 파일(find/path)로 다시 설치
             if ($p.winget) {
-                Write-Log "$($p.name): 설치 시작 (winget: $($p.winget))"
-                & winget.exe install --id $p.winget -e --silent --accept-package-agreements --accept-source-agreements *> $null
-                if ($LASTEXITCODE -eq 0) { Write-Log "$($p.name): 설치 완료" 'OK' } else { Write-Log "$($p.name): 설치 실패 (코드 $LASTEXITCODE)" 'ERROR' }
-                continue
+                $wg = Get-Command winget.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($wg) {
+                    $wp = [pscustomobject]@{
+                        name      = $p.name
+                        args      = "install --id $($p.winget) -e --silent --accept-package-agreements --accept-source-agreements"
+                        installed = $p.installed
+                    }
+                    $job = New-InstallJob $wp $wg.Source
+                    if ($p.find -or $p.path) { $job.FallbackP = $p }
+                    $jobs += $job
+                    Write-Log "$($p.name): winget 으로 설치합니다. ($($p.winget))"
+                    continue
+                }
+                if (-not ($p.find -or $p.path)) { Write-Log "$($p.name): winget 이 없어 설치할 수 없습니다." 'ERROR'; Set-ProgState $p.name 'error' 'winget 없음'; continue }
+                Write-Log "$($p.name): winget 이 없어 USB 설치 파일로 설치합니다."
             }
             $path = Find-Installer $AppRoot $files $p $Plan.Site.name
             if (-not $path) { Write-Log "$($p.name): 설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요." 'ERROR'; Set-ProgState $p.name 'error' '설치파일 없음'; continue }
@@ -1031,11 +1044,17 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             $again = @()
             foreach ($r in $retry) {
                 $path = $r.Path
-                if ($r.P.fallbackUrl -and $r.Code -ne 1618 -and -not (Test-Installed $r.P)) {
+                $rp = $r.P
+                if ($r.FallbackP) {
+                    # winget 이 실패하면 USB 설치 파일로
+                    $usb = Find-Installer $AppRoot $files $r.FallbackP $Plan.Site.name
+                    if ($usb) { $rp = $r.FallbackP; $path = $usb; Write-Log "$($rp.name): winget 설치가 안 되어 USB 설치 파일로 설치합니다." }
+                }
+                elseif ($r.P.fallbackUrl -and $r.Code -ne 1618 -and -not (Test-Installed $r.P)) {
                     $dl = Get-FallbackInstaller $r.P
                     if ($dl) { $path = $dl }
                 }
-                $j = New-InstallJob $r.P $path
+                $j = New-InstallJob $rp $path
                 $j.Retried = $true
                 $again += $j
             }
@@ -2304,7 +2323,10 @@ function Update-ProgramList {
         if ($p.uninstall) {
             $where = if (@(Get-UninstallEntries $p.uninstall).Count -gt 0) { '프로그램 추가/제거에서 삭제' } else { '(이미 없음)' }
         }
-        elseif ($p.winget) { $where = "winget: $($p.winget)" }
+        elseif ($p.winget) {
+            $usb = if ($p.find -or $p.path) { Find-Installer $script:AppRoot $script:AppFiles $p $null } else { $null }
+            $where = "winget: $($p.winget)" + $(if ($usb) { "  (실패 시 USB: $([IO.Path]::GetFileName($usb)))" } else { '' })
+        }
         else {
             $siteName = $(if (Get-SelectedSite) { (Get-SelectedSite).name } else { $null })
             $path = Find-Installer $script:AppRoot $script:AppFiles $p $siteName

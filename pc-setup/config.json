@@ -148,6 +148,7 @@
     },
     {
       "name": "Adobe Reader",
+      "winget": "Adobe.Acrobat.Reader.64-bit",
       "find": [
         "*AcroRdr*.exe",
         "Reader_kr_install.exe",
