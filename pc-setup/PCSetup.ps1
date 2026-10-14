@@ -2136,7 +2136,9 @@ $btnReload    = New-Control 'Button' '설정 다시 불러오기' 182 356 160 30
 $btnLogs      = New-Control 'Button' '로그 폴더 열기' 12 390 160 30
 $btnDump      = New-Control 'Button' 'USB 폴더 목록 저장' 182 390 160 30
 $btnSaveStart = New-Control 'Button' '시작화면 저장 (Win11)' 12 424 160 30
-$form.Controls.AddRange(@($btnConfig, $btnReload, $btnLogs, $btnDump, $btnSaveStart))
+$btnOrder     = New-Control 'Button' '진행 순서 보기' 182 424 160 30
+$btnOrder.Font = $BoldFont
+$form.Controls.AddRange(@($btnConfig, $btnReload, $btnLogs, $btnDump, $btnSaveStart, $btnOrder))
 
 # --- 가운데: 네트워크 / 프린터 / PC 이름 / 정품 인증 ---
 $grpNet = New-Group '2. 이더넷 IP (수동 입력)' 354 8 400 184
@@ -2560,7 +2562,121 @@ function Update-StatusView {
     $doneP = @($lvPrograms.Items | Where-Object { $_.Name -match '^(done|skipped)' }).Count
     $grpTasks.Text = "1. 진행 상황  (완료 $doneT / $($lvTasks.Items.Count))"
     $grpApps.Text  = "6. 프로그램 진행 상황  (완료 $doneP / $($lvPrograms.Items.Count))"
+    Update-OrderWindow
 }
+
+# --- 진행 순서 창 (실제 실행 순서 + 설명 + 실시간 상태) ---
+$TaskNotes = @{
+    uac         = '맨 처음 실행'
+    network     = '수동 IP 또는 자동으로 받기'
+    update      = '백그라운드에서 시작 → 아래 작업들과 동시에 진행'
+    programs    = '30초 간격으로 실행해 동시에 설치 (+ OneDrive 삭제)'
+    fonts       = ''
+    taskbar     = ''
+    desktop     = ''
+    officeLinks = '오피스 설치가 끝난 뒤'
+    misc        = 'PC 이름은 재부팅 후 적용'
+    power       = ''
+    startmenu   = ''
+    extensions  = '브라우저 설정보다 먼저 업데이트'
+    edge        = '설정 후 실행 중인 엣지 닫기'
+    chrome      = '설정 후 실행 중인 크롬 닫기'
+    printer     = '체크한 프린터만'
+    drivers     = ''
+    docCentral  = '업데이트 끝난 것 확인 후 (재부팅되면 로그인 후 이어서)'
+    activation  = '마지막 확인'
+}
+$script:OrderForm = $null
+$script:OrderSig = ''
+
+function Update-OrderWindow {
+    if (-not $script:OrderForm -or $script:OrderForm.IsDisposed -or -not $script:OrderForm.Visible) { return }
+    $lv = $script:OrderForm.Tag
+    $running = $script:Running -or ($lvTasks.Visible -and $script:Sync)
+    $sig = (@($TaskDefs | ForEach-Object { "$($_.Id)=$(Test-TaskChecked $_.Id)" }) -join ',') + "|$running"
+    if ($sig -ne $script:OrderSig) {
+        # 체크 상태가 바뀌었으면 목록을 다시 만듦
+        $script:OrderSig = $sig
+        $lv.BeginUpdate()
+        $lv.Items.Clear()
+        $n = 0
+        foreach ($t in $TaskDefs) {
+            $on = Test-TaskChecked $t.Id
+            $num = if ($on) { $n++; "$n" } else { '-' }
+            $it = New-Object System.Windows.Forms.ListViewItem($num)
+            [void]$it.SubItems.Add($t.Title)
+            [void]$it.SubItems.Add((Get-TaskCategory $t.Id))
+            [void]$it.SubItems.Add([string]$TaskNotes[$t.Id])
+            [void]$it.SubItems.Add($(if ($on) { '' } else { '제외' }))
+            $it.Tag = $t.Id
+            if (-not $on) { $it.ForeColor = [System.Drawing.Color]::Silver }
+            [void]$lv.Items.Add($it)
+        }
+        $lv.EndUpdate()
+    }
+    # 진행 중이면 상태 표시
+    if ($script:Sync -and $script:Sync.TaskStates) {
+        foreach ($it in $lv.Items) {
+            if ($it.Text -eq '-') { continue }
+            $v = [string]$script:Sync.TaskStates[[string]$it.Tag]
+            if (-not $v) { $v = 'pending|' }
+            if ($it.SubItems[4].Tag -eq $v) { continue }
+            $it.SubItems[4].Tag = $v
+            $parts = $v.Split('|', 2)
+            $style = $StateStyles[$parts[0]]
+            if (-not $style) { continue }
+            $text = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { $style[1] }
+            $it.SubItems[4].Text = "$($style[0]) $text"
+            $it.ForeColor = $style[2]
+            $it.BackColor = $style[3]
+        }
+    }
+}
+
+function Show-OrderWindow {
+    if ($script:OrderForm -and -not $script:OrderForm.IsDisposed) {
+        $script:OrderForm.Show()
+        $script:OrderForm.Activate()
+        $script:OrderSig = ''
+        Update-OrderWindow
+        return
+    }
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = 'PC 셋팅 - 진행 순서'
+    $f.ClientSize = New-Object System.Drawing.Size(820, 520)
+    $f.StartPosition = 'CenterParent'
+    $f.Font = $Font
+    $f.ShowInTaskbar = $false
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text = '체크한 작업이 아래 번호 순서대로 실행됩니다. (회색 = 체크 안 함)'
+    $lbl.Location = New-Object System.Drawing.Point(12, 10)
+    $lbl.Size = New-Object System.Drawing.Size(796, 20)
+    $lv = New-Object System.Windows.Forms.ListView
+    $lv.View = 'Details'
+    $lv.FullRowSelect = $true
+    $lv.HeaderStyle = 'Nonclickable'
+    $lv.Location = New-Object System.Drawing.Point(12, 34)
+    $lv.Size = New-Object System.Drawing.Size(796, 440)
+    $lv.Anchor = 'Top, Bottom, Left, Right'
+    foreach ($col in @(@('순서', 48), @('작업', 250), @('분류', 95), @('설명', 250), @('상태', 130))) { [void]$lv.Columns.Add($col[0], $col[1]) }
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = '닫기'
+    $btnClose.Location = New-Object System.Drawing.Point(708, 482)
+    $btnClose.Size = New-Object System.Drawing.Size(100, 30)
+    $btnClose.Anchor = 'Bottom, Right'
+    $btnClose.Add_Click({ $script:OrderForm.Hide() })
+    $f.Controls.AddRange(@($lbl, $lv, $btnClose))
+    $f.Tag = $lv
+    # 닫기(X) 는 숨기기만 (다시 열 때 그대로)
+    $f.Add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; $s.Hide() } })
+    $script:OrderForm = $f
+    $script:OrderSig = ''
+    $f.Show($form)
+    Update-OrderWindow
+}
+
+$btnOrder.Add_Click({ Show-OrderWindow })
+$tvTasks.Add_AfterCheck({ Update-OrderWindow })
 
 # 끝난 뒤 아직 '대기/진행 중' 으로 남은 줄 정리 (중지 → 중지됨, 재부팅 → 재부팅 후 계속)
 function Close-StatusView([string]$Leftover) {
