@@ -149,14 +149,14 @@
     {
       "name": "Adobe Reader",
       "find": [
-        "AcroRdr*.exe",
+        "*AcroRdr*.exe",
         "Reader_kr_install.exe",
         "*Reader*install*.exe",
         "*acro*.exe"
       ],
       "args": "",
       "argsMatch": {
-        "AcroRdr*.exe": "/sAll /rs /msi EULA_ACCEPT=YES"
+        "*AcroRdr*.exe": "/sAll /rs /msi EULA_ACCEPT=YES"
       },
       "installed": [
         "%ProgramFiles%\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
