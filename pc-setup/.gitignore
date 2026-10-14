@@ -1,0 +1,5 @@
+logs/
+installers/*
+!installers/README.txt
+drivers/*
+!drivers/README.txt

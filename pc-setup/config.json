@@ -1,0 +1,35 @@
+{
+  "programs": [
+    { "name": "Chrome", "winget": "Google.Chrome" },
+    { "name": "반디집", "winget": "Bandisoft.Bandizip" },
+    { "name": "Adobe Acrobat Reader", "winget": "Adobe.Acrobat.Reader.64-bit" },
+    { "name": "카카오톡", "winget": "Kakao.KakaoTalk" },
+    { "name": "Zoom", "winget": "Zoom.Zoom" },
+    { "name": "사내 프로그램 (예시)", "file": "installers\\example_setup.exe", "args": "/S", "selected": false }
+  ],
+  "taskbar": {
+    "alignLeft": true,
+    "search": "icon",
+    "hideTaskView": true,
+    "hideWidgets": true,
+    "hideChat": true
+  },
+  "power": {
+    "plan": "high",
+    "monitorTimeoutAC": 30,
+    "sleepTimeoutAC": 0,
+    "monitorTimeoutDC": 10,
+    "sleepTimeoutDC": 30,
+    "lidCloseAC": "nothing",
+    "lidCloseDC": "sleep",
+    "disableHibernate": false
+  },
+  "drivers": {
+    "localFolder": "drivers",
+    "useVendorTool": true,
+    "windowsUpdate": true
+  },
+  "misc": {
+    "showFileExtensions": true
+  }
+}

@@ -1,0 +1,3 @@
+Put extracted driver folders (containing .inf files) here.
+All .inf files in subfolders are installed with pnputil.
+Example: drivers\\Dell_Latitude_5440\\...
