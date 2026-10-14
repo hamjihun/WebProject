@@ -3,22 +3,6 @@
 새 PC나 포맷한 PC에서 **`Setup.bat` 더블클릭 한 번**으로 사내 표준 셋팅을 진행합니다.
 설치파일은 USB(**프로그램USB**)의 `【 Application 】` 폴더에서 자동으로 찾습니다. USB 드라이브 문자(D:, E: 등)가 바뀌어도 됩니다.
 
-## 실행 파일 (PCSetup.exe)
-
-`PCSetup.exe` 하나로 실행하는 포터블 형태입니다. 설치가 필요 없습니다.
-
-- USB 아무 곳에 `PCSetup.exe` 를 두고 더블클릭 → 관리자 권한 확인 **예**
-- 처음 실행하면 exe 옆에 `config.json`(설정)이 자동으로 만들어집니다. 설정을 바꾸려면 이 파일을 수정하세요. (exe 를 다시 만들 필요 없음)
-- 로그는 exe 옆 `logs` 폴더, Windows 11 시작화면 저장은 exe 옆 `startmenu` 폴더에 저장됩니다.
-- 재부팅 후 이어하기도 exe 로 자동 실행됩니다.
-- `Setup.bat` + `PCSetup.ps1` 로 실행하는 방법도 그대로 쓸 수 있습니다.
-
-### exe 다시 만들기 (PCSetup.ps1 을 고친 경우)
-프로그램 본체(`PCSetup.ps1`)는 exe 안에 들어 있으므로, 본체를 고쳤다면 exe 를 다시 만들어야 합니다.
-Windows 에서 `launcher\build.bat` 을 더블클릭하면 같은 폴더에 새 `PCSetup.exe` 가 만들어집니다. (Windows 에 기본으로 있는 .NET 컴파일러 사용, 별도 설치 필요 없음)
-
-> 서명되지 않은 exe 라서 처음 실행할 때 Windows SmartScreen 이나 백신이 경고할 수 있습니다. 그럴 때는 **추가 정보 → 실행** 을 누르거나 백신 예외에 등록하세요.
-
 ## 진행 순서
 
 | 순서 | 작업 | 내용 |
