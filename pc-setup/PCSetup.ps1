@@ -350,6 +350,10 @@ $Worker = {
     #               설치를 시작한 뒤에 실행된 그 이름의 프로그램 창만 대상
     #   select    : click 전에 목록에서 고를 항목 (예: "*Adobe*Acrobat*")
     #   close     : true 면 찾은 창을 닫음
+    #   radio     : 매번 선택해 둘 라디오 버튼 (예: 사용권 계약 '동의합니다')
+    #   windowText: 창 제목/글자에 이 패턴이 있는 창에서만 (예: "*재부팅*|*다시 시작*")
+    #   waitIdle  : 버튼을 누르기 전에 윈도우 업데이트/다른 설치가 끝났는지 확인
+    #               true = 항상, 글자 패턴 = 그 글자가 창에 있을 때만 (예: 마침 화면에 '다시 시작' 이 있으면)
     function Move-AutoStep($Job) {
         $Job.StepIdx++
         $Job.UncheckSeen = $false
@@ -379,6 +383,57 @@ $Worker = {
             }
         }
         return $null
+    }
+
+    # 창 제목이나 창 안의 글자에 패턴이 있는지 (예: '재부팅', '다시 시작')
+    function Test-WindowText($Window, [string]$Patterns) {
+        if (Test-LikeAny $Window.Current.Name $Patterns) { return $true }
+        foreach ($t in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::Text))) {
+            if (Test-LikeAny $t.Current.Name $Patterns) { return $true }
+        }
+        foreach ($t in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::RadioButton))) {
+            if (Test-LikeAny $t.Current.Name $Patterns) { return $true }
+        }
+        return $false
+    }
+
+    # 라디오 버튼 선택 (예: 사용권 계약 '동의합니다')
+    function Select-UIRadio($Window, [string]$Patterns, [string]$Name) {
+        foreach ($rb in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::RadioButton))) {
+            $label = ($rb.Current.Name -replace '&', '').Trim()
+            if (-not $label -or -not (Test-LikeAny $label $Patterns)) { continue }
+            $sp = $null
+            if ($rb.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$sp) -and -not $sp.Current.IsSelected) {
+                $sp.Select()
+                Write-Log "${Name}: '$label' 선택" 'OK'
+                Start-Sleep -Milliseconds 400
+            }
+        }
+    }
+
+    # 재부팅 버튼을 누르기 전: 윈도우 업데이트 / 다른 설치가 끝났는지 확인 (최대 30분 대기)
+    function Wait-RebootSafe($Job) {
+        for ($i = 0; $i -lt 360; $i++) {
+            if ($Sync.Cancel) { return $false }
+            $busy = @()
+            if ($Sync.Bg -and -not $Sync.Bg.Done) { $busy += '윈도우 업데이트(백그라운드)' }
+            try { if ((New-Object -ComObject Microsoft.Update.Installer).IsBusy) { $busy += '윈도우 업데이트 설치' } } catch { }
+            if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\InProgress') { $busy += 'MSI 설치' }
+            $busy += @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.SessionId -ne 0 -and -not $Job.Tree.Contains([int]$_.Id) -and
+                ($_.ProcessName -eq 'msiexec' -or $_.ProcessName -match 'setup|install')
+            } | ForEach-Object { $_.ProcessName })
+            if ($busy.Count -eq 0) {
+                Write-Log "$($Job.P.name): 윈도우 업데이트와 다른 설치가 모두 끝난 것을 확인했습니다." 'OK'
+                return $true
+            }
+            if ($i % 12 -eq 0) { Write-Log "$($Job.P.name): 재부팅 전에 끝나기를 기다립니다 - $(($busy | Select-Object -Unique) -join ', ')" 'WARN' }
+            Set-Status "$($Job.P.name): 재부팅 전에 업데이트/설치가 끝나기를 기다리는 중 ($(($busy | Select-Object -Unique) -join ', '))"
+            Set-ProgState $Job.P.name 'running' '재부팅 전 확인 중 (업데이트/설치 대기)'
+            Start-Sleep -Seconds 5
+        }
+        Write-Log "$($Job.P.name): 30분을 기다려도 업데이트/설치가 끝나지 않아 재부팅 버튼을 누르지 않았습니다. 확인 후 직접 눌러주세요." 'WARN'
+        return $false
     }
 
     function Step-AutoJob($Job, $Windows, $AllWindows, $Procs) {
@@ -431,6 +486,8 @@ $Worker = {
         foreach ($w in $Windows) {
             try {
                 if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
+                if ($st.windowText -and -not (Test-WindowText $w $st.windowText)) { continue }
+                if ($st.radio) { Select-UIRadio $w $st.radio $name }
                 if ($st.select -and -not $Job.Selected) {
                     $picked = Select-UIItem $w $st.select
                     if (-not $picked) { continue }
@@ -454,6 +511,14 @@ $Worker = {
                 }
                 if ($btn) {
                     $bn = $btn.Current.Name
+                    $needWait = $false
+                    if ($st.waitIdle -is [bool]) { $needWait = $st.waitIdle }
+                    elseif ($st.waitIdle) { $needWait = Test-WindowText $w ([string]$st.waitIdle) }
+                    if ($needWait) {
+                        Write-Log "${name}: [$bn] 을 누르면 재부팅될 수 있어 업데이트/다른 설치가 끝났는지 먼저 확인합니다."
+                        if (-not (Wait-RebootSafe $Job)) { $Job.Manual = $true; Set-ProgState $name 'manual' '재부팅 버튼을 직접 눌러주세요'; return }
+                        Write-Log "${name}: 재부팅을 진행합니다." 'OK'
+                    }
                     Invoke-UIButton $btn
                     Write-Log "${name}: [$bn] 자동 클릭" 'OK'
                     Move-AutoStep $Job
@@ -1680,12 +1745,11 @@ $Worker = {
         }
         if (-not $path -or -not (Test-Path -LiteralPath $path)) { throw '문서중앙화 설치파일을 찾지 못했습니다.' }
 
-        Write-Log "문서중앙화 설치 시작: $path (설치 화면에서 직접 진행, 재부팅이 여러 번 될 수 있습니다)"
-        Set-Status '문서중앙화: 설치 화면에서 직접 진행해 주세요 (재부팅하라고 뜨면 확인)'
-        Show-Guide '문서중앙화 설치 안내' $dc.guide
-        try { $code = Start-Installer $path $dc.args }
-        finally { Hide-Guide }
-        Write-Log "문서중앙화 설치 프로그램 종료 (코드 $code)" 'OK'
+        $p = [pscustomobject]@{
+            name = '문서중앙화'; args = $dc.args; guide = $dc.guide; auto = $dc.auto; dismiss = $dc.dismiss
+        }
+        Write-Log "문서중앙화 설치 시작: $path (재부팅이 여러 번 될 수 있습니다)"
+        Invoke-InstallJobs @(New-InstallJob $p $path) 0 $false
     }
 
     # --- 실행 ----------------------------------------------------------------

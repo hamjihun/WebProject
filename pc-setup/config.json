@@ -261,7 +261,27 @@
       "*문서중앙화*.exe"
     ],
     "args": "",
-    "guide": "설치 창이 뜨면 그대로 진행하세요.\n재부팅하라고 뜨면 [확인(OK)] 을 누르세요.\n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다."
+    "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  [다음] → [설치] → [마침]\n  → 재부팅하라고 뜨면: 윈도우 업데이트/다른 설치가 끝났는지\n     확인한 뒤 자동으로 재부팅\n\n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다.\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.",
+    "auto": [
+      {
+        "radio": "*동의합니다*|*동의함*|*I accept*",
+        "click": "설치|설치(*|Install|Install(*",
+        "alsoClick": "다음*|Next*|동의*|I Agree*",
+        "timeout": 600
+      },
+      {
+        "click": "마침*|Finish*|완료*|닫기*",
+        "waitIdle": "*다시 시작*|*재부팅*|*재시작*|*restart*|*reboot*",
+        "timeout": 1800
+      },
+      {
+        "windowText": "*다시 시작*|*재부팅*|*재시작*|*restart*|*reboot*",
+        "click": "예*|Yes*|확인*|OK|지금 다시 시작*|다시 시작*|재부팅*",
+        "waitIdle": true,
+        "timeout": 180,
+        "optional": true
+      }
+    ]
   },
   "drivers": {
     "localFolder": "drivers",
