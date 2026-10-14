@@ -8,6 +8,10 @@
     "subnet": "255.255.255.0",
     "dns1": "168.126.63.1"
   },
+  "install": {
+    "parallel": true,
+    "staggerSeconds": 30
+  },
   "programs": [
     {
       "name": "오피스",
@@ -158,7 +162,14 @@
   },
   "taskbar": {
     "search": "icon",
-    "hideWidgets": true
+    "hideWidgets": true,
+    "unpin": [
+      "메일",
+      "Mail",
+      "Microsoft Store",
+      "*Bandizip*",
+      "*반디집*"
+    ]
   },
   "desktopIcons": [
     "computer",

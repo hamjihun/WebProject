@@ -152,9 +152,13 @@ $Worker = {
     $IsWin11 = [Environment]::OSVersion.Version.Build -ge 22000
 
     function Write-Log([string]$Message, [string]$Level = 'INFO') {
+        if ($Plan.LogPrefix) { $Message = "$($Plan.LogPrefix) $Message" }
         $line = '[{0}] [{1}] {2}' -f (Get-Date -Format 'HH:mm:ss'), $Level, $Message
         $Sync.Queue.Enqueue($line)
-        Add-Content -LiteralPath $Plan.LogFile -Value $line -Encoding UTF8
+        # 윈도우 업데이트(백그라운드)와 같은 로그 파일에 쓰므로 잠금
+        if ($Sync.LogLock) { [System.Threading.Monitor]::Enter($Sync.LogLock) }
+        try { Add-Content -LiteralPath $Plan.LogFile -Value $line -Encoding UTF8 }
+        finally { if ($Sync.LogLock) { [System.Threading.Monitor]::Exit($Sync.LogLock) } }
     }
 
     # 작업이 끝난 뒤 안내창에 보여줄 메시지
@@ -189,18 +193,8 @@ $Worker = {
     # 화면 위에 항상 떠 있는 안내창 (설치 화면에서 직접 고를 것이 있을 때)
     function Show-Guide([string]$Title, [string]$Text) { $Sync.Guide = "[$Title]`n`n$(Expand-SiteText $Text)" }
 
-    function Hide-Guide { $Sync.GuideWait = $false; $Sync.Guide = '' }
+    function Hide-Guide { $Sync.GuideWait = ''; $Sync.Guide = '' }
 
-    # 안내창의 [완료] 버튼을 누를 때까지 대기
-    function Wait-GuideConfirm([string]$Name) {
-        $Sync.GuideAck = $false
-        $Sync.GuideWait = $true
-        Set-Status "${Name}: 남은 설정을 마친 뒤 안내창의 [완료] 를 눌러주세요"
-        while (-not $Sync.GuideAck) { Start-Sleep -Milliseconds 500 }
-        $Sync.GuideWait = $false
-    }
-
-    # 설치파일 실행. 설치 프로그램이 띄운 다른 프로그램(카톡 실행 등)은 기다리지 않음
     function Start-InstallerProcess([string]$Path, [string]$Arguments) {
         if ($Path -like '*.msi') {
             $msiArgs = "/i `"$Path`" /qn /norestart"
@@ -212,6 +206,7 @@ $Worker = {
             if ($Arguments) { $sp.ArgumentList = $Arguments.Replace('{dir}', (Split-Path $Path)) }
             $proc = Start-Process @sp
         }
+        $null = $proc.Handle   # 끝난 뒤 종료 코드를 읽으려면 미리 핸들을 잡아둬야 함
         return $proc
     }
 
@@ -234,15 +229,9 @@ $Worker = {
         return $false
     }
 
-    # 설치를 시작한 뒤에 새로 실행된 프로그램들의 창 (설치 프로그램, Client Update 등)
-    function Get-NewWindows([datetime]$Since) {
-        $pids = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
-            $_.Id -ne $PID -and $(try { $_.StartTime -ge $Since } catch { $false })
-        } | ForEach-Object { $_.Id })
-        if ($pids.Count -eq 0) { return @() }
+    function Get-TopWindows {
         $root = [System.Windows.Automation.AutomationElement]::RootElement
-        $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
-        return @($wins | Where-Object { $pids -contains $_.Current.ProcessId })
+        return @($root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition))
     }
 
     function Find-UIControl($Window, $ControlType) {
@@ -307,70 +296,83 @@ $Worker = {
         return $true
     }
 
-    # config 의 auto 단계를 순서대로 실행. 단계를 못 찾으면 $false (직접 진행으로 전환)
+    # config 의 auto 단계를 순서대로 처리 (한 번 호출에 한 동작씩, 여러 설치를 번갈아 처리)
     #   click     : 누를 버튼 이름 (예: "Finish*|마침*")
     #   alsoClick : click 버튼이 나올 때까지 계속 누를 버튼 (예: "다음*|Next*")
     #   setText   : 입력칸에 넣을 값 (예: "{erpServer}"), 넣은 뒤 click 버튼을 누름
-    #   window    : 창 제목 패턴 (생략하면 새로 뜬 모든 창)
+    #   window    : 창 제목 패턴 (생략하면 그 설치 프로그램의 모든 창)
     #   uncheck   : 버튼을 누르기 전에 체크 해제할 체크박스 이름 (예: "*Daum*")
     #               이 체크박스를 한 번도 못 찾았으면 click 버튼을 누르지 않음 (체크된 채로 설치되는 것 방지)
     #   optional  : true 면 못 찾아도 실패로 보지 않고 다음 단계로
-    function Invoke-AutoSteps([datetime]$Since, $Steps, [string]$Name) {
-        Initialize-UIA
-        $n = 0
-        foreach ($st in @($Steps)) {
-            $n++
-            $timeout = if ($st.timeout) { [int]$st.timeout } else { 180 }
-            $deadline = (Get-Date).AddSeconds($timeout)
-            $lastAlso = [datetime]::MinValue
-            $uncheckSeen = -not $st.uncheck
-            $done = $false
-            while (-not $done -and (Get-Date) -lt $deadline) {
-                Start-Sleep -Milliseconds 700
-                foreach ($w in (Get-NewWindows $Since)) {
-                    try {
-                        if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
-                        if ($st.uncheck -and (Clear-UICheckBoxes $w $st.uncheck $Name) -gt 0) { $uncheckSeen = $true }
-                        $btn = $null
-                        if ($st.click -and $uncheckSeen) { $btn = Find-UIButton $w $st.click }
+    #   timeout   : 이 단계를 기다릴 시간(초)
+    function Move-AutoStep($Job) {
+        $Job.StepIdx++
+        $Job.UncheckSeen = $false
+        $Job.LastAlso = [datetime]::MinValue
+        $Job.PauseUntil = (Get-Date).AddSeconds(1)
+        $steps = @($Job.P.auto)
+        if ($Job.StepIdx -lt $steps.Count) {
+            $t = if ($steps[$Job.StepIdx].timeout) { [int]$steps[$Job.StepIdx].timeout } else { 180 }
+            $Job.Deadline = (Get-Date).AddSeconds($t)
+        }
+        else { Write-Log "$($Job.P.name): 설치 화면 자동 진행 완료" 'OK' }
+    }
 
-                        if ($st.setText) {
-                            if ($st.click -and -not $btn) { continue }
-                            $text = Expand-SiteText $st.setText
-                            if (-not (Set-UIText $w $text)) { continue }
-                            Write-Log "${Name}: '$text' 자동 입력" 'OK'
-                            Start-Sleep -Milliseconds 600
-                            if ($btn) { Invoke-UIButton $btn; Write-Log "${Name}: [$($btn.Current.Name)] 자동 클릭" 'OK' }
-                            $done = $true
-                            break
-                        }
-                        if ($btn) {
-                            Invoke-UIButton $btn
-                            Write-Log "${Name}: [$($btn.Current.Name)] 자동 클릭" 'OK'
-                            $done = $true
-                            break
-                        }
-                        if ($st.alsoClick -and ((Get-Date) - $lastAlso).TotalSeconds -ge 2) {
-                            $b2 = Find-UIButton $w $st.alsoClick
-                            if ($b2) {
-                                Invoke-UIButton $b2
-                                Write-Log "${Name}: [$($b2.Current.Name)] 자동 클릭"
-                                $lastAlso = Get-Date
-                                break
-                            }
-                        }
+    function Step-AutoJob($Job, $Windows) {
+        $steps = @($Job.P.auto)
+        if ($Job.Manual -or $Job.StepIdx -ge $steps.Count) { return }
+        if ((Get-Date) -lt $Job.PauseUntil) { return }
+        $st = $steps[$Job.StepIdx]
+        $name = $Job.P.name
+
+        if ((Get-Date) -gt $Job.Deadline) {
+            if ($st.optional) {
+                Write-Log "${name}: 자동 진행 $($Job.StepIdx + 1) 단계 화면이 없어 넘어갑니다."
+                Move-AutoStep $Job
+                return
+            }
+            Write-Log "${name}: 자동 진행 $($Job.StepIdx + 1) 단계에서 화면을 찾지 못했습니다. 안내창을 보고 직접 진행해 주세요." 'WARN'
+            $Job.Manual = $true
+            return
+        }
+
+        foreach ($w in $Windows) {
+            try {
+                if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
+                if ($st.uncheck -and (Clear-UICheckBoxes $w $st.uncheck $name) -gt 0) { $Job.UncheckSeen = $true }
+                $btn = $null
+                if ($st.click -and ($Job.UncheckSeen -or -not $st.uncheck)) { $btn = Find-UIButton $w $st.click }
+
+                if ($st.setText) {
+                    if ($st.click -and -not $btn) { continue }
+                    $text = Expand-SiteText $st.setText
+                    if (-not (Set-UIText $w $text)) { continue }
+                    Write-Log "${name}: '$text' 자동 입력" 'OK'
+                    Start-Sleep -Milliseconds 500
+                    if ($btn) { $bn = $btn.Current.Name; Invoke-UIButton $btn; Write-Log "${name}: [$bn] 자동 클릭" 'OK' }
+                    Move-AutoStep $Job
+                    return
+                }
+                if ($btn) {
+                    $bn = $btn.Current.Name
+                    Invoke-UIButton $btn
+                    Write-Log "${name}: [$bn] 자동 클릭" 'OK'
+                    Move-AutoStep $Job
+                    return
+                }
+                if ($st.alsoClick -and ((Get-Date) - $Job.LastAlso).TotalSeconds -ge 2) {
+                    $b2 = Find-UIButton $w $st.alsoClick
+                    if ($b2) {
+                        $bn = $b2.Current.Name
+                        Invoke-UIButton $b2
+                        Write-Log "${name}: [$bn] 자동 클릭"
+                        $Job.LastAlso = Get-Date
+                        return
                     }
-                    catch { }   # 읽는 도중 창이 닫힌 경우
                 }
             }
-            if (-not $done) {
-                if ($st.optional) { Write-Log "${Name}: 자동 진행 $n 단계 화면이 없어 넘어갑니다."; continue }
-                Write-Log "${Name}: 자동 진행 $n 단계에서 화면을 찾지 못했습니다. 안내창을 보고 직접 진행해 주세요." 'WARN'
-                return $false
-            }
-            Start-Sleep -Seconds 1
+            catch { }   # 읽는 도중 창이 닫힌 경우
         }
-        return $true
     }
 
     function Restart-Explorer {
@@ -387,6 +389,29 @@ $Worker = {
         $idx = $n.IfIndex
         $adapter = Get-NetAdapter -InterfaceIndex $idx -ErrorAction Stop
         Write-Log "어댑터: $($adapter.Name) ($($adapter.InterfaceDescription), $($adapter.Status))"
+
+        if ($n.Dhcp) {
+            # 자동으로 IP 주소 받기 + DNS 자동
+            Get-NetRoute -InterfaceIndex $idx -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+            Set-NetIPInterface -InterfaceIndex $idx -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
+            Set-DnsClientServerAddress -InterfaceIndex $idx -ResetServerAddresses -ErrorAction Stop
+            & ipconfig.exe /renew "$($adapter.Name)" *> $null
+            Set-Status 'IP 주소를 자동으로 받는 중...'
+            $ip = $null
+            for ($i = 0; $i -lt 15; $i++) {
+                $ip = Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                      Where-Object { $_.PrefixOrigin -eq 'Dhcp' } | Select-Object -First 1
+                if ($ip) { break }
+                Start-Sleep -Seconds 2
+            }
+            if ($ip) { Write-Log "자동으로 IP 주소 받기 설정 완료: $($ip.IPAddress)" 'OK' }
+            else {
+                Write-Log '자동으로 IP 주소 받기로 설정했지만 아직 IP를 받지 못했습니다. 랜선 연결을 확인하세요.' 'WARN'
+                Add-Notice '네트워크: 자동으로 IP 주소를 받지 못했습니다. 랜선 연결을 확인하세요.'
+            }
+            return
+        }
 
         $current = @(Get-NetIPAddress -InterfaceIndex $idx -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object { $_.IPAddress })
         if ($current -notcontains $n.IP) {
@@ -422,65 +447,171 @@ $Worker = {
         }
     }
 
-    # --- 2. 프로그램 설치 ------------------------------------------------------
+    # --- 2. 프로그램 설치 (여러 개를 간격을 두고 동시에) --------------------------
+    function New-InstallJob($P, [string]$Path) {
+        return @{
+            P = $P; Path = $Path; State = 'pending'; Proc = $null; Tree = $null; Since = $null; Code = $null
+            StepIdx = 0; Deadline = [datetime]::MaxValue; PauseUntil = [datetime]::MinValue; LastAlso = [datetime]::MinValue
+            UncheckSeen = $false; Manual = $false; Alive = $true
+        }
+    }
+
+    function Start-InstallJob($Job) {
+        $p = $Job.P
+        if ($p.clipboard) {
+            $clip = Expand-SiteText $p.clipboard
+            [System.Windows.Forms.Clipboard]::SetText($clip)
+            Write-Log "$($p.name): '$clip' 를 클립보드에 복사했습니다. (Ctrl+V 로 붙여넣기)"
+        }
+        $Job.Since = (Get-Date).AddSeconds(-2)
+        $Job.Proc  = Start-InstallerProcess $Job.Path $p.args
+        $Job.Tree  = New-Object 'System.Collections.Generic.HashSet[int]'
+        [void]$Job.Tree.Add($Job.Proc.Id)
+        $Job.State = 'running'
+        if ($p.auto) {
+            $first = @($p.auto)[0]
+            $Job.Deadline = (Get-Date).AddSeconds($(if ($first.timeout) { [int]$first.timeout } else { 180 }))
+        }
+        $how = if ($p.auto) { '자동 진행' } elseif ($p.args) { '자동 설치' } else { '설치 화면에서 직접 진행' }
+        Write-Log "$($p.name): 설치 시작 ($how) - $($Job.Path)"
+    }
+
+    # 설치 프로그램과 그 프로그램이 띄운 하위 프로그램(Client Update 등)을 묶어서 추적
+    function Update-JobTree($Job, $Procs, $AliveIds) {
+        $added = $true
+        while ($added) {
+            $added = $false
+            foreach ($pr in $Procs) {
+                $id = [int]$pr.ProcessId
+                if ($Job.Tree.Contains($id)) { continue }
+                if ($Job.Tree.Contains([int]$pr.ParentProcessId) -and $pr.CreationDate -ge $Job.Since) {
+                    [void]$Job.Tree.Add($id)
+                    $added = $true
+                }
+            }
+        }
+        $Job.Alive = $false
+        foreach ($id in $Job.Tree) { if ($AliveIds.Contains($id)) { $Job.Alive = $true; break } }
+    }
+
+    function Complete-InstallJob($Job) {
+        $Job.State = 'done'
+        $Job.Code = $Job.Proc.ExitCode
+        $name = $Job.P.name
+        switch ($Job.Code) {
+            0       { Write-Log "${name}: 설치 완료" 'OK' }
+            3010    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true }
+            1641    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true }
+            1618    { Write-Log "${name}: 다른 설치가 진행 중이라 설치하지 못했습니다. 나중에 다시 설치합니다." 'WARN' }
+            default {
+                if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK' }
+                else { Write-Log "${name}: 설치 종료 코드 $($Job.Code) (실패했을 수 있으니 확인하세요)" 'ERROR' }
+            }
+        }
+    }
+
+    function Update-InstallJob($Job, $Procs, $AliveIds, $Windows) {
+        Update-JobTree $Job $Procs $AliveIds
+        if ($Job.State -eq 'running' -and $Job.P.auto) {
+            $mine = @(foreach ($w in $Windows) { try { if ($Job.Tree.Contains([int]$w.Current.ProcessId)) { $w } } catch { } })
+            Step-AutoJob $Job $mine
+        }
+        if (-not $Job.Proc.HasExited) { return }
+
+        $steps = @($Job.P.auto)
+        $autoPending = $Job.P.auto -and -not $Job.Manual -and $Job.StepIdx -lt $steps.Count
+        if ($autoPending) {
+            # 남은 단계가 모두 '없어도 되는' 단계이고 관련 프로그램이 모두 끝났으면 완료
+            $rest = @($steps | Select-Object -Skip $Job.StepIdx | Where-Object { -not $_.optional })
+            if ($rest.Count -eq 0 -and -not $Job.Alive) { Complete-InstallJob $Job }
+            return   # 아니면 다음 화면(Client Update 등)을 기다림 (제한시간이 지나면 직접 진행으로 전환)
+        }
+        if ($Job.Manual -and $Job.P.confirmAfter) {
+            if ($Job.State -ne 'waitAck') {
+                $Job.State = 'waitAck'
+                Write-Log "$($Job.P.name): 직접 진행을 마친 뒤 안내창의 [완료] 를 눌러주세요."
+            }
+            if ($Sync.GuideAck -eq $Job.P.name) { $Sync.GuideAck = ''; Complete-InstallJob $Job }
+            return
+        }
+        Complete-InstallJob $Job
+    }
+
+    function Invoke-InstallJobs($Jobs, [int]$Gap, [bool]$Parallel) {
+        $needUia = @($Jobs | Where-Object { $_.P.auto }).Count -gt 0
+        if ($needUia) { Initialize-UIA }
+        $next = Get-Date
+        $total = $Jobs.Count
+        while ($true) {
+            $open = @($Jobs | Where-Object { $_.State -ne 'done' })
+            if ($open.Count -eq 0) { break }
+            if ($Sync.Cancel) { Write-Log '중지 요청으로 프로그램 설치를 멈춥니다. (이미 실행된 설치 창은 그대로 남아 있습니다)' 'WARN'; break }
+
+            $running = @($Jobs | Where-Object { $_.State -in 'running', 'waitAck' })
+            $pending = @($Jobs | Where-Object { $_.State -eq 'pending' })
+            $canStart = if ($Parallel) { (Get-Date) -ge $next -or $running.Count -eq 0 } else { $running.Count -eq 0 }
+            if ($pending.Count -gt 0 -and $canStart) {
+                try { Start-InstallJob $pending[0] }
+                catch { Write-Log "$($pending[0].P.name): 설치 시작 실패 - $($_.Exception.Message)" 'ERROR'; $pending[0].State = 'done'; $pending[0].Code = -1 }
+                $next = (Get-Date).AddSeconds($Gap)
+            }
+
+            $procs = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, CreationDate -ErrorAction SilentlyContinue)
+            $aliveIds = New-Object 'System.Collections.Generic.HashSet[int]'
+            foreach ($pr in $procs) { [void]$aliveIds.Add([int]$pr.ProcessId) }
+            $windows = if ($needUia) { Get-TopWindows } else { @() }
+            foreach ($j in @($Jobs | Where-Object { $_.State -in 'running', 'waitAck' })) {
+                try { Update-InstallJob $j $procs $aliveIds $windows }
+                catch { Write-Log "$($j.P.name): 상태 확인 오류 - $($_.Exception.Message)" 'WARN' }
+            }
+
+            # 안내창: 진행 중인 설치들의 안내를 모아서 표시
+            $active = @($Jobs | Where-Object { $_.State -in 'running', 'waitAck' -and $_.P.guide })
+            $Sync.Guide = (@($active | ForEach-Object {
+                $tag = if ($_.State -eq 'waitAck') { '  ← 끝나면 [완료]' } elseif ($_.Manual) { '  (직접 진행)' } else { '' }
+                "■ $($_.P.name)$tag`r`n$((Expand-SiteText $_.P.guide) -replace "`n", "`r`n")"
+            }) -join "`r`n`r`n")
+            $waiting = @($Jobs | Where-Object { $_.State -eq 'waitAck' } | Select-Object -First 1)
+            $Sync.GuideWait = if ($waiting.Count) { $waiting[0].P.name } else { '' }
+
+            $done = @($Jobs | Where-Object { $_.State -eq 'done' }).Count
+            $names = (@($Jobs | Where-Object { $_.State -in 'running', 'waitAck' } | ForEach-Object { $_.P.name })) -join ', '
+            Set-Status "프로그램 설치 중: $names  (완료 $done/$total, 대기 $($pending.Count))"
+            Set-StepProgress $done $total
+            Start-Sleep -Milliseconds 800
+        }
+        Hide-Guide
+    }
+
     function Install-Programs {
         $list = @($Plan.Programs)
         if ($list.Count -eq 0) { Write-Log '선택된 프로그램이 없습니다.'; return }
         $files = Get-AppFiles $AppRoot
-
-        for ($i = 0; $i -lt $list.Count; $i++) {
-            $p = $list[$i]
-            Set-StepProgress $i $list.Count
-            Set-Status "프로그램 설치 중 ($($i + 1)/$($list.Count)): $($p.name)"
-            try {
-                if (Test-Installed $p) { Write-Log "$($p.name): 이미 설치되어 있어 건너뜀" 'OK'; continue }
-
-                if ($p.winget) {
-                    Write-Log "$($p.name): 설치 시작 (winget: $($p.winget))"
-                    & winget.exe install --id $p.winget -e --silent --accept-package-agreements --accept-source-agreements *> $null
-                    $code = $LASTEXITCODE
-                }
-                else {
-                    $path = Find-Installer $AppRoot $files $p $Plan.Site.name
-                    if (-not $path) { throw '설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요.' }
-                    if ($p.clipboard) {
-                        $clip = Expand-SiteText $p.clipboard
-                        [System.Windows.Forms.Clipboard]::SetText($clip)
-                        Write-Log "$($p.name): '$clip' 를 클립보드에 복사했습니다. (Ctrl+V 로 붙여넣기)"
-                    }
-                    if ($p.args) { Write-Log "$($p.name): 자동 설치 시작 ($path)" }
-                    else {
-                        Write-Log "$($p.name): 설치 화면이 뜨면 안내에 따라 진행해 주세요. ($path)"
-                        Set-Status "$($p.name): 설치 화면에서 직접 진행해 주세요 (끝나면 자동으로 다음 단계)"
-                    }
-                    if ($p.guide) { Show-Guide "$($p.name) 설치 안내" $p.guide }
-                    try {
-                        if ($p.auto) {
-                            Set-Status "$($p.name): 설치 화면을 자동으로 진행하는 중... (마우스/키보드를 건드리지 마세요)"
-                            $since = (Get-Date).AddSeconds(-2)
-                            $proc = Start-InstallerProcess $path $p.args
-                            $autoOk = Invoke-AutoSteps $since $p.auto $p.name
-                            if ($autoOk) { Write-Log "$($p.name): 설치 화면 자동 진행 완료" 'OK' }
-                            elseif ($p.confirmAfter) { Wait-GuideConfirm $p.name }
-                            if (-not $proc.HasExited) { $proc.WaitForExit() }
-                            $code = $proc.ExitCode
-                        }
-                        else {
-                            $code = Start-Installer $path $p.args
-                            if ($p.confirmAfter) { Wait-GuideConfirm $p.name }
-                        }
-                    }
-                    finally { Hide-Guide }
-                }
-
-                if ($code -eq 0) { Write-Log "$($p.name): 설치 완료" 'OK' }
-                elseif ($code -eq 3010 -or $code -eq 1641) {
-                    Write-Log "$($p.name): 설치 완료 (재부팅 필요)" 'OK'
-                    $Sync.RebootRequired = $true
-                }
-                else { Write-Log "$($p.name): 설치 종료 코드 $code (실패했을 수 있으니 확인하세요)" 'ERROR' }
+        $jobs = @()
+        foreach ($p in $list) {
+            if (Test-Installed $p) { Write-Log "$($p.name): 이미 설치되어 있어 건너뜀" 'OK'; continue }
+            if ($p.winget) {
+                Write-Log "$($p.name): 설치 시작 (winget: $($p.winget))"
+                & winget.exe install --id $p.winget -e --silent --accept-package-agreements --accept-source-agreements *> $null
+                if ($LASTEXITCODE -eq 0) { Write-Log "$($p.name): 설치 완료" 'OK' } else { Write-Log "$($p.name): 설치 실패 (코드 $LASTEXITCODE)" 'ERROR' }
+                continue
             }
-            catch { Write-Log "$($p.name): $($_.Exception.Message)" 'ERROR' }
+            $path = Find-Installer $AppRoot $files $p $Plan.Site.name
+            if (-not $path) { Write-Log "$($p.name): 설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요." 'ERROR'; continue }
+            $jobs += New-InstallJob $p $path
+        }
+        if ($jobs.Count -eq 0) { return }
+
+        $gap = if ($null -ne $Cfg.install.staggerSeconds) { [int]$Cfg.install.staggerSeconds } else { 30 }
+        $parallel = $Cfg.install.parallel -ne $false
+        if ($parallel) { Write-Log "프로그램 $($jobs.Count)개를 $gap 초 간격으로 차례로 실행해 동시에 설치합니다." }
+        Invoke-InstallJobs $jobs $gap $parallel
+
+        # 다른 설치와 겹쳐서 실패한 것(1618)은 하나씩 다시 설치
+        $retry = @($jobs | Where-Object { $_.Code -eq 1618 })
+        if ($retry.Count -gt 0 -and -not $Sync.Cancel) {
+            Write-Log "겹쳐서 실패한 프로그램을 하나씩 다시 설치합니다: $(($retry | ForEach-Object { $_.P.name }) -join ', ')"
+            Invoke-InstallJobs @($retry | ForEach-Object { New-InstallJob $_.P $_.Path }) 0 $false
         }
     }
 
@@ -554,7 +685,40 @@ $Worker = {
             try { if (& $item.Run) { Write-Log "작업표시줄: $($item.Desc) 적용" 'OK' } }
             catch { Write-Log "작업표시줄: $($item.Desc) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
+        if (@($t.unpin).Count -gt 0) {
+            try { Remove-TaskbarPins @($t.unpin) } catch { Write-Log "작업표시줄 아이콘 제거 실패 - $($_.Exception.Message)" 'ERROR' }
+        }
         $State.RestartExplorer = $true
+    }
+
+    # 작업표시줄에 고정된 아이콘 제거 (메일, Microsoft Store, 반디집 등)
+    function Remove-TaskbarPins([string[]]$Patterns) {
+        $removed = @()
+        $shell = New-Object -ComObject Shell.Application
+        foreach ($item in $shell.NameSpace('shell:::{4234d49b-0245-4df3-b780-3893943456e1}').Items()) {
+            $name = $item.Name
+            if (-not (Test-LikeAny $name ($Patterns -join '|'))) { continue }
+            foreach ($v in $item.Verbs()) {
+                if ($v.Name.Replace('&', '') -match '작업 표시줄에서 제거|작업 표시줄에서 고정 해제|Unpin from taskbar') {
+                    $v.DoIt()
+                    $removed += $name
+                }
+            }
+        }
+        # 바로가기로 고정된 아이콘 (반디집 등)
+        $pinDir = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+        foreach ($lnk in @(Get-ChildItem -LiteralPath $pinDir -Filter *.lnk -ErrorAction SilentlyContinue)) {
+            if (Test-LikeAny $lnk.BaseName ($Patterns -join '|')) {
+                Remove-Item -LiteralPath $lnk.FullName -Force -ErrorAction SilentlyContinue
+                if ($removed -notcontains $lnk.BaseName) { $removed += $lnk.BaseName }
+            }
+        }
+        # Microsoft Store 는 다시 고정되지 않도록 정책도 설정
+        if (Test-LikeAny 'Microsoft Store' ($Patterns -join '|')) {
+            try { Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' 'NoPinningStoreToTaskbar' 1 } catch { }
+        }
+        if ($removed.Count -gt 0) { Write-Log "작업표시줄 아이콘 제거: $(($removed | Select-Object -Unique) -join ', ')" 'OK' }
+        else { Write-Log '작업표시줄에서 제거할 아이콘이 없습니다. (이미 없거나 고정되어 있지 않음)' }
     }
 
     # --- 5. 바탕화면 아이콘 ----------------------------------------------------
@@ -973,6 +1137,7 @@ $Worker = {
         Write-Log "${Label}: $($updates.Count)개 발견"
 
         for ($i = 0; $i -lt $updates.Count; $i++) {
+            if ($Sync.Cancel) { Write-Log '중지 요청으로 업데이트 설치를 멈춥니다.' 'WARN'; break }
             $u = $updates[$i]
             Set-StepProgress $i $updates.Count
             Set-Status "$Label 설치 중 ($($i + 1)/$($updates.Count)): $($u.Title)"
@@ -1066,6 +1231,7 @@ $Worker = {
                 Add-Notice '윈도우 업데이트: 남은 항목이 있습니다. 설정 > Windows 업데이트 에서 확인하세요.'
                 return
             }
+            if ($Sync.Cancel) { return }
             Write-Log "윈도우 업데이트 $round 회차 (드라이버 포함)"
             $State.UpdateReboot = $false
             $n = Invoke-WindowsUpdate 'IsInstalled=0 and IsHidden=0' '윈도우 업데이트'
@@ -1077,6 +1243,69 @@ $Worker = {
                 return
             }
             if ($n -eq 0) { Write-Log '윈도우 업데이트: 최신 버전입니다.' 'OK'; return }
+        }
+    }
+
+    # 프로그램 설치와 동시에 진행하도록 윈도우 업데이트를 별도 런스페이스에서 실행
+    function Start-BackgroundUpdate {
+        $bg = [hashtable]::Synchronized(@{
+            Queue = $Sync.Queue; Notices = $Sync.Notices; LogLock = $Sync.LogLock
+            Status = '윈도우 업데이트 준비 중'; Percent = 0; StepCount = 1; Done = $false; Cancel = $false
+            RebootRequired = $false; NeedReboot = $false; ResumeRound = 0
+            Guide = ''; GuideWait = ''; GuideAck = ''
+        })
+        $bgPlan = $Plan.Clone()
+        $bgPlan.Steps = @(@{ Id = 'update'; Title = '윈도우 업데이트' })
+        $bgPlan.Background = $true
+        $bgPlan.LogPrefix = '[업데이트]'
+        $rs = [runspacefactory]::CreateRunspace()
+        $rs.ApartmentState = 'STA'
+        $rs.Open()
+        $ps = [powershell]::Create()
+        $ps.Runspace = $rs
+        [void]$ps.AddScript($Plan.WorkerCode).AddArgument($bg).AddArgument($bgPlan)
+        $State.Bg = @{ Sync = $bg; PS = $ps; RS = $rs; Handle = $ps.BeginInvoke() }
+        $Sync.Bg = $bg
+        $Sync.BgPS = $ps
+        Write-Log '윈도우 업데이트를 백그라운드에서 시작했습니다. (프로그램 설치와 동시에 진행)'
+    }
+
+    # 윈도우 업데이트가 끝나기를 기다리고, 재부팅이 필요한지 확인
+    function Wait-BackgroundUpdate {
+        if (-not $State.Bg) { return }
+        $bg = $State.Bg.Sync
+        Write-Log '윈도우 업데이트가 끝나기를 기다립니다...'
+        while (-not $bg.Done) {
+            if ($Sync.Cancel) { $bg.Cancel = $true; return }
+            Set-Status "윈도우 업데이트 마무리 대기 중 - $($bg.Status)"
+            Start-Sleep -Seconds 2
+        }
+        try { [void]$State.Bg.PS.EndInvoke($State.Bg.Handle) } catch { }
+        $State.Bg.PS.Dispose()
+        $State.Bg.RS.Dispose()
+        $State.Bg = $null
+        $Sync.Bg = $null
+        $Sync.BgPS = $null
+        if ($bg.NeedReboot) {
+            $State.ResumeHere = $true
+            $State.ResumeRound = $bg.ResumeRound
+        }
+        elseif ($bg.RebootRequired) { $Sync.RebootRequired = $true }
+    }
+
+    # 업데이트 재부팅이 필요하면: 설치 중인 프로그램이 없는지 확인 → 이어하기 예약 (업데이트부터 다시)
+    function Request-UpdateReboot([string[]]$RemainingIds) {
+        Restart-Explorer
+        Wait-InstallIdle
+        $ids = @('update') + @($RemainingIds | Where-Object { $_ -and $_ -ne 'update' })
+        try {
+            Register-Resume $ids $State.ResumeRound
+            $Sync.ResumeRequested = $true
+        }
+        catch {
+            Write-Log "이어하기 예약 실패: $($_.Exception.Message)" 'ERROR'
+            Add-Notice '재부팅 후 Setup.bat 을 다시 실행해서 윈도우 업데이트부터 이어서 진행하세요.'
+            $Sync.RebootRequired = $true
         }
     }
 
@@ -1170,22 +1399,29 @@ $Worker = {
 
     # --- 실행 ----------------------------------------------------------------
     try {
-        $os = Get-CimInstance Win32_OperatingSystem
-        Write-Log "셋팅 시작 - PC: $env:COMPUTERNAME / 사용자: $env:USERNAME / $($os.Caption) (빌드 $($os.BuildNumber))"
-        Write-Log "USB 폴더: $AppRoot"
+        if (-not $Plan.Background) {
+            $os = Get-CimInstance Win32_OperatingSystem
+            Write-Log "셋팅 시작 - PC: $env:COMPUTERNAME / 사용자: $env:USERNAME / $($os.Caption) (빌드 $($os.BuildNumber))"
+            Write-Log "USB 폴더: $AppRoot"
+        }
         $Sync.StepCount = [Math]::Max(1, $Plan.Steps.Count)
+        $stoppedAt = -1
 
         for ($s = 0; $s -lt $Plan.Steps.Count; $s++) {
+            if ($Sync.Cancel) { Write-Log '중지 요청으로 남은 작업을 건너뜁니다.' 'WARN'; break }
             $State.Step = $s
             Set-StepProgress 0 1
             $step = $Plan.Steps[$s]
             if ($step.Id -eq 'docCentral') {
+                # 문서중앙화 전에 윈도우 업데이트를 마무리하고, 재부팅이 필요하면 먼저 재부팅
+                Wait-BackgroundUpdate
+                if ($State.ResumeHere) { $stoppedAt = $s; break }
                 # 문서중앙화 설치가 PC를 재부팅해도 남은 작업(정품 인증 확인 등)을 이어서 하도록 미리 예약
                 Restart-Explorer
                 $after = @($Plan.Steps | Select-Object -Skip ($s + 1) | ForEach-Object { $_.Id })
                 try { Register-Resume $after 0 } catch { Write-Log "이어하기 예약 실패: $($_.Exception.Message)" 'WARN' }
             }
-            Write-Log "===== $($step.Title) ====="
+            if (-not $Plan.Background) { Write-Log "===== $($step.Title) =====" }
             Set-Status $step.Title
             try {
                 switch ($step.Id) {
@@ -1203,33 +1439,36 @@ $Worker = {
                     'extensions'  { Install-BrowserExtensions }
                     'printer'     { Install-Printers }
                     'drivers'     { Install-Drivers }
-                    'update'      { Invoke-UpdateCycle }
+                    'update'      { if ($Plan.Background) { Invoke-UpdateCycle } else { Start-BackgroundUpdate } }
                     'activation'  { Test-Activation }
                     'docCentral'  { Install-DocCentral }
                 }
             }
             catch { Write-Log "$($step.Title) 중 오류: $($_.Exception.Message)" 'ERROR' }
+        }
 
-            # 윈도우 업데이트 후 재부팅이 필요하면: 설치 중인 프로그램이 없는지 확인 → 이어하기 예약 → 재부팅
-            if ($State.ResumeHere) {
-                Restart-Explorer
-                Wait-InstallIdle
-                $remaining = @($Plan.Steps | Select-Object -Skip $s | ForEach-Object { $_.Id })
-                try {
-                    Register-Resume $remaining $State.ResumeRound
-                    $Sync.ResumeRequested = $true
-                }
-                catch {
-                    Write-Log "이어하기 예약 실패: $($_.Exception.Message)" 'ERROR'
-                    Add-Notice '재부팅 후 Setup.bat 을 다시 실행해서 윈도우 업데이트부터 이어서 진행하세요.'
-                    $Sync.RebootRequired = $true
-                }
-                break
-            }
+        if ($Plan.Background) {
+            # 백그라운드 업데이트: 재부팅 필요 여부만 알려줌 (재부팅은 메인 작업이 결정)
+            if ($State.ResumeHere) { $Sync.NeedReboot = $true; $Sync.ResumeRound = $State.ResumeRound }
+            Write-Log '윈도우 업데이트 작업 끝'
+            return
+        }
+
+        # 모든 작업 뒤 (문서중앙화가 없을 때): 업데이트 마무리 확인
+        if ($stoppedAt -lt 0 -and -not $Sync.Cancel) {
+            Wait-BackgroundUpdate
+            if ($State.ResumeHere) { $stoppedAt = $Plan.Steps.Count }
+        }
+        if ($State.ResumeHere -and -not $Sync.Cancel) {
+            Write-Log '윈도우 업데이트 적용을 위해 재부팅이 필요합니다.' 'WARN'
+            Request-UpdateReboot @($Plan.Steps | Select-Object -Skip $stoppedAt | ForEach-Object { $_.Id })
         }
 
         Restart-Explorer
-        if ($Sync.ResumeRequested) {
+        if ($Sync.Cancel) {
+            Write-Log '===== 중지되었습니다 =====' 'WARN'
+        }
+        elseif ($Sync.ResumeRequested) {
             Write-Log '===== 재부팅 후 이어서 진행합니다 =====' 'OK'
         }
         else {
@@ -1239,6 +1478,7 @@ $Worker = {
     }
     catch { Write-Log "예상치 못한 오류: $($_.Exception.Message)" 'ERROR' }
     finally {
+        if ($State.Bg -and -not $Plan.Background) { $State.Bg.Sync.Cancel = $true }
         $Sync.Percent = 100
         $Sync.Status  = '완료'
         $Sync.Done    = $true
@@ -1276,12 +1516,14 @@ $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
 $form.Font = $Font
 
-# 실행 순서대로 (재부팅이 필요한 윈도우 업데이트와 문서중앙화는 마지막)
+# 실행 순서대로. 윈도우 업데이트는 백그라운드에서 시작해 프로그램 설치와 동시에 진행하고,
+# 문서중앙화 직전(또는 마지막)에 끝나기를 기다려 재부팅이 필요하면 재부팅 후 이어서 진행
 $TaskDefs = @(
     @{ Id = 'network';     Title = '이더넷 IP 설정';                    Default = $true },
+    @{ Id = 'update';      Title = '윈도우 업데이트 (설치와 동시에 진행)'; Default = $true },
     @{ Id = 'programs';    Title = '프로그램 설치 (USB)';               Default = $true },
     @{ Id = 'fonts';       Title = '폰트 설치 (LG스마트체)';            Default = $true },
-    @{ Id = 'taskbar';     Title = '작업표시줄 (뉴스 끄기, 검색 아이콘)'; Default = $true },
+    @{ Id = 'taskbar';     Title = '작업표시줄 (뉴스·아이콘 정리)';      Default = $true },
     @{ Id = 'desktop';     Title = '바탕화면 아이콘 표시';              Default = $true },
     @{ Id = 'officeLinks'; Title = '엑셀·파워포인트·워드 바로가기';      Default = $true },
     @{ Id = 'misc';        Title = '파일 확장명 표시 / PC 이름';        Default = $true },
@@ -1292,7 +1534,6 @@ $TaskDefs = @(
     @{ Id = 'extensions';  Title = '크롬·엣지 업데이트 + ClouDoc 확장';  Default = $true },
     @{ Id = 'printer';     Title = '프린터 설치';                       Default = $true },
     @{ Id = 'drivers';     Title = '드라이버 확인 (제조사 도구 등)';     Default = $false },
-    @{ Id = 'update';      Title = '윈도우 업데이트 (최신까지 반복)';    Default = $true },
     @{ Id = 'docCentral';  Title = '문서중앙화 설치 (재부팅 여러 번)';   Default = $true },
     @{ Id = 'activation';  Title = '정품 인증 확인';                    Default = $true }
 )
@@ -1325,7 +1566,8 @@ $txtGateway = New-Control 'TextBox' '192.168.0.1' 104 112 160 24
 $txtDns1    = New-Control 'TextBox' $Config.network.dns1 104 142 160 24
 $lblGwHint  = New-Control 'Label' 'IP 입력 시 자동 변경' 270 115 125 20
 $lblGwHint.ForeColor = $Gray
-$grpNet.Controls.AddRange(@($cmbAdapter, $txtIp, $txtSubnet, $txtGateway, $txtDns1, $lblGwHint))
+$chkDhcp    = New-Control 'CheckBox' '자동으로 IP 받기' 270 52 125 24
+$grpNet.Controls.AddRange(@($cmbAdapter, $txtIp, $txtSubnet, $txtGateway, $txtDns1, $lblGwHint, $chkDhcp))
 
 # 지점: ERP 서버 주소와 기본 프린터가 정해짐
 $grpSite = New-Group '3. 지점 (ERP 서버 / 프린터)' 354 198 400 48
@@ -1388,7 +1630,11 @@ $txtLog.BackColor = [System.Drawing.Color]::White
 $txtLog.Font = New-Object System.Drawing.Font('Consolas', 9)
 $btnStart = New-Control 'Button' '셋팅 시작' 1018 714 150 36
 $btnStart.Font = $BoldFont
-$form.Controls.AddRange(@($lblStatus, $progress, $txtLog, $btnStart))
+$btnStop = New-Control 'Button' '중지' 860 714 150 36
+$btnStop.Font = $BoldFont
+$btnStop.ForeColor = [System.Drawing.Color]::DarkRed
+$btnStop.Enabled = $false
+$form.Controls.AddRange(@($lblStatus, $progress, $txtLog, $btnStart, $btnStop))
 
 # ---------------------------------------------------------------------------
 # 화면 데이터
@@ -1491,6 +1737,13 @@ $txtIp.Add_TextChanged({
     if ($o.Count -ge 3 -and $o[2] -match '^\d{1,3}$') { $txtGateway.Text = '{0}.{1}.{2}.1' -f $o[0], $o[1], $o[2] }
 })
 $txtIp.Add_GotFocus({ $txtIp.SelectionStart = $txtIp.Text.Length })
+
+# 자동으로 IP 받기(DHCP)를 고르면 수동 입력칸은 사용하지 않음
+$chkDhcp.Add_CheckedChanged({
+    $manual = -not $chkDhcp.Checked
+    foreach ($tb in @($txtIp, $txtSubnet, $txtGateway, $txtDns1)) { $tb.Enabled = $manual }
+    $lblGwHint.Visible = $manual
+})
 
 $btnUsb.Add_Click({
     $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -1619,23 +1872,28 @@ foreach ($rb in $SiteRadios) {
 # --- 설치 안내창 (항상 위) ---
 $guideForm = New-Object System.Windows.Forms.Form
 $guideForm.Text = 'PC 셋팅 - 설치 안내'
-$guideForm.ClientSize = New-Object System.Drawing.Size(440, 250)
+$guideForm.ClientSize = New-Object System.Drawing.Size(470, 380)
 $guideForm.FormBorderStyle = 'FixedToolWindow'
 $guideForm.TopMost = $true
 $guideForm.ShowInTaskbar = $false
 $guideForm.StartPosition = 'Manual'
 $guideForm.ControlBox = $false
 $guideForm.BackColor = [System.Drawing.Color]::LightYellow
-$lblGuide = New-Object System.Windows.Forms.Label
+$lblGuide = New-Object System.Windows.Forms.TextBox
+$lblGuide.Multiline = $true
+$lblGuide.ReadOnly = $true
+$lblGuide.ScrollBars = 'Vertical'
+$lblGuide.BorderStyle = 'None'
+$lblGuide.BackColor = [System.Drawing.Color]::LightYellow
 $lblGuide.Location = New-Object System.Drawing.Point(14, 12)
-$lblGuide.Size = New-Object System.Drawing.Size(414, 186)
-$lblGuide.Font = New-Object System.Drawing.Font('Malgun Gothic', 11)
+$lblGuide.Size = New-Object System.Drawing.Size(444, 312)
+$lblGuide.Font = New-Object System.Drawing.Font('Malgun Gothic', 10.5)
 $btnGuideOk = New-Object System.Windows.Forms.Button
 $btnGuideOk.Text = '완료 (다음 단계로)'
 $btnGuideOk.Font = $BoldFont
-$btnGuideOk.Location = New-Object System.Drawing.Point(270, 204)
-$btnGuideOk.Size = New-Object System.Drawing.Size(158, 36)
-$btnGuideOk.Add_Click({ $script:Sync.GuideAck = $true })
+$btnGuideOk.Location = New-Object System.Drawing.Point(230, 334)
+$btnGuideOk.Size = New-Object System.Drawing.Size(228, 36)
+$btnGuideOk.Add_Click({ $script:Sync.GuideAck = $script:Sync.GuideWait })
 $guideForm.Controls.AddRange(@($lblGuide, $btnGuideOk))
 $script:LastGuide = ''
 
@@ -1644,14 +1902,17 @@ function Update-GuideWindow {
     if ($text -ne $script:LastGuide) {
         $script:LastGuide = $text
         if ($text) {
-            $lblGuide.Text = $text
+            # 글상자는 줄바꿈이 CRLF 여야 함
+            $lblGuide.Text = $text.Replace("`r`n", "`n").Replace("`n", "`r`n")
             $area = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
             $guideForm.Location = New-Object System.Drawing.Point(($area.Right - $guideForm.Width - 12), ($area.Top + 12))
             if (-not $guideForm.Visible) { $guideForm.Show() }
         }
         elseif ($guideForm.Visible) { $guideForm.Hide() }
     }
-    $btnGuideOk.Visible = [bool]$script:Sync.GuideWait
+    $wait = [string]$script:Sync.GuideWait
+    $btnGuideOk.Visible = [bool]$wait
+    if ($wait) { $btnGuideOk.Text = "$wait 완료 (다음으로)" }
 }
 
 # --- 시작 ---
@@ -1667,7 +1928,11 @@ function Start-Setup([bool]$Auto = $false) {
 
     # 네트워크 입력 확인
     $network = $null
-    if ($ids -contains 'network') {
+    if ($ids -contains 'network' -and $chkDhcp.Checked) {
+        if ($cmbAdapter.SelectedIndex -lt 0) { [System.Windows.Forms.MessageBox]::Show('이더넷 어댑터를 찾지 못했습니다. 랜카드 드라이버를 확인하세요.') | Out-Null; return }
+        $network = @{ IfIndex = $script:Adapters[$cmbAdapter.SelectedIndex].ifIndex; Dhcp = $true }
+    }
+    elseif ($ids -contains 'network') {
         $prefix = Get-PrefixLength $txtSubnet.Text.Trim()
         if ($cmbAdapter.SelectedIndex -lt 0) { [System.Windows.Forms.MessageBox]::Show('이더넷 어댑터를 찾지 못했습니다. 랜카드 드라이버를 확인하세요.') | Out-Null; return }
         if (-not (Test-IPv4 $txtIp.Text.Trim())) { [System.Windows.Forms.MessageBox]::Show('IP 주소를 끝까지 입력하세요. (예: 192.168.0.25)') | Out-Null; $txtIp.Focus(); return }
@@ -1711,7 +1976,8 @@ function Start-Setup([bool]$Auto = $false) {
     if (-not $Auto) {
         $summary = ($steps | ForEach-Object { " - $($_.Title)" }) -join "`n"
         $extra = ''
-        if ($network) { $extra += "`nIP: $($network.IP) / 게이트웨이: $($network.Gateway)" }
+        if ($network -and $network.Dhcp) { $extra += "`nIP: 자동으로 받기 (DHCP)" }
+        elseif ($network) { $extra += "`nIP: $($network.IP) / 게이트웨이: $($network.Gateway)" }
         if ($site) { $extra += "`n지점: $($site.name) (ERP $($site.erpServer))" }
         $extra += "`n프로그램: $($selectedPrograms.Count)개 / 프린터: $(($selectedPrinters | ForEach-Object { $_.name }) -join ', ')"
         $ans = [System.Windows.Forms.MessageBox]::Show("다음 작업을 시작합니다.`n`n$summary`n$extra`n`n진행할까요?", 'PC 셋팅', 'YesNo', 'Question')
@@ -1734,6 +2000,7 @@ function Start-Setup([bool]$Auto = $false) {
         Printers     = $selectedPrinters
         Site         = $site
         UpdateRound  = $(if ($resume) { [int]$resume.UpdateRound } else { 0 })
+        WorkerCode   = $Worker.ToString()
         ComputerName = $newName
         LogFile      = $logFile
     }
@@ -1748,14 +2015,19 @@ function Start-Setup([bool]$Auto = $false) {
         RebootRequired  = $false
         ResumeRequested = $false
         Guide           = ''
-        GuideWait       = $false
-        GuideAck        = $false
+        GuideWait       = ''
+        GuideAck        = ''
+        Cancel          = $false
+        LogLock         = New-Object System.Object
+        Bg              = $null
+        BgPS            = $null
     })
     if ($resume) { foreach ($n in @($resume.Notices)) { if ($n) { [void]$script:Sync.Notices.Add($n) } } }
     $script:ResumeState = $null
 
     $txtLog.Clear()
     foreach ($c in $controlsToLock) { $c.Enabled = $false }
+    $btnStop.Enabled = $true
     $script:Running = $true
 
     $script:Runspace = [runspacefactory]::CreateRunspace()
@@ -1776,7 +2048,10 @@ $timer.Add_Tick({
     $line = $null
     while ($script:Sync.Queue.TryDequeue([ref]$line)) { $txtLog.AppendText($line + "`r`n") }
     $progress.Value = [Math]::Min(100, [Math]::Max(0, [int]$script:Sync.Percent))
-    $lblStatus.Text = $script:Sync.Status
+    $status = [string]$script:Sync.Status
+    $bg = $script:Sync.Bg
+    if ($bg -and -not $bg.Done) { $status += "    ‖  업데이트: $($bg.Status)" }
+    $lblStatus.Text = $status
     Update-GuideWindow
 
     if (-not $script:Sync.Done) { return }
@@ -1790,8 +2065,15 @@ $timer.Add_Tick({
     $script:Runspace.Dispose()
     $script:Running = $false
     foreach ($c in $controlsToLock) { $c.Enabled = $true }
+    $btnStop.Enabled = $false
+    $btnStop.Text = '중지'
     Update-ProgramList
     Update-Activation
+
+    if ($script:Sync.Cancel) {
+        [System.Windows.Forms.MessageBox]::Show("중지했습니다.`n`n이미 실행된 설치 창이나 진행 중이던 윈도우 업데이트는 그대로 남아 있을 수 있습니다.`n다시 시작하려면 [셋팅 시작] 을 누르세요. (이미 설치된 프로그램은 건너뜁니다)", 'PC 셋팅', 'OK', 'Information') | Out-Null
+        return
+    }
 
     $errors = @($txtLog.Lines | Where-Object { $_ -like '*`[ERROR`]*' }).Count
 
@@ -1818,10 +2100,29 @@ $timer.Add_Tick({
     }
 })
 
+# 중지: 진행 중인 작업을 멈추고 재부팅 후 이어하기 예약도 취소
+# (이미 실행된 설치 프로그램은 강제로 끄지 않음 - 설치 중에 끄면 프로그램이 망가질 수 있음)
+function Stop-Setup {
+    if (-not $script:Running) { return }
+    $ans = [System.Windows.Forms.MessageBox]::Show("진행 중인 작업을 중지할까요?`n`n이미 실행된 설치 창은 그대로 두니 필요하면 직접 닫아주세요.`n재부팅 후 이어하기 예약도 취소됩니다.", 'PC 셋팅 - 중지', 'YesNo', 'Warning')
+    if ($ans -ne 'Yes') { return }
+    $script:Sync.Cancel = $true
+    $script:Sync.GuideAck = $script:Sync.GuideWait
+    if ($script:Sync.Bg) { $script:Sync.Bg.Cancel = $true }
+    try { [void]$script:PS.BeginStop($null, $null) } catch { }
+    try { if ($script:Sync.BgPS) { [void]$script:Sync.BgPS.BeginStop($null, $null) } } catch { }
+    Unregister-ScheduledTask -TaskName 'PCSetupResume' -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $ResumePath -Force -ErrorAction SilentlyContinue
+    $btnStop.Enabled = $false
+    $btnStop.Text = '중지하는 중...'
+}
+
+$btnStop.Add_Click({ Stop-Setup })
+
 $form.Add_FormClosing({
     param($s, $e)
     if ($script:Running) {
-        [System.Windows.Forms.MessageBox]::Show('작업이 진행 중입니다. 끝날 때까지 기다려 주세요.', 'PC 셋팅', 'OK', 'Warning') | Out-Null
+        [System.Windows.Forms.MessageBox]::Show('작업이 진행 중입니다. 멈추려면 [중지] 버튼을 누르세요.', 'PC 셋팅', 'OK', 'Warning') | Out-Null
         $e.Cancel = $true
     }
 })
