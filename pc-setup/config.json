@@ -1,35 +1,109 @@
 {
+  "usb": {
+    "label": "프로그램USB",
+    "appFolder": "【 Application 】"
+  },
+  "network": {
+    "ip": "192.168.",
+    "subnet": "255.255.255.0",
+    "dns1": "168.126.63.1",
+    "dns2": "8.8.8.8"
+  },
   "programs": [
-    { "name": "Chrome", "winget": "Google.Chrome" },
-    { "name": "반디집", "winget": "Bandisoft.Bandizip" },
-    { "name": "Adobe Acrobat Reader", "winget": "Adobe.Acrobat.Reader.64-bit" },
-    { "name": "카카오톡", "winget": "Kakao.KakaoTalk" },
-    { "name": "Zoom", "winget": "Zoom.Zoom" },
-    { "name": "사내 프로그램 (예시)", "file": "installers\\example_setup.exe", "args": "/S", "selected": false }
+    {
+      "name": "오피스",
+      "find": ["*오피스*\\setup.exe", "*office*\\setup.exe", "*오피스*.exe", "*office*.exe"],
+      "args": "",
+      "installed": ["%ProgramFiles%\\Microsoft Office\\root\\Office1*\\EXCEL.EXE", "%ProgramFiles(x86)%\\Microsoft Office\\root\\Office1*\\EXCEL.EXE",
+                    "%ProgramFiles%\\Microsoft Office\\Office1*\\EXCEL.EXE", "%ProgramFiles(x86)%\\Microsoft Office\\Office1*\\EXCEL.EXE"]
+    },
+    {
+      "name": "반디집",
+      "find": ["*bandizip*.exe", "*반디집*.exe"],
+      "args": "/S",
+      "installed": ["%ProgramFiles%\\Bandizip\\Bandizip.exe"]
+    },
+    {
+      "name": "크롬",
+      "find": ["*chrome*.msi", "*chrome*.exe", "*크롬*.msi", "*크롬*.exe"],
+      "args": "/silent /install",
+      "installed": ["%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe", "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"]
+    },
+    {
+      "name": "카카오톡",
+      "find": ["*kakaotalk*.exe", "*카카오톡*.exe", "*카톡*.exe"],
+      "args": "/S",
+      "installed": ["%ProgramFiles(x86)%\\Kakao\\KakaoTalk\\KakaoTalk.exe", "%ProgramFiles%\\Kakao\\KakaoTalk\\KakaoTalk.exe"]
+    },
+    {
+      "name": "Adobe Reader",
+      "find": ["*reader*.exe", "*acro*.exe", "*adobe*.exe", "*아크로뱃*.exe"],
+      "args": "/sAll /rs /msi EULA_ACCEPT=YES",
+      "installed": ["%ProgramFiles%\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe", "%ProgramFiles(x86)%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
+                    "%ProgramFiles%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe"]
+    },
+    {
+      "name": "V3",
+      "find": ["*v3*.exe", "*ahnlab*.exe", "*안랩*.exe"],
+      "args": "",
+      "installed": ["%ProgramFiles%\\AhnLab\\V3*", "%ProgramFiles(x86)%\\AhnLab\\V3*"]
+    },
+    {
+      "name": "ERP",
+      "find": ["*erp*.exe", "*erp*.msi"],
+      "args": ""
+    }
   ],
+  "fonts": {
+    "folder": "2. font\\LG스마트체",
+    "search": "LG스마트체"
+  },
   "taskbar": {
-    "alignLeft": true,
     "search": "icon",
-    "hideTaskView": true,
-    "hideWidgets": true,
-    "hideChat": true
+    "hideWidgets": true
+  },
+  "desktopIcons": ["computer", "userFiles", "network", "recycleBin", "controlPanel"],
+  "misc": {
+    "showFileExtensions": true
   },
   "power": {
-    "plan": "high",
-    "monitorTimeoutAC": 30,
+    "plan": "",
+    "monitorTimeoutAC": 60,
+    "monitorTimeoutDC": 60,
     "sleepTimeoutAC": 0,
-    "monitorTimeoutDC": 10,
-    "sleepTimeoutDC": 30,
+    "sleepTimeoutDC": 0,
     "lidCloseAC": "nothing",
-    "lidCloseDC": "sleep",
+    "lidCloseDC": "nothing",
+    "lidOnlyLaptop": true,
     "disableHibernate": false
+  },
+  "browser": {
+    "updateFirst": true,
+    "chromeExtensions": ["mhocmmnceidnldpneiioaglmmgkhhmgh"],
+    "edgeExtensions": ["nijboebkfeipcfjoohpkloahghaidpaj"],
+    "enforceSettings": false
+  },
+  "printer": {
+    "driverFolder": "5. IV C2263N(김해2F 1.133, 1F 1.11 부산0.7)\\C3060드라이버",
+    "search": "*C3060*",
+    "driverName": "",
+    "driverHint": "C3060",
+    "namePrefix": "IV C2263N",
+    "printers": [
+      { "name": "부산", "ip": "192.168.0.7" },
+      { "name": "김해 2F", "ip": "192.168.1.133" },
+      { "name": "김해 1F", "ip": "192.168.1.11" }
+    ]
+  },
+  "docCentral": {
+    "folder": "8.문서중앙화",
+    "search": "*문서중앙화*",
+    "file": "",
+    "args": ""
   },
   "drivers": {
     "localFolder": "drivers",
     "useVendorTool": true,
     "windowsUpdate": true
-  },
-  "misc": {
-    "showFileExtensions": true
   }
 }
