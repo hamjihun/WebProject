@@ -104,6 +104,17 @@ $Common = {
         return $false
     }
 
+    # 프로그램 추가/제거 목록에서 이름이 맞는 항목 (제거 명령 포함)
+    function Get-UninstallEntries([string]$Pattern) {
+        $keys = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        )
+        @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |
+          Where-Object { $_.DisplayName -and $_.DisplayName -like $Pattern -and $_.UninstallString })
+    }
+
     function Get-ActivationInfo {
         $os  = Get-CimInstance Win32_OperatingSystem
         $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
@@ -472,8 +483,8 @@ $Worker = {
             $first = @($p.auto)[0]
             $Job.Deadline = (Get-Date).AddSeconds($(if ($first.timeout) { [int]$first.timeout } else { 180 }))
         }
-        $how = if ($p.auto) { '자동 진행' } elseif ($p.args) { '자동 설치' } else { '설치 화면에서 직접 진행' }
-        Write-Log "$($p.name): 설치 시작 ($how) - $($Job.Path)"
+        $how = if ($p.uninstall) { '삭제' } elseif ($p.auto) { '자동 진행' } elseif ($p.args) { '자동 설치' } else { '설치 화면에서 직접 진행' }
+        Write-Log "$($p.name): 시작 ($how) - $($Job.Path) $($p.args)"
     }
 
     # 설치 프로그램과 그 프로그램이 띄운 하위 프로그램(Client Update 등)을 묶어서 추적
@@ -498,6 +509,11 @@ $Worker = {
         $Job.State = 'done'
         $Job.Code = $Job.Proc.ExitCode
         $name = $Job.P.name
+        if ($Job.P.uninstall) {
+            if (@(Get-UninstallEntries $Job.P.uninstall).Count -eq 0) { Write-Log "${name}: 삭제 완료" 'OK' }
+            else { Write-Log "${name}: 삭제가 끝나지 않았습니다. (종료 코드 $($Job.Code)) 프로그램 추가/제거에서 확인하세요." 'WARN' }
+            return
+        }
         switch ($Job.Code) {
             0       { Write-Log "${name}: 설치 완료" 'OK' }
             3010    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true }
@@ -583,12 +599,33 @@ $Worker = {
         Hide-Guide
     }
 
+    # 프로그램 추가/제거의 제거 명령으로 삭제 작업 만들기 (예: OneDrive)
+    function New-UninstallJobs($P) {
+        $entries = @(Get-UninstallEntries $P.uninstall)
+        if ($entries.Count -eq 0) { Write-Log "$($P.name): 프로그램 추가/제거에 없어 건너뜀 (이미 삭제됨)" 'OK'; return @() }
+        foreach ($proc in @($P.stopProcess)) { if ($proc) { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue } }
+        $jobs = @()
+        foreach ($en in $entries) {
+            $cmd = [Environment]::ExpandEnvironmentVariables($en.UninstallString.Trim())
+            if ($cmd -match '^"([^"]+)"\s*(.*)$' -or $cmd -match '^(.+?\.exe)\s*(.*)$') {
+                $exe = $matches[1]; $arg = $matches[2].Trim()
+                if ($P.extraArgs) { $arg = "$arg $($P.extraArgs)".Trim() }
+                $jp = [pscustomobject]@{ name = $P.name; uninstall = $P.uninstall; args = $arg }
+                $jobs += New-InstallJob $jp $exe
+                Write-Log "$($P.name): '$($en.DisplayName)' 삭제 예정"
+            }
+            else { Write-Log "$($P.name): 제거 명령을 해석하지 못했습니다: $cmd" 'WARN' }
+        }
+        return $jobs
+    }
+
     function Install-Programs {
         $list = @($Plan.Programs)
         if ($list.Count -eq 0) { Write-Log '선택된 프로그램이 없습니다.'; return }
         $files = Get-AppFiles $AppRoot
         $jobs = @()
         foreach ($p in $list) {
+            if ($p.uninstall) { $jobs += New-UninstallJobs $p; continue }
             if (Test-Installed $p) { Write-Log "$($p.name): 이미 설치되어 있어 건너뜀" 'OK'; continue }
             if ($p.winget) {
                 Write-Log "$($p.name): 설치 시작 (winget: $($p.winget))"
@@ -1669,7 +1706,10 @@ function Update-ProgramList {
     $list = @($script:Config.programs)
     for ($i = 0; $i -lt $list.Count; $i++) {
         $p = $list[$i]
-        if ($p.winget) { $where = "winget: $($p.winget)" }
+        if ($p.uninstall) {
+            $where = if (@(Get-UninstallEntries $p.uninstall).Count -gt 0) { '프로그램 추가/제거에서 삭제' } else { '(이미 없음)' }
+        }
+        elseif ($p.winget) { $where = "winget: $($p.winget)" }
         else {
             $siteName = $(if (Get-SelectedSite) { (Get-SelectedSite).name } else { $null })
             $path = Find-Installer $script:AppRoot $script:AppFiles $p $siteName

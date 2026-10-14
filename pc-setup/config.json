@@ -14,6 +14,13 @@
   },
   "programs": [
     {
+      "name": "OneDrive 삭제",
+      "uninstall": "*OneDrive*",
+      "stopProcess": [
+        "OneDrive"
+      ]
+    },
+    {
       "name": "오피스",
       "find": [
         "1.OfficeSetup.exe",
