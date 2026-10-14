@@ -1771,7 +1771,7 @@ $TaskDefs = @(
     @{ Id = 'edge';        Title = '엣지 설정';                         Default = $true },
     @{ Id = 'chrome';      Title = '크롬 설정';                         Default = $true },
     @{ Id = 'extensions';  Title = '크롬·엣지 업데이트 + ClouDoc 확장';  Default = $true },
-    @{ Id = 'printer';     Title = '프린터 설치 (기본 꺼짐, 직접 설치)'; Default = $false },
+    @{ Id = 'printer';     Title = '프린터 설치';                       Default = $true },
     @{ Id = 'drivers';     Title = '드라이버 확인 (제조사 도구 등)';     Default = $false },
     @{ Id = 'docCentral';  Title = '문서중앙화 설치 (재부팅 여러 번)';   Default = $true },
     @{ Id = 'activation';  Title = '정품 인증 확인';                    Default = $true }
@@ -1779,10 +1779,14 @@ $TaskDefs = @(
 
 # --- 왼쪽: 작업 선택 ---
 $grpTasks = New-Group '1. 실행할 작업 (위에서부터 순서대로)' 12 8 330 340
-$clbTasks = New-Control 'CheckedListBox' '' 10 22 310 308
+$clbTasks = New-Control 'CheckedListBox' '' 10 22 310 276
 $clbTasks.CheckOnClick = $true
 foreach ($t in $TaskDefs) { [void]$clbTasks.Items.Add($t.Title, $t.Default) }
-$grpTasks.Controls.Add($clbTasks)
+$btnTasksAll  = New-Control 'Button' '전체 선택' 10 302 150 30
+$btnTasksNone = New-Control 'Button' '전체 해제' 170 302 150 30
+$btnTasksAll.Add_Click({  for ($i = 0; $i -lt $clbTasks.Items.Count; $i++) { $clbTasks.SetItemChecked($i, $true) } })
+$btnTasksNone.Add_Click({ for ($i = 0; $i -lt $clbTasks.Items.Count; $i++) { $clbTasks.SetItemChecked($i, $false) } })
+$grpTasks.Controls.AddRange(@($clbTasks, $btnTasksAll, $btnTasksNone))
 
 # 실행 중/끝난 뒤에는 체크 목록 대신 진행 상황 표시판을 보여줌 (✔ 완료 / ▶ 진행 중 / ✖ 실패 ...)
 function New-StatusList([int]$X, [int]$Y, [int]$W, [int]$H, [string]$Col1, [int]$W1) {
@@ -1837,7 +1841,7 @@ $lblSite = New-Control 'Label' '' ($x + 4) 22 (390 - $x) 20
 $lblSite.ForeColor = $Gray
 $grpSite.Controls.Add($lblSite)
 
-$grpPrinter = New-Group '4. 프린터 (작업에서 체크한 경우만 설치)' 354 252 400 92
+$grpPrinter = New-Group '4. 설치할 프린터 (네트워크)' 354 252 400 92
 $clbPrinters = New-Control 'CheckedListBox' '' 10 20 380 64
 $clbPrinters.CheckOnClick = $true
 $grpPrinter.Controls.Add($clbPrinters)
@@ -2240,7 +2244,7 @@ function Show-StatusView([bool]$On) {
     $lvTasks.Visible = $On
     $clbPrograms.Visible = -not $On
     $lvPrograms.Visible = $On
-    foreach ($b in @($btnPick, $btnRescan, $btnAdd, $btnRemove)) { $b.Visible = -not $On }
+    foreach ($b in @($btnPick, $btnRescan, $btnAdd, $btnRemove, $btnTasksAll, $btnTasksNone)) { $b.Visible = -not $On }
     if (-not $On) {
         $grpTasks.Text = '1. 실행할 작업 (위에서부터 순서대로)'
         $grpApps.Text = '6. 설치할 프로그램'
@@ -2252,7 +2256,7 @@ function Show-StatusView([bool]$On) {
 $script:Running = $false
 $script:ResumeState = $null
 # 진행 상황 표시판이 회색으로 흐려지지 않도록 그룹 대신 개별 컨트롤만 잠금
-$controlsToLock = @($clbTasks, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $clbPrograms, $btnPick, $btnRescan, $btnAdd, $btnRemove, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
+$controlsToLock = @($clbTasks, $btnTasksAll, $btnTasksNone, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $clbPrograms, $btnPick, $btnRescan, $btnAdd, $btnRemove, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
 
 function Start-Setup([bool]$Auto = $false) {
     # 지난 결과를 보고 있는 중이면 먼저 선택 화면으로 돌아감
