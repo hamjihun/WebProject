@@ -5,15 +5,20 @@
     - 설치할 프로그램, 프린터, 각종 설정 값은 config.json 에서 관리합니다.
     - 설치파일은 USB(이름: 프로그램USB)의 【 Application 】 폴더에서 자동으로 찾습니다.
     - 재부팅이 필요하면(윈도우 업데이트, 문서중앙화) 로그인 후 -Resume 으로 자동 실행되어 이어서 진행합니다.
+    - PCSetup.exe 로 실행하면 exe 가 이 스크립트를 임시 폴더에 꺼내 -RootDir(exe 폴더)와 함께 실행합니다.
 #>
-param([switch]$Resume)
+param(
+    [switch]$Resume,
+    [string]$RootDir,       # config.json / logs 가 있는 폴더 (exe 로 실행할 때 exe 폴더)
+    [string]$LauncherExe    # exe 로 실행했을 때 exe 경로 (재부팅 후 이어하기에 사용)
+)
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName Microsoft.VisualBasic
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-$Root       = $PSScriptRoot
+$Root       = if ($RootDir) { $RootDir.TrimEnd('\') } else { $PSScriptRoot }
 $ConfigPath = Join-Path $Root 'config.json'
 $LogDir     = Join-Path $Root 'logs'
 $ResumePath = Join-Path $env:ProgramData 'PCSetup\resume.json'
@@ -1415,8 +1420,13 @@ $Worker = {
         if ($Plan.Root.TrimEnd('\') -ne $app) {
             if (Test-Path -LiteralPath $app) { Remove-Item -LiteralPath $app -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType Directory -Path $app -Force | Out-Null
-            Get-ChildItem -LiteralPath $Plan.Root | Where-Object { $_.Name -ne 'logs' } |
-                ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $app -Recurse -Force }
+            # 도구에 필요한 파일만 복사 (exe 를 USB 루트에 둔 경우 USB 전체가 복사되지 않도록)
+            $items = @('PCSetup.ps1', 'Setup.bat', 'config.json', 'startmenu')
+            if ($Plan.LauncherExe) { $items += [IO.Path]::GetFileName($Plan.LauncherExe) }
+            foreach ($it in $items) {
+                $src = Join-Path $Plan.Root $it
+                if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $app -Recurse -Force }
+            }
         }
         $state = [ordered]@{
             Steps       = @($RemainingIds)
@@ -1430,7 +1440,12 @@ $Worker = {
         $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResumePath -Encoding UTF8
 
         $user      = "$env:USERDOMAIN\$env:USERNAME"
-        $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$app\PCSetup.ps1`" -Resume"
+        if ($Plan.LauncherExe) {
+            $action = New-ScheduledTaskAction -Execute (Join-Path $app ([IO.Path]::GetFileName($Plan.LauncherExe))) -Argument '-Resume'
+        }
+        else {
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$app\PCSetup.ps1`" -Resume"
+        }
         $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user
         $trigger.Delay = 'PT20S'
         $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
@@ -2345,6 +2360,7 @@ function Start-Setup([bool]$Auto = $false) {
         Site         = $site
         UpdateRound  = $(if ($resume) { [int]$resume.UpdateRound } else { 0 })
         WorkerCode   = $Worker.ToString()
+        LauncherExe  = $LauncherExe
         ComputerName = $newName
         LogFile      = $logFile
     }
