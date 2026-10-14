@@ -266,18 +266,37 @@ $Worker = {
     }
 
     # 이름이 맞는 체크박스를 찾아 체크 해제. 찾은 체크박스 개수를 돌려줌
-    function Clear-UICheckBoxes($Window, [string]$Patterns, [string]$Name) {
+    # 이름이 맞는 체크 항목을 찾아 체크 해제. 찾은 개수를 돌려줌
+    # - 일반 체크박스: 체크 상태를 읽어서 켜져 있을 때만 해제
+    # - 목록 안의 체크 항목 (카카오톡 설치의 '구성 요소 선택' 목록 등): 상태를 읽을 수 없으면
+    #   항목을 선택하고 스페이스로 한 번만 전환 (기본값이 체크된 항목이라 한 번 누르면 해제됨)
+    function Clear-UICheckBoxes($Window, [string]$Patterns, [string]$Name, $Job) {
         $found = 0
-        foreach ($cb in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::CheckBox))) {
-            $label = ($cb.Current.Name -replace '&', '').Trim()
-            if (-not $label -or -not (Test-LikeAny $label $Patterns)) { continue }
-            $found++
-            $tp = $null
-            if ($cb.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp) -and
-                $tp.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::Off) {
-                $tp.Toggle()
-                Write-Log "${Name}: '$label' 체크 해제" 'OK'
-                Start-Sleep -Milliseconds 400
+        $types = @([System.Windows.Automation.ControlType]::CheckBox, [System.Windows.Automation.ControlType]::TreeItem,
+                   [System.Windows.Automation.ControlType]::ListItem, [System.Windows.Automation.ControlType]::DataItem)
+        foreach ($ct in $types) {
+            foreach ($cb in (Find-UIControl $Window $ct)) {
+                $label = ($cb.Current.Name -replace '&', '').Trim()
+                if (-not $label -or -not (Test-LikeAny $label $Patterns)) { continue }
+                $found++
+                $tp = $null
+                if ($cb.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp)) {
+                    if ($tp.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::Off) {
+                        $tp.Toggle()
+                        Write-Log "${Name}: '$label' 체크 해제" 'OK'
+                        Start-Sleep -Milliseconds 400
+                    }
+                }
+                elseif ($Job -and -not $Job.Toggled.Contains($label)) {
+                    $sp = $null
+                    if ($cb.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$sp)) { $sp.Select() }
+                    $cb.SetFocus()
+                    Start-Sleep -Milliseconds 300
+                    [System.Windows.Forms.SendKeys]::SendWait(' ')
+                    [void]$Job.Toggled.Add($label)
+                    Write-Log "${Name}: '$label' 체크 해제 (스페이스)" 'OK'
+                    Start-Sleep -Milliseconds 400
+                }
             }
         }
         return $found
@@ -350,7 +369,7 @@ $Worker = {
         foreach ($w in $Windows) {
             try {
                 if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
-                if ($st.uncheck -and (Clear-UICheckBoxes $w $st.uncheck $name) -gt 0) { $Job.UncheckSeen = $true }
+                if ($st.uncheck -and (Clear-UICheckBoxes $w $st.uncheck $name $Job) -gt 0) { $Job.UncheckSeen = $true }
                 $btn = $null
                 if ($st.click -and ($Job.UncheckSeen -or -not $st.uncheck)) { $btn = Find-UIButton $w $st.click }
 
@@ -463,7 +482,8 @@ $Worker = {
         return @{
             P = $P; Path = $Path; State = 'pending'; Proc = $null; Tree = $null; Since = $null; Code = $null
             StepIdx = 0; Deadline = [datetime]::MaxValue; PauseUntil = [datetime]::MinValue; LastAlso = [datetime]::MinValue
-            UncheckSeen = $false; Manual = $false; Alive = $true
+            UncheckSeen = $false; Manual = $false; Alive = $true; Failed = $false; Retried = $false; LastDismiss = [datetime]::MinValue
+            Toggled = (New-Object 'System.Collections.Generic.HashSet[string]')
         }
     }
 
@@ -521,16 +541,36 @@ $Worker = {
             1618    { Write-Log "${name}: 다른 설치가 진행 중이라 설치하지 못했습니다. 나중에 다시 설치합니다." 'WARN' }
             default {
                 if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK' }
-                else { Write-Log "${name}: 설치 종료 코드 $($Job.Code) (실패했을 수 있으니 확인하세요)" 'ERROR' }
+                else {
+                    $Job.Failed = $true
+                    $again = if ($Job.P.args -and -not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
+                    Write-Log "${name}: 설치 종료 코드 $($Job.Code) (실패했을 수 있으니 확인하세요)$again" $(if ($again) { 'WARN' } else { 'ERROR' })
+                }
             }
         }
     }
 
     function Update-InstallJob($Job, $Procs, $AliveIds, $Windows) {
         Update-JobTree $Job $Procs $AliveIds
-        if ($Job.State -eq 'running' -and $Job.P.auto) {
+        if ($Job.State -eq 'running' -and ($Job.P.auto -or $Job.P.dismiss)) {
             $mine = @(foreach ($w in $Windows) { try { if ($Job.Tree.Contains([int]$w.Current.ProcessId)) { $w } } catch { } })
-            Step-AutoJob $Job $mine
+            # 중간에 뜨는 팝업 닫기 (예: 반디집 '새 버전 홈페이지 방문?' → 아니요)
+            if ($Job.P.dismiss -and ((Get-Date) - $Job.LastDismiss).TotalSeconds -ge 1) {
+                foreach ($w in $mine) {
+                    try {
+                        $b = Find-UIButton $w $Job.P.dismiss
+                        if ($b) {
+                            $bn = $b.Current.Name
+                            Invoke-UIButton $b
+                            Write-Log "$($Job.P.name): 팝업 [$bn] 자동 클릭" 'OK'
+                            $Job.LastDismiss = Get-Date
+                            break
+                        }
+                    }
+                    catch { }
+                }
+            }
+            if ($Job.P.auto) { Step-AutoJob $Job $mine }
         }
         if (-not $Job.Proc.HasExited) { return }
 
@@ -645,10 +685,12 @@ $Worker = {
         Invoke-InstallJobs $jobs $gap $parallel
 
         # 다른 설치와 겹쳐서 실패한 것(1618)은 하나씩 다시 설치
-        $retry = @($jobs | Where-Object { $_.Code -eq 1618 })
+        # 자동 설치(args 있음)가 실패한 것도 한 번 더 시도 (예: 크롬 온라인 설치 오류)
+        $retry = @($jobs | Where-Object { $_.Code -eq 1618 -or ($_.Failed -and $_.P.args -and -not $_.P.uninstall) })
         if ($retry.Count -gt 0 -and -not $Sync.Cancel) {
-            Write-Log "겹쳐서 실패한 프로그램을 하나씩 다시 설치합니다: $(($retry | ForEach-Object { $_.P.name }) -join ', ')"
-            Invoke-InstallJobs @($retry | ForEach-Object { New-InstallJob $_.P $_.Path }) 0 $false
+            Write-Log "겹치거나 실패한 프로그램을 하나씩 다시 설치합니다: $(($retry | ForEach-Object { $_.P.name }) -join ', ')"
+            $again = @($retry | ForEach-Object { $j = New-InstallJob $_.P $_.Path; $j.Retried = $true; $j })
+            Invoke-InstallJobs $again 0 $false
         }
     }
 
