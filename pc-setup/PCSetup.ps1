@@ -372,6 +372,9 @@ $Worker = {
         $Job.StepIdx++
         $Job.UncheckSeen = $false
         $Job.Selected = $false
+        $Job.SeenAt = $null
+        $Job.ClickTries = 0
+        $Job.KeySince = $null
         $Job.LastAlso = [datetime]::MinValue
         $Job.PauseUntil = (Get-Date).AddSeconds(1)
         $steps = @($Job.P.auto)
@@ -450,6 +453,51 @@ $Worker = {
         return $false
     }
 
+    # 버튼을 프로그램이 찾을 수 없는 화면(반디집 등)용: 창 안의 비율 위치를 실제 마우스로 클릭
+    function Invoke-ClickAt($Window, $Points, [string]$Name) {
+        if (-not ('PCSetup.Mouse' -as [type])) {
+            Add-Type -Namespace PCSetup -Name Mouse -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern void mouse_event(int flags, int dx, int dy, int data, System.IntPtr extra);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int cmd);
+[DllImport("user32.dll")] public static extern bool GetWindowRect(System.IntPtr hWnd, out RECT rect);
+[DllImport("user32.dll")] public static extern System.IntPtr SetThreadDpiAwarenessContext(System.IntPtr ctx);
+public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+'@
+        }
+        # 화면 배율(125%, 150%)에서도 좌표가 맞도록 이 작업 스레드만 DPI 인식으로
+        try { [void][PCSetup.Mouse]::SetThreadDpiAwarenessContext([IntPtr](-4)) } catch { }
+        $h = [IntPtr]$Window.Current.NativeWindowHandle
+        [void][PCSetup.Mouse]::ShowWindow($h, 9)
+        [void][PCSetup.Mouse]::SetForegroundWindow($h)
+        Start-Sleep -Milliseconds 400
+        $r = New-Object PCSetup.Mouse+RECT
+        [void][PCSetup.Mouse]::GetWindowRect($h, [ref]$r)
+        foreach ($pt in @($Points)) {
+            $x = [int]($r.Left + ($r.Right - $r.Left) * [double]$pt[0])
+            $y = [int]($r.Top + ($r.Bottom - $r.Top) * [double]$pt[1])
+            [void][PCSetup.Mouse]::SetCursorPos($x, $y)
+            Start-Sleep -Milliseconds 150
+            [PCSetup.Mouse]::mouse_event(0x02, 0, 0, 0, [IntPtr]::Zero)   # 왼쪽 버튼 누름
+            [PCSetup.Mouse]::mouse_event(0x04, 0, 0, 0, [IntPtr]::Zero)   # 뗌
+            Write-Log "${Name}: 창 위치 ($($pt[0]), $($pt[1])) 클릭" 'OK'
+            Start-Sleep -Milliseconds 800
+        }
+    }
+
+    # 자동 진행이 멈췄을 때 그 창의 버튼/체크박스 이름을 로그에 남김 (설정을 맞추기 위한 참고용)
+    function Write-WindowDump($Windows, [string]$Name) {
+        foreach ($w in @($Windows | Select-Object -First 4)) {
+            try {
+                $btns = @(Find-UIControl $w ([System.Windows.Automation.ControlType]::Button) | ForEach-Object { $_.Current.Name } | Where-Object { $_ } | Select-Object -First 15)
+                $chks = @(Find-UIControl $w ([System.Windows.Automation.ControlType]::CheckBox) | ForEach-Object { $_.Current.Name } | Where-Object { $_ } | Select-Object -First 10)
+                Write-Log "${Name}: [참고] 창 '$($w.Current.Name)' 버튼: $($btns -join ' / ')  체크: $($chks -join ' / ')"
+            }
+            catch { }
+        }
+    }
+
     function Step-AutoJob($Job, $Windows, $AllWindows, $Procs) {
         $steps = @($Job.P.auto)
         if ($Job.Manual -or $Job.StepIdx -ge $steps.Count) { return }
@@ -491,8 +539,35 @@ $Worker = {
                 return
             }
             Write-Log "${name}: 자동 진행 $($Job.StepIdx + 1) 단계에서 화면을 찾지 못했습니다. 안내창을 보고 직접 진행해 주세요." 'WARN'
+            Write-WindowDump $Windows $name
             Set-ProgState $name 'manual' '직접 진행 필요 (노란 안내창 참고)'
             $Job.Manual = $true
+            return
+        }
+
+        # 창 안의 위치를 마우스로 클릭하는 단계 (clickAt: [[가로비율, 세로비율], ...])
+        #   delay        : 창이 보인 뒤 기다릴 시간(초)
+        #   whenInstalled: 설치 파일이 생긴 뒤(설치가 끝난 뒤)에만 클릭
+        #   untilClosed  : 창이 닫힐 때까지 5초마다 다시 클릭 (최대 3번)
+        if ($st.clickAt) {
+            $cands = @(foreach ($w in $Windows) { try { if (-not $st.window -or (Test-LikeAny $w.Current.Name $st.window)) { $w } } catch { } })
+            if ($cands.Count -eq 0) {
+                if ($st.untilClosed -and $Job.ClickTries -gt 0) { Move-AutoStep $Job }
+                return
+            }
+            if ($cands.Count -gt 1) { return }   # 팝업이 떠 있으면 닫힐 때까지 기다림
+            if ($st.whenInstalled -and -not (Test-Installed $Job.P)) { return }
+            if (-not $Job.SeenAt) { $Job.SeenAt = Get-Date; return }
+            $delay = if ($null -ne $st.delay) { [double]$st.delay } else { 2 }
+            if (((Get-Date) - $Job.SeenAt).TotalSeconds -lt $delay) { return }
+            if ($Job.ClickTries -gt 0) {
+                if (((Get-Date) - $Job.LastClick).TotalSeconds -lt 5) { return }
+                if (-not $st.untilClosed -or $Job.ClickTries -ge 3) { Move-AutoStep $Job; return }
+            }
+            Invoke-ClickAt $cands[0] $st.clickAt $name
+            $Job.ClickTries++
+            $Job.LastClick = Get-Date
+            if (-not $st.untilClosed) { Move-AutoStep $Job }
             return
         }
 
@@ -545,6 +620,18 @@ $Worker = {
                         Invoke-UIButton $b2
                         Write-Log "${name}: [$bn] 자동 클릭"
                         $Job.LastAlso = Get-Date
+                        return
+                    }
+                }
+                # 버튼을 찾지 못했지만 이 화면이 맞으면 5초 뒤 키 입력 (예: 카카오톡 설치 완료 → Enter = 마침)
+                if ($st.fallbackKeys -and -not $btn) {
+                    if (-not $Job.KeySince) { $Job.KeySince = Get-Date }
+                    elseif (((Get-Date) - $Job.KeySince).TotalSeconds -ge 5) {
+                        $w.SetFocus()
+                        Start-Sleep -Milliseconds 300
+                        [System.Windows.Forms.SendKeys]::SendWait([string]$st.fallbackKeys)
+                        Write-Log "${name}: 버튼 대신 키 입력 $($st.fallbackKeys)" 'OK'
+                        Move-AutoStep $Job
                         return
                     }
                 }
@@ -632,6 +719,7 @@ $Worker = {
             StepIdx = 0; Deadline = [datetime]::MaxValue; PauseUntil = [datetime]::MinValue; LastAlso = [datetime]::MinValue
             UncheckSeen = $false; Manual = $false; Alive = $true; Failed = $false; Retried = $false; LastDismiss = [datetime]::MinValue
             Toggled = (New-Object 'System.Collections.Generic.HashSet[string]'); Selected = $false; DeadSince = $null
+            SeenAt = $null; ClickTries = 0; LastClick = [datetime]::MinValue; KeySince = $null
         }
     }
 
@@ -1130,18 +1218,6 @@ $Worker = {
             catch { Write-Log "파일 확장명 설정 실패 - $($_.Exception.Message)" 'ERROR' }
         }
 
-        # 사용자 계정 컨트롤(UAC) 슬라이더 가장 아래 = '알리지 않음'
-        # (EnableLUA 는 켜둠 - 끄면 스토어 앱/엣지 일부 기능이 동작하지 않음)
-        if ($m.uacNeverNotify) {
-            try {
-                $sys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
-                Set-Reg $sys 'ConsentPromptBehaviorAdmin' 0
-                Set-Reg $sys 'PromptOnSecureDesktop' 0
-                Write-Log '사용자 계정 컨트롤: 가장 아래 (알리지 않음)' 'OK'
-            }
-            catch { Write-Log "사용자 계정 컨트롤 설정 실패 - $($_.Exception.Message)" 'ERROR' }
-        }
-
         if ($Plan.ComputerName -and $Plan.ComputerName -ne $env:COMPUTERNAME) {
             try {
                 Rename-Computer -NewName $Plan.ComputerName -Force -ErrorAction Stop
@@ -1150,6 +1226,16 @@ $Worker = {
             }
             catch { Write-Log "PC 이름 변경 실패 - $($_.Exception.Message)" 'ERROR' }
         }
+    }
+
+    # --- 사용자 계정 컨트롤 --------------------------------------------------------
+    # 슬라이더 가장 아래 = '다음의 경우 항상 알리지 않음 (사용자 계정 컨트롤 끄기)'
+    # (EnableLUA 는 켜둠 - 완전히 끄면 스토어 앱/엣지 일부 기능이 동작하지 않음)
+    function Set-Uac {
+        $sys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+        Set-Reg $sys 'ConsentPromptBehaviorAdmin' 0
+        Set-Reg $sys 'PromptOnSecureDesktop' 0
+        Write-Log '사용자 계정 컨트롤: 가장 아래 (항상 알리지 않음)' 'OK'
     }
 
     # --- 8. 전원 --------------------------------------------------------------
@@ -1293,7 +1379,18 @@ $Worker = {
             try { Set-Reg $key $name 1; Write-Log "엣지: $($items[$name])" 'OK' }
             catch { Write-Log "엣지: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
-        Write-Log '엣지를 다시 열면 적용됩니다.'
+        Close-Browser 'msedge' '엣지'
+    }
+
+    # 설정이 바로 적용되도록 실행 중인 브라우저 닫기 (엣지는 시작 부스트로 뒤에서 실행 중일 수 있음)
+    function Close-Browser([string]$Proc, [string]$Label) {
+        if ($Cfg.browser.closeAfterSettings -eq $false) { Write-Log "$Label 을 다시 열면 적용됩니다."; return }
+        $running = @(Get-Process -Name $Proc -ErrorAction SilentlyContinue)
+        if ($running.Count -gt 0) {
+            $running | Stop-Process -Force -ErrorAction SilentlyContinue
+            Write-Log "$Label 설정 적용을 위해 실행 중인 $Label 을 닫았습니다."
+        }
+        Write-Log "$Label 을 열면 설정이 적용되어 있습니다."
     }
 
     function Set-ChromeSettings {
@@ -1306,7 +1403,7 @@ $Worker = {
             try { Set-Reg $key $name 1; Write-Log "크롬: $($items[$name])" 'OK' }
             catch { Write-Log "크롬: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
-        Write-Log '크롬을 다시 열면 적용됩니다.'
+        Close-Browser 'chrome' '크롬'
     }
 
     function Wait-Process2($Proc, [int]$Seconds) {
@@ -1315,10 +1412,16 @@ $Worker = {
 
     function Update-Browsers {
         Set-Status '엣지 최신 버전으로 업데이트 중...'
+        $edgeExe = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+        $before = if (Test-Path -LiteralPath $edgeExe) { (Get-Item -LiteralPath $edgeExe).VersionInfo.ProductVersion } else { '없음' }
         $edgeUpd = "${env:ProgramFiles(x86)}\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe"
         if (Test-Path -LiteralPath $edgeUpd) {
-            Wait-Process2 (Start-Process $edgeUpd -ArgumentList '/ua /installsource scheduler' -PassThru) 600
-            Write-Log '엣지 업데이트 확인 완료' 'OK'
+            # 최신 버전 엣지를 내려받아 설치하도록 직접 요청 (/ua 만으로는 업데이트가 안 되는 경우가 있음)
+            $edgeArgs = '/silent /install "appguid={56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}&appname=Microsoft%20Edge&needsadmin=True"'
+            Wait-Process2 (Start-Process $edgeUpd -ArgumentList $edgeArgs -PassThru) 900
+            Wait-Process2 (Start-Process $edgeUpd -ArgumentList '/ua /installsource scheduler' -PassThru) 300
+            $after = if (Test-Path -LiteralPath $edgeExe) { (Get-Item -LiteralPath $edgeExe).VersionInfo.ProductVersion } else { '없음' }
+            Write-Log "엣지 업데이트: $before → $after" 'OK'
         }
         else { Write-Log '엣지 업데이트 프로그램을 찾지 못했습니다.' 'WARN' }
 
@@ -1831,6 +1934,7 @@ $Worker = {
                     'desktop'     { Set-DesktopIcons }
                     'officeLinks' { New-OfficeShortcuts }
                     'misc'        { Set-Misc }
+                    'uac'         { Set-Uac }
                     'power'       { Set-Power }
                     'startmenu'   { Set-StartMenu }
                     'edge'        { Set-EdgeSettings }
@@ -1925,6 +2029,7 @@ $form.Font = $Font
 # 실행 순서대로. 윈도우 업데이트는 백그라운드에서 시작해 프로그램 설치와 동시에 진행하고,
 # 문서중앙화 직전(또는 마지막)에 끝나기를 기다려 재부팅이 필요하면 재부팅 후 이어서 진행
 $TaskDefs = @(
+    @{ Id = 'uac';         Title = '사용자 계정 컨트롤 끄기 (가장 아래)'; Default = $true },
     @{ Id = 'network';     Title = '이더넷 IP 설정';                    Default = $true },
     @{ Id = 'update';      Title = '윈도우 업데이트 (설치와 동시에 진행)'; Default = $true },
     @{ Id = 'programs';    Title = '프로그램 설치 (USB)';               Default = $true },
@@ -1932,12 +2037,12 @@ $TaskDefs = @(
     @{ Id = 'taskbar';     Title = '작업표시줄 (뉴스·아이콘 정리)';      Default = $true },
     @{ Id = 'desktop';     Title = '바탕화면 아이콘 표시';              Default = $true },
     @{ Id = 'officeLinks'; Title = '엑셀·파워포인트·워드 바로가기';      Default = $true },
-    @{ Id = 'misc';        Title = '확장명 표시 / UAC 알리지 않음 / PC 이름'; Default = $true },
+    @{ Id = 'misc';        Title = '파일 확장명 표시 / PC 이름';        Default = $true },
     @{ Id = 'power';       Title = '전원 설정';                         Default = $true },
     @{ Id = 'startmenu';   Title = '시작화면 정리 (엣지만)';            Default = $true },
+    @{ Id = 'extensions';  Title = '크롬·엣지 업데이트 + ClouDoc 확장';  Default = $true },
     @{ Id = 'edge';        Title = '엣지 설정';                         Default = $true },
     @{ Id = 'chrome';      Title = '크롬 설정';                         Default = $true },
-    @{ Id = 'extensions';  Title = '크롬·엣지 업데이트 + ClouDoc 확장';  Default = $true },
     @{ Id = 'printer';     Title = '프린터 설치';                       Default = $true },
     @{ Id = 'drivers';     Title = '드라이버 확인 (제조사 도구 등)';     Default = $false },
     @{ Id = 'docCentral';  Title = '문서중앙화 설치 (재부팅 여러 번)';   Default = $true },

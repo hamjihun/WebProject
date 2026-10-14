@@ -47,16 +47,35 @@
       "installed": [
         "%ProgramFiles%\\Bandizip\\Bandizip.exe"
       ],
-      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  '새 버전 홈페이지 방문?' → [아니요]\n  '사용 통계 및 오류 보고서 자동 전송' 체크 해제\n  → [동의 및 설치] → [닫기] → [지금 적용] → [확인]\n\n자동 진행이 멈추면 위 순서대로 직접 진행한 뒤\n이 창의 [완료] 를 누르세요.",
+      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  '새 버전 홈페이지 방문?' → [아니요]\n  '사용 통계 및 오류 보고서 자동 전송' 체크 해제 (마우스 클릭)\n  → [동의 및 설치] → 설치 끝나면 [닫기]\n  → [지금 적용] → [확인]\n\n자동 진행이 멈추면 위 순서대로 직접 진행한 뒤\n이 창의 [완료] 를 누르세요.",
       "auto": [
         {
-          "uncheck": "*통계*|*오류 보고*",
-          "click": "동의 및 설치*|*동의*설치*",
-          "timeout": 120
+          "window": "*설치*|*Setup*",
+          "clickAt": [
+            [
+              0.072,
+              0.796
+            ],
+            [
+              0.509,
+              0.91
+            ]
+          ],
+          "delay": 4,
+          "timeout": 180
         },
         {
-          "click": "닫기*|Close*",
-          "timeout": 300
+          "window": "*설치*|*Setup*",
+          "clickAt": [
+            [
+              0.509,
+              0.91
+            ]
+          ],
+          "whenInstalled": true,
+          "untilClosed": true,
+          "delay": 3,
+          "timeout": 600
         },
         {
           "click": "지금 적용*",
@@ -107,7 +126,9 @@
           "timeout": 180
         },
         {
+          "windowText": "*완료*|*마쳤*|*마침*|*Finish*|*Completing*",
           "click": "마침*|Finish*|닫기*|완료*",
+          "fallbackKeys": "{ENTER}",
           "timeout": 300,
           "optional": true
         }
@@ -209,8 +230,7 @@
     "controlPanel"
   ],
   "misc": {
-    "showFileExtensions": true,
-    "uacNeverNotify": true
+    "showFileExtensions": true
   },
   "power": {
     "plan": "",
@@ -231,8 +251,9 @@
     "edgeExtensions": [
       "nijboebkfeipcfjoohpkloahghaidpaj"
     ],
-    "enforceSettings": false,
-    "hideEdgeFirstRun": true
+    "enforceSettings": true,
+    "hideEdgeFirstRun": true,
+    "closeAfterSettings": true
   },
   "printer": {
     "driverFolder": "5. IV C2263N(김해2F 1.133, 1F 1.11 부산0.7)\\C3060드라이버",
