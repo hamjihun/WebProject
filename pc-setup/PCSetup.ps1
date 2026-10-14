@@ -265,6 +265,24 @@ $Worker = {
         [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
     }
 
+    # 이름이 맞는 체크박스를 찾아 체크 해제. 찾은 체크박스 개수를 돌려줌
+    function Clear-UICheckBoxes($Window, [string]$Patterns, [string]$Name) {
+        $found = 0
+        foreach ($cb in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::CheckBox))) {
+            $label = ($cb.Current.Name -replace '&', '').Trim()
+            if (-not $label -or -not (Test-LikeAny $label $Patterns)) { continue }
+            $found++
+            $tp = $null
+            if ($cb.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp) -and
+                $tp.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::Off) {
+                $tp.Toggle()
+                Write-Log "${Name}: '$label' 체크 해제" 'OK'
+                Start-Sleep -Milliseconds 400
+            }
+        }
+        return $found
+    }
+
     # 입력칸이 여러 개면 비어 있거나 IP 처럼 생긴 칸을 고름
     function Set-UIText($Window, [string]$Text) {
         $edits = Find-UIControl $Window ([System.Windows.Automation.ControlType]::Edit)
@@ -294,6 +312,9 @@ $Worker = {
     #   alsoClick : click 버튼이 나올 때까지 계속 누를 버튼 (예: "다음*|Next*")
     #   setText   : 입력칸에 넣을 값 (예: "{erpServer}"), 넣은 뒤 click 버튼을 누름
     #   window    : 창 제목 패턴 (생략하면 새로 뜬 모든 창)
+    #   uncheck   : 버튼을 누르기 전에 체크 해제할 체크박스 이름 (예: "*Daum*")
+    #               이 체크박스를 한 번도 못 찾았으면 click 버튼을 누르지 않음 (체크된 채로 설치되는 것 방지)
+    #   optional  : true 면 못 찾아도 실패로 보지 않고 다음 단계로
     function Invoke-AutoSteps([datetime]$Since, $Steps, [string]$Name) {
         Initialize-UIA
         $n = 0
@@ -302,14 +323,16 @@ $Worker = {
             $timeout = if ($st.timeout) { [int]$st.timeout } else { 180 }
             $deadline = (Get-Date).AddSeconds($timeout)
             $lastAlso = [datetime]::MinValue
+            $uncheckSeen = -not $st.uncheck
             $done = $false
             while (-not $done -and (Get-Date) -lt $deadline) {
                 Start-Sleep -Milliseconds 700
                 foreach ($w in (Get-NewWindows $Since)) {
                     try {
                         if ($st.window -and -not (Test-LikeAny $w.Current.Name $st.window)) { continue }
+                        if ($st.uncheck -and (Clear-UICheckBoxes $w $st.uncheck $Name) -gt 0) { $uncheckSeen = $true }
                         $btn = $null
-                        if ($st.click) { $btn = Find-UIButton $w $st.click }
+                        if ($st.click -and $uncheckSeen) { $btn = Find-UIButton $w $st.click }
 
                         if ($st.setText) {
                             if ($st.click -and -not $btn) { continue }
@@ -341,6 +364,7 @@ $Worker = {
                 }
             }
             if (-not $done) {
+                if ($st.optional) { Write-Log "${Name}: 자동 진행 $n 단계 화면이 없어 넘어갑니다."; continue }
                 Write-Log "${Name}: 자동 진행 $n 단계에서 화면을 찾지 못했습니다. 안내창을 보고 직접 진행해 주세요." 'WARN'
                 return $false
             }

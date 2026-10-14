@@ -35,7 +35,27 @@
       "installed": [
         "%ProgramFiles%\\Bandizip\\Bandizip.exe"
       ],
-      "guide": "1) '사용 통계 및 오류 보고서를 자동으로 전송합니다' 체크 해제\n2) [동의 및 설치]\n3) [닫기]\n4) [지금 적용] → [확인]\n\n모두 끝나면 이 창의 [완료] 를 누르세요.",
+      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  '사용 통계 및 오류 보고서 자동 전송' 체크 해제\n  → [동의 및 설치] → [닫기] → [지금 적용] → [확인]\n\n자동 진행이 멈추면 위 순서대로 직접 진행한 뒤\n이 창의 [완료] 를 누르세요.",
+      "auto": [
+        {
+          "uncheck": "*통계*|*오류 보고*",
+          "click": "동의 및 설치*|*동의*설치*",
+          "timeout": 120
+        },
+        {
+          "click": "닫기*|Close*",
+          "timeout": 300
+        },
+        {
+          "click": "지금 적용*",
+          "timeout": 60
+        },
+        {
+          "click": "확인*|OK",
+          "timeout": 60,
+          "optional": true
+        }
+      ],
       "confirmAfter": true
     },
     {
@@ -63,7 +83,20 @@
         "%ProgramFiles(x86)%\\Kakao\\KakaoTalk\\KakaoTalk.exe",
         "%ProgramFiles%\\Kakao\\KakaoTalk\\KakaoTalk.exe"
       ],
-      "guide": "1) [다음] → [다음]\n2) 'Daum을 시작페이지로 설정' 체크 해제\n3) 설치 진행"
+      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  [다음] → [다음] → 'Daum을 시작페이지로 설정' 체크 해제\n  → 설치\n\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.",
+      "auto": [
+        {
+          "uncheck": "*Daum*|*시작페이지*|*시작 페이지*",
+          "click": "설치*|Install*",
+          "alsoClick": "다음*|Next*|동의*|I Agree*",
+          "timeout": 180
+        },
+        {
+          "click": "마침*|Finish*|닫기*|완료*",
+          "timeout": 300,
+          "optional": true
+        }
+      ]
     },
     {
       "name": "Adobe Reader",
