@@ -2053,10 +2053,10 @@ $TaskDefs = @(
 $grpTasks = New-Group '1. 실행할 작업 (분류별)' 12 8 330 340
 # 화면에서는 분류별로 묶어서 보여줌 (실행 순서는 위 $TaskDefs 순서 그대로)
 $TaskCategories = [ordered]@{
-    '윈도우 설정'   = @('uac', 'network', 'taskbar', 'desktop', 'misc', 'power', 'startmenu')
+    '윈도우 설정'   = @('uac', 'network', 'taskbar', 'desktop', 'officeLinks', 'misc', 'power', 'startmenu')
     '프로그램 설치' = @('update', 'programs', 'fonts', 'printer', 'docCentral', 'drivers')
     '브라우저'      = @('extensions', 'edge', 'chrome')
-    '기타'          = @('officeLinks', 'activation')
+    '기타'          = @('activation')
 }
 # 분류에 빠진 작업이 있으면 '기타' 에 넣음
 $listed = @($TaskCategories.Values | ForEach-Object { $_ })
