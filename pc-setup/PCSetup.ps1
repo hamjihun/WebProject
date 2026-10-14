@@ -166,11 +166,17 @@ $Worker = {
         if ($Plan.LogPrefix) { $Message = "$($Plan.LogPrefix) $Message" }
         $line = '[{0}] [{1}] {2}' -f (Get-Date -Format 'HH:mm:ss'), $Level, $Message
         $Sync.Queue.Enqueue($line)
+        if ($Level -eq 'ERROR') { $Sync.ErrorCount = 1 + [int]$Sync.ErrorCount }
+        elseif ($Level -eq 'WARN') { $Sync.WarnCount = 1 + [int]$Sync.WarnCount }
         # 윈도우 업데이트(백그라운드)와 같은 로그 파일에 쓰므로 잠금
         if ($Sync.LogLock) { [System.Threading.Monitor]::Enter($Sync.LogLock) }
         try { Add-Content -LiteralPath $Plan.LogFile -Value $line -Encoding UTF8 }
         finally { if ($Sync.LogLock) { [System.Threading.Monitor]::Exit($Sync.LogLock) } }
     }
+
+    # 화면의 진행 상황 표시판에 상태 기록 (state: pending/running/manual/waitAck/done/skipped/warn/error/reboot)
+    function Set-TaskState([string]$Id, [string]$StateName, [string]$Text = '') { if ($Sync.TaskStates) { $Sync.TaskStates[$Id] = "$StateName|$Text" } }
+    function Set-ProgState([string]$Name, [string]$StateName, [string]$Text = '') { if ($Sync.ProgStates) { $Sync.ProgStates[$Name] = "$StateName|$Text" } }
 
     # 작업이 끝난 뒤 안내창에 보여줄 메시지
     function Add-Notice([string]$Message) { [void]$Sync.Notices.Add($Message) }
@@ -362,6 +368,7 @@ $Worker = {
                 return
             }
             Write-Log "${name}: 자동 진행 $($Job.StepIdx + 1) 단계에서 화면을 찾지 못했습니다. 안내창을 보고 직접 진행해 주세요." 'WARN'
+            Set-ProgState $name 'manual' '직접 진행 필요 (노란 안내창 참고)'
             $Job.Manual = $true
             return
         }
@@ -499,6 +506,8 @@ $Worker = {
         $Job.Tree  = New-Object 'System.Collections.Generic.HashSet[int]'
         [void]$Job.Tree.Add($Job.Proc.Id)
         $Job.State = 'running'
+        $runText = if ($p.uninstall) { '삭제 중' } elseif ($p.auto) { '자동 진행 중' } elseif ($p.args) { '자동 설치 중' } else { '설치 화면에서 진행해 주세요' }
+        Set-ProgState $p.name $(if ($p.auto -or $p.args -or $p.uninstall) { 'running' } else { 'manual' }) $runText
         if ($p.auto) {
             $first = @($p.auto)[0]
             $Job.Deadline = (Get-Date).AddSeconds($(if ($first.timeout) { [int]$first.timeout } else { 180 }))
@@ -530,21 +539,27 @@ $Worker = {
         $Job.Code = $Job.Proc.ExitCode
         $name = $Job.P.name
         if ($Job.P.uninstall) {
-            if (@(Get-UninstallEntries $Job.P.uninstall).Count -eq 0) { Write-Log "${name}: 삭제 완료" 'OK' }
-            else { Write-Log "${name}: 삭제가 끝나지 않았습니다. (종료 코드 $($Job.Code)) 프로그램 추가/제거에서 확인하세요." 'WARN' }
+            if (@(Get-UninstallEntries $Job.P.uninstall).Count -eq 0) { Write-Log "${name}: 삭제 완료" 'OK'; Set-ProgState $name 'done' '삭제 완료' }
+            else { Write-Log "${name}: 삭제가 끝나지 않았습니다. (종료 코드 $($Job.Code)) 프로그램 추가/제거에서 확인하세요." 'WARN'; Set-ProgState $name 'warn' '삭제 확인 필요' }
             return
         }
         switch ($Job.Code) {
-            0       { Write-Log "${name}: 설치 완료" 'OK' }
-            3010    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true }
-            1641    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true }
-            1618    { Write-Log "${name}: 다른 설치가 진행 중이라 설치하지 못했습니다. 나중에 다시 설치합니다." 'WARN' }
+            0       { Write-Log "${name}: 설치 완료" 'OK'; Set-ProgState $name 'done' '설치 완료' }
+            3010    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true; Set-ProgState $name 'done' '설치 완료 (재부팅 후 적용)' }
+            1641    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true; Set-ProgState $name 'done' '설치 완료 (재부팅 후 적용)' }
+            1618    {
+                Write-Log "${name}: 다른 설치가 진행 중이라 설치하지 못했습니다. 나중에 다시 설치합니다." 'WARN'
+                Set-ProgState $name $(if ($Job.Retried) { 'error' } else { 'pending' }) $(if ($Job.Retried) { '설치 실패 (다른 설치와 겹침)' } else { '다시 설치 대기' })
+            }
             default {
-                if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK' }
+                if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK'; Set-ProgState $name 'done' '설치 완료' }
                 else {
                     $Job.Failed = $true
                     $again = if ($Job.P.args -and -not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
                     Write-Log "${name}: 설치 종료 코드 $($Job.Code) (실패했을 수 있으니 확인하세요)$again" $(if ($again) { 'WARN' } else { 'ERROR' })
+                    if ($again) { Set-ProgState $name 'pending' '다시 설치 대기' }
+                    elseif ($Job.Manual -or -not $Job.P.args) { Set-ProgState $name 'warn' "확인 필요 (종료 코드 $($Job.Code))" }
+                    else { Set-ProgState $name 'error' "설치 실패 (종료 코드 $($Job.Code))" }
                 }
             }
         }
@@ -585,6 +600,7 @@ $Worker = {
         if ($Job.Manual -and $Job.P.confirmAfter) {
             if ($Job.State -ne 'waitAck') {
                 $Job.State = 'waitAck'
+                Set-ProgState $Job.P.name 'waitAck' '끝나면 노란 안내창의 [완료] 를 눌러주세요'
                 Write-Log "$($Job.P.name): 직접 진행을 마친 뒤 안내창의 [완료] 를 눌러주세요."
             }
             if ($Sync.GuideAck -eq $Job.P.name) { $Sync.GuideAck = ''; Complete-InstallJob $Job }
@@ -642,7 +658,7 @@ $Worker = {
     # 프로그램 추가/제거의 제거 명령으로 삭제 작업 만들기 (예: OneDrive)
     function New-UninstallJobs($P) {
         $entries = @(Get-UninstallEntries $P.uninstall)
-        if ($entries.Count -eq 0) { Write-Log "$($P.name): 프로그램 추가/제거에 없어 건너뜀 (이미 삭제됨)" 'OK'; return @() }
+        if ($entries.Count -eq 0) { Write-Log "$($P.name): 프로그램 추가/제거에 없어 건너뜀 (이미 삭제됨)" 'OK'; Set-ProgState $P.name 'skipped' '이미 없음'; return @() }
         foreach ($proc in @($P.stopProcess)) { if ($proc) { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue } }
         $jobs = @()
         foreach ($en in $entries) {
@@ -666,7 +682,7 @@ $Worker = {
         $jobs = @()
         foreach ($p in $list) {
             if ($p.uninstall) { $jobs += New-UninstallJobs $p; continue }
-            if (Test-Installed $p) { Write-Log "$($p.name): 이미 설치되어 있어 건너뜀" 'OK'; continue }
+            if (Test-Installed $p) { Write-Log "$($p.name): 이미 설치되어 있어 건너뜀" 'OK'; Set-ProgState $p.name 'skipped' '이미 설치됨'; continue }
             if ($p.winget) {
                 Write-Log "$($p.name): 설치 시작 (winget: $($p.winget))"
                 & winget.exe install --id $p.winget -e --silent --accept-package-agreements --accept-source-agreements *> $null
@@ -674,7 +690,7 @@ $Worker = {
                 continue
             }
             $path = Find-Installer $AppRoot $files $p $Plan.Site.name
-            if (-not $path) { Write-Log "$($p.name): 설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요." 'ERROR'; continue }
+            if (-not $path) { Write-Log "$($p.name): 설치파일을 찾지 못했습니다. 화면에서 [설치파일 지정] 으로 선택하세요." 'ERROR'; Set-ProgState $p.name 'error' '설치파일 없음'; continue }
             $jobs += New-InstallJob $p $path
         }
         if ($jobs.Count -eq 0) { return }
@@ -1368,8 +1384,13 @@ $Worker = {
         if ($bg.NeedReboot) {
             $State.ResumeHere = $true
             $State.ResumeRound = $bg.ResumeRound
+            Set-TaskState 'update' 'reboot' '재부팅 후 이어서 업데이트'
         }
-        elseif ($bg.RebootRequired) { $Sync.RebootRequired = $true }
+        else {
+            if ($bg.RebootRequired) { $Sync.RebootRequired = $true }
+            if ([int]$bg.ErrorCount -gt 0) { Set-TaskState 'update' 'warn' '확인 필요 (로그 참고)' }
+            else { Set-TaskState 'update' 'done' '최신 버전' }
+        }
     }
 
     # 업데이트 재부팅이 필요하면: 설치 중인 프로그램이 없는지 확인 → 이어하기 예약 (업데이트부터 다시)
@@ -1502,6 +1523,9 @@ $Worker = {
             }
             if (-not $Plan.Background) { Write-Log "===== $($step.Title) =====" }
             Set-Status $step.Title
+            $err0 = [int]$Sync.ErrorCount
+            $warn0 = [int]$Sync.WarnCount
+            Set-TaskState $step.Id 'running'
             try {
                 switch ($step.Id) {
                     'network'     { Set-Network }
@@ -1524,6 +1548,13 @@ $Worker = {
                 }
             }
             catch { Write-Log "$($step.Title) 중 오류: $($_.Exception.Message)" 'ERROR' }
+
+            # 윈도우 업데이트는 백그라운드에서 계속되므로 끝날 때 따로 표시
+            if ($step.Id -ne 'update' -or $Plan.Background) {
+                if ([int]$Sync.ErrorCount -gt $err0) { Set-TaskState $step.Id 'error' '실패 항목 있음 (로그 참고)' }
+                elseif ([int]$Sync.WarnCount -gt $warn0) { Set-TaskState $step.Id 'warn' '확인 필요 (로그 참고)' }
+                else { Set-TaskState $step.Id 'done' }
+            }
         }
 
         if ($Plan.Background) {
@@ -1624,6 +1655,21 @@ $clbTasks.CheckOnClick = $true
 foreach ($t in $TaskDefs) { [void]$clbTasks.Items.Add($t.Title, $t.Default) }
 $grpTasks.Controls.Add($clbTasks)
 
+# 실행 중/끝난 뒤에는 체크 목록 대신 진행 상황 표시판을 보여줌 (✔ 완료 / ▶ 진행 중 / ✖ 실패 ...)
+function New-StatusList([int]$X, [int]$Y, [int]$W, [int]$H, [string]$Col1, [int]$W1) {
+    $lv = New-Control 'ListView' '' $X $Y $W $H
+    $lv.View = 'Details'
+    $lv.FullRowSelect = $true
+    $lv.MultiSelect = $false
+    $lv.HeaderStyle = 'Nonclickable'
+    $lv.Visible = $false
+    [void]$lv.Columns.Add($Col1, $W1)
+    [void]$lv.Columns.Add('상태', $W - $W1 - 24)
+    return $lv
+}
+$lvTasks = New-StatusList 10 22 310 308 '작업' 150
+$grpTasks.Controls.Add($lvTasks)
+
 $btnConfig    = New-Control 'Button' '설정 파일 열기' 12 356 160 30
 $btnReload    = New-Control 'Button' '설정 다시 불러오기' 182 356 160 30
 $btnLogs      = New-Control 'Button' '로그 폴더 열기' 12 390 160 30
@@ -1696,6 +1742,8 @@ $btnRescan = New-Control 'Button' '다시 찾기' 116 320 80 30
 $btnAdd    = New-Control 'Button' '+ 추가' 232 320 76 30
 $btnRemove = New-Control 'Button' '삭제' 314 320 78 30
 $grpApps.Controls.AddRange(@($clbPrograms, $btnPick, $btnRescan, $btnAdd, $btnRemove))
+$lvPrograms = New-StatusList 10 22 382 290 '프로그램' 130
+$grpApps.Controls.Add($lvPrograms)
 
 # --- 아래: 진행 상황 ---
 $lblStatus = New-Control 'Label' '대기 중' 12 466 1156 22
@@ -1997,12 +2045,93 @@ function Update-GuideWindow {
     if ($wait) { $btnGuideOk.Text = "$wait 완료 (다음으로)" }
 }
 
+# --- 진행 상황 표시판 ---
+$C = [System.Drawing.Color]
+$StateStyles = @{
+    pending = @('·', '대기',                 $C::Gray,       $C::White)
+    running = @('▶', '진행 중',              $C::RoyalBlue,  [System.Drawing.Color]::FromArgb(232, 241, 255))
+    manual  = @('!', '직접 진행 필요',        $C::DarkOrange, $C::LightYellow)
+    waitAck = @('!', '[완료] 버튼을 눌러주세요', $C::DarkOrange, $C::LightYellow)
+    done    = @('✔', '완료',                 $C::Green,      $C::Honeydew)
+    skipped = @('✔', '이미 완료',             $C::SeaGreen,   $C::Honeydew)
+    warn    = @('!', '확인 필요',             $C::DarkOrange, $C::LightYellow)
+    error   = @('✖', '실패',                 $C::Red,        $C::MistyRose)
+    reboot  = @('↻', '재부팅 후 계속',         $C::Purple,     $C::Lavender)
+    stopped = @('■', '중지됨',               $C::Gray,       $C::WhiteSmoke)
+}
+
+function Set-StatusRow($Item, [string]$Value) {
+    if ($Item.Name -eq $Value) { return }     # 바뀐 것만 다시 그림
+    $Item.Name = $Value
+    $parts = $Value.Split('|', 2)
+    $style = $StateStyles[$parts[0]]
+    if (-not $style) { return }
+    $text = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { $style[1] }
+    $Item.SubItems[1].Text = "$($style[0]) $text"
+    $Item.ForeColor = $style[2]
+    $Item.BackColor = $style[3]
+}
+
+function Add-StatusRow($List, [string]$Key, [string]$Label) {
+    $it = New-Object System.Windows.Forms.ListViewItem($Label)
+    [void]$it.SubItems.Add('')
+    $it.Tag = $Key
+    [void]$List.Items.Add($it)
+    Set-StatusRow $it 'pending|'
+}
+
+function Update-StatusView {
+    if (-not $script:Sync) { return }
+    foreach ($pair in @(@($lvTasks, $script:Sync.TaskStates), @($lvPrograms, $script:Sync.ProgStates))) {
+        $list = $pair[0]; $states = $pair[1]
+        if (-not $states) { continue }
+        foreach ($it in $list.Items) {
+            $v = $states[[string]$it.Tag]
+            if ($v) { Set-StatusRow $it $v }
+        }
+    }
+    $doneT = @($lvTasks.Items | Where-Object { $_.Name -match '^(done|skipped)' }).Count
+    $doneP = @($lvPrograms.Items | Where-Object { $_.Name -match '^(done|skipped)' }).Count
+    $grpTasks.Text = "1. 진행 상황  (완료 $doneT / $($lvTasks.Items.Count))"
+    $grpApps.Text  = "6. 프로그램 진행 상황  (완료 $doneP / $($lvPrograms.Items.Count))"
+}
+
+# 끝난 뒤 아직 '대기/진행 중' 으로 남은 줄 정리 (중지 → 중지됨, 재부팅 → 재부팅 후 계속)
+function Close-StatusView([string]$Leftover) {
+    foreach ($pair in @(@($lvTasks, $script:Sync.TaskStates), @($lvPrograms, $script:Sync.ProgStates))) {
+        foreach ($it in $pair[0].Items) {
+            if ($it.Name -match '^(pending|running|manual|waitAck)') { $pair[1][[string]$it.Tag] = "$Leftover|" }
+        }
+    }
+    Update-StatusView
+}
+
+function Show-StatusView([bool]$On) {
+    $clbTasks.Visible = -not $On
+    $lvTasks.Visible = $On
+    $clbPrograms.Visible = -not $On
+    $lvPrograms.Visible = $On
+    foreach ($b in @($btnPick, $btnRescan, $btnAdd, $btnRemove)) { $b.Visible = -not $On }
+    if (-not $On) {
+        $grpTasks.Text = '1. 실행할 작업 (위에서부터 순서대로)'
+        $grpApps.Text = '6. 설치할 프로그램'
+        $btnStart.Text = '셋팅 시작'
+    }
+}
+
 # --- 시작 ---
 $script:Running = $false
 $script:ResumeState = $null
-$controlsToLock = @($grpTasks, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $grpApps, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
+# 진행 상황 표시판이 회색으로 흐려지지 않도록 그룹 대신 개별 컨트롤만 잠금
+$controlsToLock = @($clbTasks, $grpNet, $grpSite, $grpPrinter, $grpName, $grpUsb, $clbPrograms, $btnPick, $btnRescan, $btnAdd, $btnRemove, $btnStart, $btnConfig, $btnReload, $btnSaveStart)
 
 function Start-Setup([bool]$Auto = $false) {
+    # 지난 결과를 보고 있는 중이면 먼저 선택 화면으로 돌아감
+    if ($lvTasks.Visible -and -not $Auto) {
+        Show-StatusView $false
+        $lblStatus.Text = '실행할 작업과 프로그램을 확인한 뒤 [셋팅 시작] 을 누르세요.'
+        return
+    }
     $steps = @(for ($i = 0; $i -lt $TaskDefs.Count; $i++) { if ($clbTasks.GetItemChecked($i)) { $TaskDefs[$i] } })
     $resume = $script:ResumeState
     if ($steps.Count -eq 0 -and -not $resume) { [System.Windows.Forms.MessageBox]::Show('실행할 작업을 하나 이상 선택하세요.') | Out-Null; return }
@@ -2099,6 +2228,10 @@ function Start-Setup([bool]$Auto = $false) {
         Guide           = ''
         GuideWait       = ''
         GuideAck        = ''
+        TaskStates      = [hashtable]::Synchronized(@{})
+        ProgStates      = [hashtable]::Synchronized(@{})
+        ErrorCount      = 0
+        WarnCount       = 0
         Cancel          = $false
         LogLock         = New-Object System.Object
         Bg              = $null
@@ -2106,6 +2239,14 @@ function Start-Setup([bool]$Auto = $false) {
     })
     if ($resume) { foreach ($n in @($resume.Notices)) { if ($n) { [void]$script:Sync.Notices.Add($n) } } }
     $script:ResumeState = $null
+
+    # 진행 상황 표시판 준비
+    $lvTasks.Items.Clear()
+    foreach ($st in $steps) { Add-StatusRow $lvTasks $st.Id $st.Title }
+    $lvPrograms.Items.Clear()
+    if ($ids -contains 'programs') { foreach ($p in $selectedPrograms) { Add-StatusRow $lvPrograms $p.name $p.name } }
+    Show-StatusView $true
+    Update-StatusView
 
     $txtLog.Clear()
     foreach ($c in $controlsToLock) { $c.Enabled = $false }
@@ -2135,6 +2276,7 @@ $timer.Add_Tick({
     if ($bg -and -not $bg.Done) { $status += "    ‖  업데이트: $($bg.Status)" }
     $lblStatus.Text = $status
     Update-GuideWindow
+    Update-StatusView
 
     if (-not $script:Sync.Done) { return }
 
@@ -2149,6 +2291,10 @@ $timer.Add_Tick({
     foreach ($c in $controlsToLock) { $c.Enabled = $true }
     $btnStop.Enabled = $false
     $btnStop.Text = '중지'
+    if ($script:Sync.Cancel) { Close-StatusView 'stopped' }
+    elseif ($script:Sync.ResumeRequested) { Close-StatusView 'reboot' }
+    else { Update-StatusView }
+    $btnStart.Text = '다시 선택'
     Update-ProgramList
     Update-Activation
 
