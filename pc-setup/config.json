@@ -185,7 +185,7 @@
   ],
   "fonts": {
     "folder": "2. font\\LG스마트체",
-    "search": "LG스마트체"
+    "search": "*스마트체*"
   },
   "taskbar": {
     "search": "icon",

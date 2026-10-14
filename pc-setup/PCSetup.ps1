@@ -798,40 +798,85 @@ $Worker = {
     function Install-Fonts {
         $f = $Cfg.fonts
         $folder = Resolve-AppDir $AppRoot $f.folder $f.search
+        if (-not $folder) { $folder = Resolve-AppDir $AppRoot $null '*스마트체*' }
+        if (-not $folder) { $folder = Resolve-AppDir $AppRoot $null '*font*' }
         if (-not $folder) { throw "폰트 폴더를 찾지 못했습니다: $($f.folder)" }
+        Write-Log "폰트 폴더: $folder"
+
+        $fonts = @(Get-ChildItem -LiteralPath $folder -Recurse -File | Where-Object { $_.Extension -in '.ttf', '.otf', '.ttc' })
+        if ($fonts.Count -eq 0) { throw "폰트 파일(.ttf)이 없습니다: $folder" }
+        Write-Log "폰트 파일 $($fonts.Count)개: $(($fonts | ForEach-Object { $_.Name }) -join ', ')"
 
         Add-Type -AssemblyName System.Drawing
         if (-not ('PCSetup.FontApi' -as [type])) {
-            Add-Type -Namespace PCSetup -Name FontApi -MemberDefinition '[DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int AddFontResource(string file);'
+            Add-Type -Namespace PCSetup -Name FontApi -MemberDefinition @'
+[DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int AddFontResource(string file);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, int msg, System.IntPtr wParam, System.IntPtr lParam, int flags, int timeout, out System.IntPtr result);
+'@
         }
 
         $fontsDir = Join-Path $env:windir 'Fonts'
         $regPath  = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
-        $used = @{}
-        $fonts = @(Get-ChildItem -LiteralPath $folder -Recurse -File | Where-Object { $_.Extension -in '.ttf', '.otf' })
-        if ($fonts.Count -eq 0) { throw "폰트 파일(.ttf)이 없습니다: $folder" }
 
+        # 레지스트리에 이 파일이 폰트로 등록되어 있는지 (전체 사용자 또는 현재 사용자)
+        $isRegistered = {
+            param($fileName)
+            foreach ($rp in @($regPath, 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts')) {
+                $props = (Get-ItemProperty -LiteralPath $rp -ErrorAction SilentlyContinue).PSObject.Properties
+                foreach ($pr in $props) { if ("$($pr.Value)" -and ([IO.Path]::GetFileName("$($pr.Value)") -ieq $fileName)) { return $true } }
+            }
+            return $false
+        }
+
+        $shellFonts = (New-Object -ComObject Shell.Application).Namespace(0x14)   # 0x14 = Windows 글꼴 폴더
+        $ok = 0
         foreach ($font in $fonts) {
             try {
                 $dest = Join-Path $fontsDir $font.Name
+                if ((Test-Path -LiteralPath $dest) -and (& $isRegistered $font.Name)) {
+                    Write-Log "폰트: $($font.Name) 이미 설치됨" 'OK'
+                    $ok++
+                    continue
+                }
+
+                # 1) 사람이 글꼴 폴더에 복사/붙여넣기 하는 것과 같은 방법 (설치 + 등록까지 Windows 가 처리)
+                $shellFonts.CopyHere($font.FullName, 0x14)   # 0x14 = 진행창 없음 + 모두 예
+                for ($w = 0; $w -lt 30; $w++) {
+                    if ((Test-Path -LiteralPath $dest) -and (& $isRegistered $font.Name)) { break }
+                    Start-Sleep -Milliseconds 500
+                }
+
+                # 2) 그래도 등록이 안 됐으면 직접 복사 + 등록
                 if (-not (Test-Path -LiteralPath $dest)) { Copy-Item -LiteralPath $font.FullName -Destination $dest -Force -ErrorAction Stop }
-
-                $pfc = New-Object System.Drawing.Text.PrivateFontCollection
-                $pfc.AddFontFile($font.FullName)
-                $family = $pfc.Families[0].Name
-                $pfc.Dispose()
-
-                $type = if ($font.Extension -eq '.otf') { 'OpenType' } else { 'TrueType' }
-                $regName = "$family ($type)"
-                if ($used.ContainsKey($regName)) { $regName = "$($font.BaseName) ($type)" }
-                $used[$regName] = $true
-
-                Set-ItemProperty -Path $regPath -Name $regName -Value $font.Name -ErrorAction Stop
+                if (-not (& $isRegistered $font.Name)) {
+                    $family = $font.BaseName
+                    try {
+                        $pfc = New-Object System.Drawing.Text.PrivateFontCollection
+                        $pfc.AddFontFile($dest)
+                        if ($pfc.Families.Count -gt 0) { $family = $pfc.Families[0].Name }
+                        $pfc.Dispose()
+                    }
+                    catch { }   # 이름을 못 읽어도 파일 이름으로 등록
+                    $type = if ($font.Extension -eq '.otf') { 'OpenType' } else { 'TrueType' }
+                    $regName = "$family ($type)"
+                    if ((Get-ItemProperty -LiteralPath $regPath -ErrorAction SilentlyContinue).PSObject.Properties.Name -contains $regName) {
+                        $regName = "$($font.BaseName) ($type)"
+                    }
+                    New-ItemProperty -LiteralPath $regPath -Name $regName -Value $font.Name -PropertyType String -Force -ErrorAction Stop | Out-Null
+                    Write-Log "폰트: $($font.Name) 직접 등록 ($regName)"
+                }
                 [void][PCSetup.FontApi]::AddFontResource($dest)
-                Write-Log "폰트 설치: $($font.Name)" 'OK'
+
+                if ((Test-Path -LiteralPath $dest) -and (& $isRegistered $font.Name)) { Write-Log "폰트 설치: $($font.Name)" 'OK'; $ok++ }
+                else { Write-Log "폰트 설치 확인 실패: $($font.Name)" 'ERROR' }
             }
             catch { Write-Log "폰트 설치 실패: $($font.Name) - $($_.Exception.Message)" 'ERROR' }
         }
+
+        # 열려 있는 프로그램들에 글꼴이 바뀌었다고 알림 (WM_FONTCHANGE)
+        $r = [IntPtr]::Zero
+        [void][PCSetup.FontApi]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [IntPtr]::Zero, [IntPtr]::Zero, 2, 3000, [ref]$r)
+        Write-Log "폰트 $ok / $($fonts.Count) 개 설치됨 (이미 열려 있던 프로그램은 다시 열어야 목록에 보입니다)" $(if ($ok -eq $fonts.Count) { 'OK' } else { 'WARN' })
     }
 
     # --- 4. 작업표시줄 ---------------------------------------------------------
