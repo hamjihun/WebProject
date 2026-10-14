@@ -1051,6 +1051,18 @@ $Worker = {
             catch { Write-Log "파일 확장명 설정 실패 - $($_.Exception.Message)" 'ERROR' }
         }
 
+        # 사용자 계정 컨트롤(UAC) 슬라이더 가장 아래 = '알리지 않음'
+        # (EnableLUA 는 켜둠 - 끄면 스토어 앱/엣지 일부 기능이 동작하지 않음)
+        if ($m.uacNeverNotify) {
+            try {
+                $sys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+                Set-Reg $sys 'ConsentPromptBehaviorAdmin' 0
+                Set-Reg $sys 'PromptOnSecureDesktop' 0
+                Write-Log '사용자 계정 컨트롤: 가장 아래 (알리지 않음)' 'OK'
+            }
+            catch { Write-Log "사용자 계정 컨트롤 설정 실패 - $($_.Exception.Message)" 'ERROR' }
+        }
+
         if ($Plan.ComputerName -and $Plan.ComputerName -ne $env:COMPUTERNAME) {
             try {
                 Rename-Computer -NewName $Plan.ComputerName -Force -ErrorAction Stop
@@ -1815,7 +1827,7 @@ $TaskDefs = @(
     @{ Id = 'taskbar';     Title = '작업표시줄 (뉴스·아이콘 정리)';      Default = $true },
     @{ Id = 'desktop';     Title = '바탕화면 아이콘 표시';              Default = $true },
     @{ Id = 'officeLinks'; Title = '엑셀·파워포인트·워드 바로가기';      Default = $true },
-    @{ Id = 'misc';        Title = '파일 확장명 표시 / PC 이름';        Default = $true },
+    @{ Id = 'misc';        Title = '확장명 표시 / UAC 알리지 않음 / PC 이름'; Default = $true },
     @{ Id = 'power';       Title = '전원 설정';                         Default = $true },
     @{ Id = 'startmenu';   Title = '시작화면 정리 (엣지만)';            Default = $true },
     @{ Id = 'edge';        Title = '엣지 설정';                         Default = $true },

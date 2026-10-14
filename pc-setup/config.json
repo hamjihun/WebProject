@@ -209,7 +209,8 @@
     "controlPanel"
   ],
   "misc": {
-    "showFileExtensions": true
+    "showFileExtensions": true,
+    "uacNeverNotify": true
   },
   "power": {
     "plan": "",
