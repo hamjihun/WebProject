@@ -564,7 +564,8 @@ $Worker = {
             Write-Log "$($p.name): '$clip' 를 클립보드에 복사했습니다. (Ctrl+V 로 붙여넣기)"
         }
         $Job.Since = (Get-Date).AddSeconds(-2)
-        $Job.Proc  = Start-InstallerProcess $Job.Path $p.args
+        $installArgs = if ($Job.Path -like '*.msi') { $p.argsMsi } else { $p.args }   # msi 는 자동으로 /qn
+        $Job.Proc  = Start-InstallerProcess $Job.Path $installArgs
         $Job.Tree  = New-Object 'System.Collections.Generic.HashSet[int]'
         [void]$Job.Tree.Add($Job.Proc.Id)
         $Job.State = 'running'
@@ -617,7 +618,7 @@ $Worker = {
                 if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK'; Set-ProgState $name 'done' '설치 완료' }
                 else {
                     $Job.Failed = $true
-                    $again = if ($Job.P.args -and -not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
+                    $again = if (($Job.P.args -or $Job.P.fallbackUrl) -and -not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
                     Write-Log "${name}: 설치 종료 코드 $($Job.Code) (실패했을 수 있으니 확인하세요)$again" $(if ($again) { 'WARN' } else { 'ERROR' })
                     if ($again) { Set-ProgState $name 'pending' '다시 설치 대기' }
                     elseif ($Job.Manual -or -not $Job.P.args) { Set-ProgState $name 'warn' "확인 필요 (종료 코드 $($Job.Code))" }
@@ -632,7 +633,8 @@ $Worker = {
         if ($Job.State -eq 'running' -and ($Job.P.auto -or $Job.P.dismiss)) {
             # (설치 프로그램이 끝난 뒤에도 다른 프로그램 창을 처리하는 단계가 남아 있을 수 있음)
             $mine = @(foreach ($w in $Windows) { try { if ($Job.Tree.Contains([int]$w.Current.ProcessId)) { $w } } catch { } })
-            # 중간에 뜨는 팝업 닫기 (예: 반디집 '새 버전 홈페이지 방문?' → 아니요)
+            # 중간에 뜨는 팝업/마지막 화면 버튼은 보이면 바로 누름
+            # (예: 반디집 '새 버전 홈페이지 방문?' → 아니요, 카카오톡 설치 완료 → 마침)
             if ($Job.P.dismiss -and ((Get-Date) - $Job.LastDismiss).TotalSeconds -ge 1) {
                 foreach ($w in $mine) {
                     try {
@@ -763,6 +765,28 @@ $Worker = {
         catch { Write-Log "엣지 첫 실행 화면 설정 실패 - $($_.Exception.Message)" 'WARN' }
     }
 
+    # 공식 오프라인 설치 파일 내려받기 (USB 설치 파일이 실패했을 때)
+    function Get-FallbackInstaller($P) {
+        $dir = Join-Path ([IO.Path]::GetTempPath()) 'PCSetup'
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $file = Join-Path $dir ([IO.Path]::GetFileName(([Uri]$P.fallbackUrl).AbsolutePath))
+        Set-ProgState $P.name 'running' '설치 파일 내려받는 중'
+        Write-Log "$($P.name): 오프라인 설치 파일을 내려받습니다. ($($P.fallbackUrl))"
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+            $old = $ProgressPreference
+            $ProgressPreference = 'SilentlyContinue'   # 진행 표시가 있으면 내려받기가 매우 느려짐
+            Invoke-WebRequest -Uri $P.fallbackUrl -OutFile $file -UseBasicParsing -ErrorAction Stop
+            $ProgressPreference = $old
+            Write-Log "$($P.name): 내려받기 완료 ($([math]::Round((Get-Item -LiteralPath $file).Length / 1MB)) MB)" 'OK'
+            return $file
+        }
+        catch {
+            Write-Log "$($P.name): 내려받기 실패 - $($_.Exception.Message)" 'WARN'
+            return $null
+        }
+    }
+
     function Install-Programs {
         $list = @($Plan.Programs)
         if ($list.Count -eq 0) { Write-Log '선택된 프로그램이 없습니다.'; return }
@@ -790,11 +814,22 @@ $Worker = {
         Invoke-InstallJobs $jobs $gap $parallel
 
         # 다른 설치와 겹쳐서 실패한 것(1618)은 하나씩 다시 설치
-        # 자동 설치(args 있음)가 실패한 것도 한 번 더 시도 (예: 크롬 온라인 설치 오류)
-        $retry = @($jobs | Where-Object { $_.Code -eq 1618 -or ($_.Failed -and $_.P.args -and -not $_.P.uninstall) })
+        # 자동 설치가 실패한 것도 한 번 더 시도
+        # fallbackUrl 이 있으면 (예: 크롬) 공식 오프라인 설치 파일을 내려받아서 다시 설치
+        $retry = @($jobs | Where-Object { $_.Code -eq 1618 -or ($_.Failed -and ($_.P.args -or $_.P.fallbackUrl) -and -not $_.P.uninstall) })
         if ($retry.Count -gt 0 -and -not $Sync.Cancel) {
             Write-Log "겹치거나 실패한 프로그램을 하나씩 다시 설치합니다: $(($retry | ForEach-Object { $_.P.name }) -join ', ')"
-            $again = @($retry | ForEach-Object { $j = New-InstallJob $_.P $_.Path; $j.Retried = $true; $j })
+            $again = @()
+            foreach ($r in $retry) {
+                $path = $r.Path
+                if ($r.P.fallbackUrl -and $r.Code -ne 1618 -and -not (Test-Installed $r.P)) {
+                    $dl = Get-FallbackInstaller $r.P
+                    if ($dl) { $path = $dl }
+                }
+                $j = New-InstallJob $r.P $path
+                $j.Retried = $true
+                $again += $j
+            }
             Invoke-InstallJobs $again 0 $false
         }
     }

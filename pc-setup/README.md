@@ -77,8 +77,8 @@
 |---|---|---|
 | 오피스 | `1.OfficeSetup.exe` | 그대로 설치 진행 |
 | 반디집 | `2.BANDIZIP-SETUP-STD-X64.EXE` | **자동 진행**: '새 버전 홈페이지 방문?' → 아니요 → '사용 통계 및 오류 보고서 자동 전송' 체크 해제 → 동의 및 설치 → 닫기 → 지금 적용 → 확인 |
-| 크롬 | `3.ChromeSetup.exe` | 자동 설치 (화면 없음) |
-| 카카오톡 | `4.KakaoTalk_Setup.exe` | **자동 진행**: 한국어 → OK → 다음 → 다음 → 'Daum을 시작페이지로 설정' 체크 해제 → 설치 |
+| 크롬 | `3.ChromeSetup.exe` (USB 에 `*chrome*.msi` 오프라인 설치 파일이 있으면 그것을 먼저 사용) | 자동 설치. 실패하면 Google 공식 기업용 오프라인 설치 파일(msi)을 내려받아 다시 설치 |
+| 카카오톡 | `4.KakaoTalk_Setup.exe` | **자동 진행**: 한국어 → OK → 다음 → 다음 → 'Daum을 시작페이지로 설정' 체크 해제 → 설치 → 설치 완료 화면 **마침** |
 | Adobe Reader | `Reader_kr_install.exe` | 설치(인터넷으로 내려받음) 후 **자동 진행**: 마침 → PDF 기본 앱 'Adobe Acrobat' 선택 → 확인 → 열린 엣지 창 닫기 |
 | V3 | `6.EPP_AgentSetup.exe` | 그대로 설치 진행 |
 | ERP | `ERP_KSystem ...exe` (부산/김해 같은 프로그램) | **자동 진행**: 다음 → Finish → Client Update 에 지점 서버 주소 입력 → 다음 |
@@ -143,7 +143,9 @@ Windows 11 은 시작화면을 프로그램으로 완벽하게 지우기가 어�
 | `guide` | 설치하는 동안 안내창에 보여줄 문구 (`{erpServer}` 는 지점의 ERP 주소로 바뀜) |
 | `confirmAfter` | `true` 면 설치 창이 닫힌 뒤에도 안내창의 [완료] 를 누를 때까지 기다림 |
 | `clipboard` | 설치 시작 전에 클립보드에 복사할 내용 |
-| `dismiss` | 설치 중에 뜨면 언제든 눌러서 닫을 팝업 버튼 (예: 반디집 `"아니요*"`) |
+| `dismiss` | 설치 중에 보이면 언제든 바로 누를 버튼 (예: 반디집 `"아니요*"`, 카카오톡 `"마침*"`) |
+| `argsMsi` | 설치 파일이 .msi 일 때 쓸 옵션 (`args` 는 .exe 용) |
+| `fallbackUrl` | 자동 설치가 실패하면 이 주소에서 설치 파일을 내려받아 다시 설치 |
 | `auto` | 설치 화면 자동 조작 단계. `click`(누를 버튼), `alsoClick`(그 전까지 계속 누를 버튼), `uncheck`(체크 해제할 항목), `setText`(입력칸에 넣을 값), `select`(목록에서 고를 항목), `close`(창 닫기), `process`(다른 프로그램 창에서 찾기, 예: `OpenWith`, `msedge`), `timeout`(초), `optional`(없어도 통과) |
 | `installed` | 이 경로에 파일이 있으면 이미 설치된 것으로 보고 건너뜀 |
 

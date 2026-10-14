@@ -73,11 +73,13 @@
     {
       "name": "크롬",
       "find": [
-        "*ChromeSetup*.exe",
         "*chrome*.msi",
+        "*ChromeSetup*.exe",
         "*chrome*.exe"
       ],
       "args": "/silent /install",
+      "argsMsi": "",
+      "fallbackUrl": "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi",
       "installed": [
         "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
         "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
@@ -91,11 +93,12 @@
         "*카카오톡*.exe"
       ],
       "args": "",
+      "dismiss": "마침*|Finish*",
       "installed": [
         "%ProgramFiles(x86)%\\Kakao\\KakaoTalk\\KakaoTalk.exe",
         "%ProgramFiles%\\Kakao\\KakaoTalk\\KakaoTalk.exe"
       ],
-      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  언어 '한국어' → [OK] → [다음] → [다음]\n  → 'Daum을 시작페이지로 설정' 체크 해제 → [설치]\n\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.",
+      "guide": "자동으로 진행합니다. 마우스/키보드를 건드리지 마세요.\n  언어 '한국어' → [OK] → [다음] → [다음]\n  → 'Daum을 시작페이지로 설정' 체크 해제 → [설치]\n  → 설치 완료 화면 [마침]\n\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.\n(설치 완료 화면의 [마침] 은 언제든 자동으로 누릅니다)",
       "auto": [
         {
           "uncheck": "*Daum*|*시작페이지*|*시작 페이지*",
