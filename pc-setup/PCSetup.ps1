@@ -275,10 +275,21 @@ $Worker = {
         return @($Window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond))
     }
 
+    # 창 제목줄의 최소화/최대화/닫기(X) 버튼인지 (이름이 '닫기' 라서 설치 창을 닫아버리는 것 방지)
+    function Test-TitleBarButton($Button) {
+        if ($Button.Current.AutomationId -in 'Close', 'Minimize', 'Maximize', 'Restore', 'Help') { return $true }
+        try {
+            $parent = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($Button)
+            if ($parent -and $parent.Current.ControlType -eq [System.Windows.Automation.ControlType]::TitleBar) { return $true }
+        }
+        catch { }
+        return $false
+    }
+
     function Find-UIButton($Window, [string]$Patterns) {
         foreach ($b in (Find-UIControl $Window ([System.Windows.Automation.ControlType]::Button))) {
             $name = ($b.Current.Name -replace '&', '').Trim()
-            if ($name -and $b.Current.IsEnabled -and (Test-LikeAny $name $Patterns)) { return $b }
+            if ($name -and $b.Current.IsEnabled -and (Test-LikeAny $name $Patterns) -and -not (Test-TitleBarButton $b)) { return $b }
         }
         return $null
     }
@@ -744,6 +755,12 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         }
         $Job.Since = (Get-Date).AddSeconds(-2)
         $installArgs = if ($Job.Path -like '*.msi') { $p.argsMsi } else { $p.args }   # msi 는 자동으로 /qn
+        # argsMatch: 설치 파일 이름에 따라 다른 옵션 (예: Adobe 오프라인 설치 파일 AcroRdr*.exe → 자동 설치)
+        if ($p.argsMatch) {
+            foreach ($pr in $p.argsMatch.PSObject.Properties) {
+                if ([IO.Path]::GetFileName($Job.Path) -like $pr.Name) { $installArgs = [string]$pr.Value; $Job.SilentByMatch = $true }
+            }
+        }
         $Job.Proc  = Start-InstallerProcess $Job.Path $installArgs
         $Job.Tree  = New-Object 'System.Collections.Generic.HashSet[int]'
         [void]$Job.Tree.Add($Job.Proc.Id)
@@ -785,8 +802,17 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             else { Write-Log "${name}: 삭제가 끝나지 않았습니다. (종료 코드 $($Job.Code)) 프로그램 추가/제거에서 확인하세요." 'WARN'; Set-ProgState $name 'warn' '삭제 확인 필요' }
             return
         }
-        switch ($Job.Code) {
-            0       { Write-Log "${name}: 설치 완료" 'OK'; Set-ProgState $name 'done' '설치 완료' }
+        # 설치 프로그램이 정상 종료 코드로 끝나도(창을 닫아도 0 이 나올 수 있음) 실제 설치 파일이 있는지 확인
+        $code = $Job.Code
+        if ($code -in 0, 3010, 1641 -and @($Job.P.installed | Where-Object { $_ }).Count -gt 0 -and -not (Test-Installed $Job.P)) {
+            Start-Sleep -Seconds 5   # 설치 마무리가 조금 늦는 경우
+            if (-not (Test-Installed $Job.P)) {
+                Write-Log "${name}: 설치 프로그램은 끝났지만(종료 코드 $code) 설치된 파일이 없습니다." 'WARN'
+                $code = -2
+            }
+        }
+        switch ($code) {
+            0       { Write-Log "${name}: 설치 완료 (설치 확인됨)" 'OK'; Set-ProgState $name 'done' '설치 완료' }
             3010    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true; Set-ProgState $name 'done' '설치 완료 (재부팅 후 적용)' }
             1641    { Write-Log "${name}: 설치 완료 (재부팅 필요)" 'OK'; $Sync.RebootRequired = $true; Set-ProgState $name 'done' '설치 완료 (재부팅 후 적용)' }
             1618    {
@@ -797,11 +823,11 @@ public struct RECT { public int Left; public int Top; public int Right; public i
                 if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK'; Set-ProgState $name 'done' '설치 완료' }
                 else {
                     $Job.Failed = $true
-                    $again = if (($Job.P.args -or $Job.P.fallbackUrl) -and -not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
-                    Write-Log "${name}: 설치 종료 코드 $($Job.Code) (실패했을 수 있으니 확인하세요)$again" $(if ($again) { 'WARN' } else { 'ERROR' })
-                    if ($again) { Set-ProgState $name 'pending' '다시 설치 대기' }
-                    elseif ($Job.Manual -or -not $Job.P.args) { Set-ProgState $name 'warn' "확인 필요 (종료 코드 $($Job.Code))" }
-                    else { Set-ProgState $name 'error' "설치 실패 (종료 코드 $($Job.Code))" }
+                    $again = if (-not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
+                    $why = if ($code -eq -2) { '설치되지 않음' } else { "종료 코드 $($Job.Code)" }
+                    Write-Log "${name}: 설치 실패 ($why)$again" $(if ($again) { 'WARN' } else { 'ERROR' })
+                    if ($again) { Set-ProgState $name 'pending' "다시 설치 대기 ($why)" }
+                    else { Set-ProgState $name 'error' "설치 실패 ($why)" }
                 }
             }
         }
@@ -999,7 +1025,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         # 다른 설치와 겹쳐서 실패한 것(1618)은 하나씩 다시 설치
         # 자동 설치가 실패한 것도 한 번 더 시도
         # fallbackUrl 이 있으면 (예: 크롬) 공식 오프라인 설치 파일을 내려받아서 다시 설치
-        $retry = @($jobs | Where-Object { $_.Code -eq 1618 -or ($_.Failed -and ($_.P.args -or $_.P.fallbackUrl) -and -not $_.P.uninstall) })
+        $retry = @($jobs | Where-Object { $_.Code -eq 1618 -or ($_.Failed -and -not $_.P.uninstall) })
         if ($retry.Count -gt 0 -and -not $Sync.Cancel) {
             Write-Log "겹치거나 실패한 프로그램을 하나씩 다시 설치합니다: $(($retry | ForEach-Object { $_.P.name }) -join ', ')"
             $again = @()
