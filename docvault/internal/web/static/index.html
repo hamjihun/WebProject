@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocVault 문서중앙화</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="login" class="login hidden">
+  <form id="loginForm" class="card login-card">
+    <h1>DocVault</h1>
+    <p class="muted">사내 문서중앙화 시스템</p>
+    <label>아이디<input name="username" autocomplete="username" required autofocus></label>
+    <label>비밀번호<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary" type="submit">로그인</button>
+    <p id="loginError" class="error"></p>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <header class="top">
+    <div class="brand">DocVault <span class="muted">문서중앙화</span></div>
+    <div class="who"><span id="whoName"></span> <button id="logoutBtn" class="link">로그아웃</button></div>
+  </header>
+  <nav class="side" id="side"></nav>
+  <main id="main" class="main"></main>
+</div>
+
+<div id="modal" class="modal hidden"><div class="modal-box card" id="modalBox"></div></div>
+<div id="toast" class="toast hidden"></div>
+<script src="/app.js"></script>
+</body>
+</html>

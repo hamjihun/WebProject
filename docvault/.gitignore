@@ -1,0 +1,7 @@
+dist/
+data/
+store/
+logs/
+docvault.json
+agent.json
+*.exe

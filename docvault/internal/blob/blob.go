@@ -98,3 +98,24 @@ func (s *Store) Delete(sha string) error {
 	}
 	return err
 }
+
+func (s *Store) Exists(sha string) bool {
+	if sha == "" || sha == EmptySHA {
+		return true
+	}
+	_, err := os.Stat(s.path(sha))
+	return err == nil
+}
+
+// Walk calls fn with the hash of every stored blob.
+func (s *Store) Walk(fn func(sha string)) error {
+	return filepath.WalkDir(filepath.Join(s.root, "blobs"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if n := d.Name(); len(n) == 64 {
+			fn(n)
+		}
+		return nil
+	})
+}

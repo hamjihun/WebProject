@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
 	password_hash TEXT NOT NULL DEFAULT '',
 	is_admin      INTEGER NOT NULL DEFAULT 0,
 	disabled      INTEGER NOT NULL DEFAULT 0,
+	write_blocked INTEGER NOT NULL DEFAULT 0,
 	failed_logins INTEGER NOT NULL DEFAULT 0,
 	locked_until  INTEGER NOT NULL DEFAULT 0,
 	created_at    INTEGER NOT NULL
@@ -79,6 +80,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS nodes_live_name
 	ON nodes(parent_id, name) WHERE deleted_at IS NULL AND parent_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS nodes_root ON nodes(share_id, owner_id) WHERE parent_id IS NULL;
 CREATE INDEX IF NOT EXISTS nodes_deleted ON nodes(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS nodes_usage ON nodes(share_id, owner_id, size) WHERE deleted_at IS NULL AND is_dir=0;
 CREATE INDEX IF NOT EXISTS nodes_batch ON nodes(delete_batch) WHERE delete_batch IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS versions (

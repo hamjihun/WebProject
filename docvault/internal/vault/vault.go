@@ -38,6 +38,16 @@ type Vault struct {
 
 	readMu   sync.Mutex
 	lastRead map[string]int64
+
+	// blobMu keeps garbage collection from deleting a blob that an upload is
+	// about to reference: uploads hold it shared, GC holds it exclusively.
+	blobMu sync.RWMutex
+
+	guardMu sync.Mutex
+	guardEv map[int64][]int64
+
+	usageMu    sync.Mutex
+	usageCache map[[2]int64][2]int64 // (share, owner) -> (bytes, computed at)
 }
 
 func New(db *sql.DB, blobs *blob.Store) *Vault {
@@ -46,6 +56,9 @@ func New(db *sql.DB, blobs *blob.Store) *Vault {
 		Blobs:    blobs,
 		Now:      func() int64 { return time.Now().Unix() },
 		lastRead: map[string]int64{},
+		guardEv:  map[int64][]int64{},
+
+		usageCache: map[[2]int64][2]int64{},
 	}
 }
 
@@ -65,7 +78,14 @@ func (v *Vault) withTx(fn func(tx *sql.Tx) error) error {
 		tx.Rollback()
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// Any committed change may have changed how much space a drive uses.
+	v.usageMu.Lock()
+	clear(v.usageCache)
+	v.usageMu.Unlock()
+	return nil
 }
 
 func randomID(n int) string {
@@ -86,11 +106,14 @@ var defaultSettings = map[string]int64{
 	"export_max_downloads": 3,
 	"session_web_hours":    12,
 	"session_agent_days":   30,
+	"guard_threshold":      200, // 랜섬웨어 의심: 이 건수 이상 수정하면(삭제는 2건=1건) 쓰기 차단 (0=끔)
+	"guard_window_sec":     300, // 위 횟수를 세는 시간(초)
 }
 
 func SettingKeys() []string {
 	return []string{"retention_days", "version_keep_days", "version_keep_count",
-		"export_valid_days", "export_max_downloads", "session_web_hours", "session_agent_days"}
+		"export_valid_days", "export_max_downloads", "session_web_hours", "session_agent_days",
+		"guard_threshold", "guard_window_sec"}
 }
 
 func (v *Vault) Setting(key string) int64 {
