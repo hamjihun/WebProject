@@ -147,46 +147,6 @@
       ]
     },
     {
-      "name": "Adobe Reader",
-      "winget": "Adobe.Acrobat.Reader.64-bit",
-      "find": [
-        "*AcroRdr*.exe",
-        "Reader_kr_install.exe",
-        "*Reader*install*.exe",
-        "*acro*.exe"
-      ],
-      "args": "",
-      "argsMatch": {
-        "*AcroRdr*.exe": "/sAll /rs /msi EULA_ACCEPT=YES"
-      },
-      "installed": [
-        "%ProgramFiles%\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
-        "%ProgramFiles(x86)%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe",
-        "%ProgramFiles%\\Adobe\\Acrobat Reader DC\\Reader\\AcroRd32.exe"
-      ],
-      "guide": "설치는 자동으로 진행합니다. (인터넷으로 내려받아 몇 분 걸릴 수 있습니다)\n끝나면 자동으로:\n  [마침] → PDF 기본 앱 'Adobe Acrobat' 선택 → [확인]\n  → Adobe 가 연 엣지 창 닫기\n\n자동 진행이 멈추면 위 순서대로 직접 진행하세요.",
-      "auto": [
-        {
-          "click": "마침*|Finish*",
-          "timeout": 1800
-        },
-        {
-          "process": "OpenWith",
-          "select": "*Adobe*Acrobat*",
-          "click": "확인*|OK",
-          "timeout": 60,
-          "optional": true
-        },
-        {
-          "process": "msedge",
-          "anyAge": true,
-          "close": true,
-          "timeout": 90,
-          "optional": true
-        }
-      ]
-    },
-    {
       "name": "V3",
       "find": [
         "*EPP_AgentSetup*.exe",
@@ -360,6 +320,7 @@
     "V3 사용자명 입력",
     "VPN 설치 (필요 시)",
     "문서중앙화 접속 테스트",
-    "Claude 설치 - 엑셀, 파워포인트"
+    "Claude 설치 - 엑셀, 파워포인트",
+    "Adobe Reader 설치 (USB 설치파일로 직접 설치)"
   ]
 }
