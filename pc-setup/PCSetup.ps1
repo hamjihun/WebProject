@@ -1651,10 +1651,35 @@ public struct POINT { public int X; public int Y; }
         }
         catch { Write-Log "엣지: 다운로드 단추 표시 실패 - $($_.Exception.Message)" 'ERROR' }
         Add-BrowserBookmarks 'edge' '엣지'
+        New-EdgeDesktopLinks
         # 직원이 바꿀 수 있게: 예전에 고정값(조직에서 관리)으로 넣은 것과 셋팅 중에만 필요한 설정은 지움
         $extra = @('StartupBoostEnabled', 'BackgroundModeEnabled', 'ManagedFavorites')
         Clear-LockedPolicies 'edge' (@($items.Keys) + $extra) '엣지'
         Close-Browser 'msedge' '엣지'
+    }
+
+    # 바탕화면에 엣지로 여는 사이트 바로가기 (예: 그룹웨어) - config browser.desktopShortcuts
+    function New-EdgeDesktopLinks {
+        $list = @($Cfg.browser.desktopShortcuts | Where-Object { $_.url })
+        if ($list.Count -eq 0) { return }
+        $edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") |
+                Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if (-not $edge) { Write-Log '엣지를 찾지 못해 바탕화면 바로가기를 만들지 못했습니다.' 'WARN'; return }
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        $shell = New-Object -ComObject WScript.Shell
+        foreach ($l in $list) {
+            try {
+                $sc = $shell.CreateShortcut((Join-Path $desktop "$($l.name).lnk"))
+                $sc.TargetPath = $edge
+                $sc.Arguments = [string]$l.url
+                $sc.WorkingDirectory = Split-Path $edge
+                $sc.IconLocation = "$edge,0"
+                $sc.Description = "$($l.name) ($($l.url))"
+                $sc.Save()
+                Write-Log "바탕화면 바로가기 (엣지): $($l.name) - $($l.url)" 'OK'
+            }
+            catch { Write-Log "$($l.name) 바로가기 실패 - $($_.Exception.Message)" 'ERROR' }
+        }
     }
 
     # 설정이 바로 적용되도록 실행 중인 브라우저 닫기 (엣지는 시작 부스트로 뒤에서 실행 중일 수 있음)
@@ -2918,7 +2943,7 @@ $TaskNotes = @{
     power       = ''
     startmenu   = ''
     extensions  = '브라우저 설정보다 먼저 업데이트'
-    edge        = '설정 후 실행 중인 엣지 닫기'
+    edge        = '바탕화면 그룹웨어 바로가기, 설정 후 실행 중인 엣지 닫기'
     chrome      = '설정 후 실행 중인 크롬 닫기'
     printer     = '체크한 프린터만'
     drivers     = ''

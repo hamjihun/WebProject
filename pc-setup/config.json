@@ -240,6 +240,12 @@
         "name": "그룹웨어",
         "url": "http://gw.ilsancorp.co.kr"
       }
+    ],
+    "desktopShortcuts": [
+      {
+        "name": "그룹웨어",
+        "url": "http://gw.ilsancorp.co.kr"
+      }
     ]
   },
   "printer": {
