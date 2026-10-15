@@ -1852,7 +1852,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         Write-Log '윈도우 업데이트가 끝나기를 기다립니다...'
         while (-not $bg.Done) {
             if ($Sync.Cancel) { $bg.Cancel = $true; return }
-            Set-Status "윈도우 업데이트 마무리 대기 중 - $($bg.Status)"
+            Set-Status '윈도우 업데이트가 끝나기를 기다리는 중 (아래 줄에 진행 상황)'
             Start-Sleep -Seconds 2
         }
         try { [void]$State.Bg.PS.EndInvoke($State.Bg.Handle) } catch { }
@@ -2292,10 +2292,13 @@ $lvPrograms = New-StatusList 10 22 382 290 '프로그램' 130
 $grpApps.Controls.Add($lvPrograms)
 
 # --- 아래: 진행 상황 ---
-$lblStatus = New-Control 'Label' '대기 중' 12 466 1156 22
+# 상태줄: 두 줄 (1줄 = 지금 하는 작업, 2줄 = 윈도우 업데이트 진행). 길면 끝을 … 로, 마우스를 올리면 전체
+$lblStatus = New-Control 'Label' '대기 중' 12 462 1156 44
 $lblStatus.Font = $BoldFont
-$progress = New-Control 'ProgressBar' '' 12 490 1156 20
-$txtLog = New-Control 'TextBox' '' 12 516 1156 190
+$lblStatus.AutoEllipsis = $true
+$StatusTip = New-Object System.Windows.Forms.ToolTip
+$progress = New-Control 'ProgressBar' '' 12 508 1156 16
+$txtLog = New-Control 'TextBox' '' 12 528 1156 178
 $txtLog.Multiline = $true
 $txtLog.ReadOnly = $true
 $txtLog.ScrollBars = 'Vertical'
@@ -2946,9 +2949,16 @@ $timer.Add_Tick({
     $line = $null
     while ($script:Sync.Queue.TryDequeue([ref]$line)) { $txtLog.AppendText($line + "`r`n") }
     $progress.Value = [Math]::Min(100, [Math]::Max(0, [int]$script:Sync.Percent))
-    $status = [string]$script:Sync.Status
+    # 줄마다 길이를 잘라서 두 줄이 서로 밀리지 않게 (전체 내용은 마우스를 올리면 보임)
+    $cut = { param($t) $t = [string]$t; if ($t.Length -gt 85) { $t.Substring(0, 84) + '…' } else { $t } }
+    $full = [string]$script:Sync.Status
+    $status = & $cut $full
     $bg = $script:Sync.Bg
-    if ($bg -and -not $bg.Done) { $status += "    ‖  업데이트: $($bg.Status)" }
+    if ($bg -and -not $bg.Done) {
+        $full += "`n업데이트: $($bg.Status)"
+        $status += "`n" + (& $cut "업데이트: $($bg.Status)")
+    }
+    if ($StatusTip.GetToolTip($lblStatus) -ne $full) { $StatusTip.SetToolTip($lblStatus, $full) }
     $lblStatus.Text = $status
     Update-GuideWindow
     Update-StatusView
