@@ -151,7 +151,10 @@ $Common = {
 # 설정 파일
 # ---------------------------------------------------------------------------
 function Read-Config {
-    Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $c = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    # Adobe Reader 는 자동 설치에서 뺌 (마무리 체크리스트에서 직접 설치) - 예전 config.json 에 남아 있어도 목록에서 제외
+    if ($c.programs) { $c.programs = @($c.programs | Where-Object { $_.name -notlike '*Adobe*' -and $_.winget -notlike 'Adobe.*' }) }
+    return $c
 }
 
 function Save-Config($Cfg) {
@@ -473,42 +476,87 @@ $Worker = {
     }
 
     # 버튼을 프로그램이 찾을 수 없는 화면(반디집 등)용: 창 안의 비율 위치를 실제 마우스로 클릭
+    # 창이 최소화됐거나 다른 창에 가려져 있으면 원래 크기로 꺼내 맨 앞으로 가져온 뒤,
+    # 클릭할 위치에 정말 그 창이 있는지 확인하고 클릭. 확인이 안 되면 클릭하지 않고 $false (다음에 다시 시도)
     function Invoke-ClickAt($Window, $Points, [string]$Name) {
-        if (-not ('PCSetup.Mouse' -as [type])) {
-            Add-Type -Namespace PCSetup -Name Mouse -MemberDefinition @'
+        if (-not ('PCSetup.Mouse2' -as [type])) {
+            Add-Type -Namespace PCSetup -Name Mouse2 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [DllImport("user32.dll")] public static extern void mouse_event(int flags, int dx, int dy, int data, System.IntPtr extra);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool BringWindowToTop(System.IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int cmd);
+[DllImport("user32.dll")] public static extern bool IsIconic(System.IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool GetWindowRect(System.IntPtr hWnd, out RECT rect);
+[DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr hWnd, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
+[DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, System.IntPtr pid);
+[DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+[DllImport("user32.dll")] public static extern bool AttachThreadInput(uint from, uint to, bool attach);
+[DllImport("user32.dll")] public static extern System.IntPtr WindowFromPoint(POINT p);
+[DllImport("user32.dll")] public static extern System.IntPtr GetAncestor(System.IntPtr hWnd, uint flags);
 [DllImport("user32.dll")] public static extern System.IntPtr SetThreadDpiAwarenessContext(System.IntPtr ctx);
 public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+public struct POINT { public int X; public int Y; }
 '@
         }
+        $M = [PCSetup.Mouse2]
         # 화면 배율(125%, 150%)에서도 좌표가 맞도록 이 작업 스레드만 DPI 인식으로
         # (클릭이 끝나면 원래대로 되돌림 - 그대로 두면 이후 창/화면이 작게 보일 수 있음)
         $oldCtx = [IntPtr]::Zero
-        try { $oldCtx = [PCSetup.Mouse]::SetThreadDpiAwarenessContext([IntPtr](-4)) } catch { }
-        try {
+        try { $oldCtx = $M::SetThreadDpiAwarenessContext([IntPtr](-4)) } catch { }
         $h = [IntPtr]$Window.Current.NativeWindowHandle
-        [void][PCSetup.Mouse]::ShowWindow($h, 9)
-        [void][PCSetup.Mouse]::SetForegroundWindow($h)
-        Start-Sleep -Milliseconds 400
-        $r = New-Object PCSetup.Mouse+RECT
-        [void][PCSetup.Mouse]::GetWindowRect($h, [ref]$r)
-        foreach ($pt in @($Points)) {
-            $x = [int]($r.Left + ($r.Right - $r.Left) * [double]$pt[0])
-            $y = [int]($r.Top + ($r.Bottom - $r.Top) * [double]$pt[1])
-            [void][PCSetup.Mouse]::SetCursorPos($x, $y)
-            Start-Sleep -Milliseconds 150
-            [PCSetup.Mouse]::mouse_event(0x02, 0, 0, 0, [IntPtr]::Zero)   # 왼쪽 버튼 누름
-            [PCSetup.Mouse]::mouse_event(0x04, 0, 0, 0, [IntPtr]::Zero)   # 뗌
-            Write-Log "${Name}: 창 위치 ($($pt[0]), $($pt[1])) 클릭" 'OK'
-            Start-Sleep -Milliseconds 800
-        }
+        $topmost = $false
+        try {
+            # 1) 최소화돼 있으면 원래 크기로 (최대 5초 기다림)
+            for ($i = 0; $i -lt 10 -and $M::IsIconic($h); $i++) {
+                if ($i -eq 0) { Write-Log "${Name}: 설치 창이 최소화돼 있어 다시 띄웁니다." }
+                [void]$M::ShowWindow($h, 9)
+                Start-Sleep -Milliseconds 500
+            }
+            if ($M::IsIconic($h)) { return $false }
+            [void]$M::ShowWindow($h, 5)
+            # 2) 맨 앞으로 (다른 프로그램이 앞에 있어도 가져올 수 있도록 입력 스레드를 잠깐 연결)
+            $fgThread = $M::GetWindowThreadProcessId($M::GetForegroundWindow(), [IntPtr]::Zero)
+            $myThread = $M::GetCurrentThreadId()
+            $attached = $false
+            if ($fgThread -ne 0 -and $fgThread -ne $myThread) { $attached = $M::AttachThreadInput($myThread, $fgThread, $true) }
+            [void]$M::BringWindowToTop($h)
+            [void]$M::SetForegroundWindow($h)
+            if ($attached) { [void]$M::AttachThreadInput($myThread, $fgThread, $false) }
+            # 클릭하는 동안만 '항상 위' (안내창 등 다른 창에 가리지 않도록)
+            [void]$M::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x0013)
+            $topmost = $true
+            Start-Sleep -Milliseconds 500
+
+            # 3) 클릭할 위치마다 정말 그 창이 있는지 먼저 확인 (하나라도 아니면 아무것도 클릭하지 않음)
+            $r = New-Object PCSetup.Mouse2+RECT
+            [void]$M::GetWindowRect($h, [ref]$r)
+            $xy = @()
+            foreach ($pt in @($Points)) {
+                $x = [int]($r.Left + ($r.Right - $r.Left) * [double]$pt[0])
+                $y = [int]($r.Top + ($r.Bottom - $r.Top) * [double]$pt[1])
+                $p = New-Object PCSetup.Mouse2+POINT
+                $p.X = $x; $p.Y = $y
+                $hit = $M::GetAncestor($M::WindowFromPoint($p), 2)
+                if ($hit -ne $h) { return $false }
+                $xy += , @($x, $y, $pt)
+            }
+
+            # 4) 클릭
+            foreach ($c in $xy) {
+                [void]$M::SetCursorPos($c[0], $c[1])
+                Start-Sleep -Milliseconds 150
+                $M::mouse_event(0x02, 0, 0, 0, [IntPtr]::Zero)   # 왼쪽 버튼 누름
+                $M::mouse_event(0x04, 0, 0, 0, [IntPtr]::Zero)   # 뗌
+                Write-Log "${Name}: 창 위치 ($($c[2][0]), $($c[2][1])) 클릭" 'OK'
+                Start-Sleep -Milliseconds 800
+            }
+            return $true
         }
         finally {
-            if ($oldCtx -ne [IntPtr]::Zero) { try { [void][PCSetup.Mouse]::SetThreadDpiAwarenessContext($oldCtx) } catch { } }
+            if ($topmost) { try { [void]$M::SetWindowPos($h, [IntPtr](-2), 0, 0, 0, 0, 0x0013) } catch { } }
+            if ($oldCtx -ne [IntPtr]::Zero) { try { [void]$M::SetThreadDpiAwarenessContext($oldCtx) } catch { } }
         }
     }
 
@@ -601,7 +649,15 @@ public struct RECT { public int Left; public int Top; public int Right; public i
                 if (((Get-Date) - $Job.LastClick).TotalSeconds -lt 5) { return }
                 if (-not $st.untilClosed -or $Job.ClickTries -ge 3) { Move-AutoStep $Job; return }
             }
-            Invoke-ClickAt $cands[0] $st.clickAt $name
+            $ok = $false
+            try { $ok = Invoke-ClickAt $cands[0] $st.clickAt $name } catch { Write-Log "${name}: 위치 클릭 오류 - $($_.Exception.Message)" 'WARN' }
+            if (-not $ok) {
+                # 창을 앞으로 가져오지 못했거나 다른 창에 가려짐 → 클릭하지 않고 2초 뒤 다시 시도
+                if (-not $Job.ClickWarned) { Write-Log "${name}: 설치 창이 가려져 있어 앞으로 가져온 뒤 다시 시도합니다." 'WARN'; $Job.ClickWarned = $true }
+                $Job.PauseUntil = (Get-Date).AddSeconds(2)
+                return
+            }
+            $Job.ClickWarned = $false
             $Job.ClickTries++
             $Job.LastClick = Get-Date
             if (-not $st.untilClosed) { Move-AutoStep $Job }
