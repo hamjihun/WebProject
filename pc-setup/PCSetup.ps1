@@ -2377,9 +2377,12 @@ $lblName.ForeColor = $Gray
 $grpName.Controls.AddRange(@($txtName, $lblName))
 
 $grpAct = New-Group 'Windows 정품 인증' 354 408 400 50
-$lblAct = New-Control 'Label' '확인 중...' 10 22 270 22
-$btnAct = New-Control 'Button' '정품 인증 설정' 284 17 108 27
-$grpAct.Controls.AddRange(@($lblAct, $btnAct))
+$lblAct = New-Control 'Label' '확인 중...' 10 22 172 22
+$lblAct.AutoEllipsis = $true
+$btnAct = New-Control 'Button' '인증 설정' 184 17 86 27
+$btnCheck = New-Control 'Button' '마무리 체크리스트' 274 17 118 27
+$btnCheck.Font = $BoldFont
+$grpAct.Controls.AddRange(@($lblAct, $btnAct, $btnCheck))
 
 # --- 오른쪽: USB / 프로그램 ---
 $grpUsb = New-Group '5. USB 설치파일 폴더' 766 8 402 84
@@ -2497,6 +2500,9 @@ function Update-Activation {
         $state = if ($a.Activated) { '인증됨' } else { '인증 안 됨' }
         $lblAct.Text = "$state  /  $($a.Edition)" + $(if ($a.IsHome) { ' (Home → Pro 업그레이드 필요)' } else { '' })
         $lblAct.ForeColor = if ($a.Activated -and -not $a.IsHome) { [System.Drawing.Color]::Green } else { [System.Drawing.Color]::Red }
+        $script:ActText = $lblAct.Text
+        $script:ActColor = $lblAct.ForeColor
+        $StatusTip.SetToolTip($lblAct, $lblAct.Text)
     }
     catch { $lblAct.Text = '확인 실패' }
 }
@@ -2878,6 +2884,147 @@ function Show-OrderWindow {
 }
 
 $btnOrder.Add_Click({ Show-OrderWindow })
+
+# 셋팅이 끝난 뒤 직접 해야 할 일 (config.json 의 finishChecklist)
+function Show-Checklist {
+    if ($script:CheckForm -and -not $script:CheckForm.IsDisposed) {
+        Update-ChecklistActivation
+        $script:CheckForm.Show()
+        $script:CheckForm.Activate()
+        return
+    }
+    $items = @($Config.finishChecklist | Where-Object { $_ })
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = 'PC 셋팅 - 마무리 체크리스트 (직접 해야 할 일)'
+    $f.ClientSize = New-Object System.Drawing.Size(560, 560)
+    $f.StartPosition = 'CenterParent'
+    $f.Font = $Font
+    $f.ShowInTaskbar = $true
+    $hdr = New-Object System.Windows.Forms.Label
+    $hdr.Text = '자동 셋팅이 끝났습니다. 아래 항목은 직접 진행하고 하나씩 체크하세요.'
+    $hdr.Font = $BoldFont
+    $hdr.Location = New-Object System.Drawing.Point(12, 10)
+    $hdr.Size = New-Object System.Drawing.Size(536, 22)
+    $pnl = New-Object System.Windows.Forms.FlowLayoutPanel
+    $pnl.FlowDirection = 'TopDown'
+    $pnl.WrapContents = $false
+    $pnl.AutoScroll = $true
+    $pnl.BorderStyle = 'FixedSingle'
+    $pnl.BackColor = [System.Drawing.Color]::White
+    $pnl.Location = New-Object System.Drawing.Point(12, 36)
+    $pnl.Size = New-Object System.Drawing.Size(536, 470)
+    $pnl.Anchor = 'Top, Bottom, Left, Right'
+    $lblCount = New-Object System.Windows.Forms.Label
+    $lblCount.Location = New-Object System.Drawing.Point(12, 522)
+    $lblCount.Size = New-Object System.Drawing.Size(300, 24)
+    $lblCount.Font = $BoldFont
+    $lblCount.Anchor = 'Bottom, Left'
+    $script:CheckBoxes = @()
+    $script:CheckActLabel = $null
+    $n = 0
+    foreach ($it in $items) {
+        $n++
+        $cb = New-Object System.Windows.Forms.CheckBox
+        $cb.Text = "$n. $it"
+        $cb.AutoSize = $true
+        $cb.MaximumSize = New-Object System.Drawing.Size(500, 0)
+        $cb.Margin = New-Object System.Windows.Forms.Padding(8, 10, 8, 2)
+        $cb.Font = $BoldFont
+        $cb.Add_CheckedChanged({
+            param($s, $e)
+            $s.ForeColor = if ($s.Checked) { [System.Drawing.Color]::Gray } else { [System.Drawing.SystemColors]::ControlText }
+            $s.Font = if ($s.Checked) { New-Object System.Drawing.Font($BoldFont, ([System.Drawing.FontStyle]::Bold -bor [System.Drawing.FontStyle]::Strikeout)) } else { $BoldFont }
+            Update-ChecklistCount
+        })
+        [void]$pnl.Controls.Add($cb)
+        $script:CheckBoxes += $cb
+        if ($it -like '*정품*' -and -not $script:CheckActLabel) {
+            $al = New-Object System.Windows.Forms.Label
+            $al.AutoSize = $true
+            $al.Margin = New-Object System.Windows.Forms.Padding(30, 0, 8, 2)
+            [void]$pnl.Controls.Add($al)
+            $script:CheckActLabel = $al
+        }
+    }
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = '닫기'
+    $btnClose.Location = New-Object System.Drawing.Point(448, 518)
+    $btnClose.Size = New-Object System.Drawing.Size(100, 30)
+    $btnClose.Anchor = 'Bottom, Right'
+    $btnClose.Add_Click({ $script:CheckForm.Hide() })
+    $f.Controls.AddRange(@($hdr, $pnl, $lblCount, $btnClose))
+    # 닫기(X) 는 숨기기만 (다시 열어도 체크한 것이 그대로)
+    $f.Add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; $s.Hide() } })
+    $script:CheckForm = $f
+    $script:CheckCountLabel = $lblCount
+    Update-ChecklistActivation
+    Update-ChecklistCount
+    $f.Show($form)
+}
+
+function Update-ChecklistCount {
+    if (-not $script:CheckCountLabel) { return }
+    $done = @($script:CheckBoxes | Where-Object { $_.Checked }).Count
+    $all = @($script:CheckBoxes).Count
+    $script:CheckCountLabel.Text = "확인 완료 $done / $all"
+    $script:CheckCountLabel.ForeColor = if ($all -gt 0 -and $done -eq $all) { [System.Drawing.Color]::Green } else { [System.Drawing.Color]::DarkOrange }
+}
+
+function Update-ChecklistActivation {
+    if (-not $script:CheckActLabel) { return }
+    Update-Activation
+    $script:CheckActLabel.Text = "현재 상태: $($script:ActText)"
+    $script:CheckActLabel.ForeColor = $script:ActColor
+}
+
+$btnCheck.Add_Click({ Show-Checklist })
+
+# 윈도우 업데이트 재부팅: 묻지 않고 카운트다운 후 자동 재부팅 (취소만 가능)
+function Show-RebootCountdown([int]$Seconds) {
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = 'PC 셋팅 - 자동 재부팅'
+    $f.ClientSize = New-Object System.Drawing.Size(440, 170)
+    $f.StartPosition = 'CenterScreen'
+    $f.FormBorderStyle = 'FixedDialog'
+    $f.MaximizeBox = $false
+    $f.MinimizeBox = $false
+    $f.TopMost = $true
+    $f.Font = $Font
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Location = New-Object System.Drawing.Point(14, 12)
+    $lbl.Size = New-Object System.Drawing.Size(412, 104)
+    $btnNow = New-Object System.Windows.Forms.Button
+    $btnNow.Text = '지금 재부팅'
+    $btnNow.Location = New-Object System.Drawing.Point(206, 126)
+    $btnNow.Size = New-Object System.Drawing.Size(110, 32)
+    $btnNow.DialogResult = 'Yes'
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = '재부팅 취소'
+    $btnCancel.Location = New-Object System.Drawing.Point(322, 126)
+    $btnCancel.Size = New-Object System.Drawing.Size(104, 32)
+    $btnCancel.DialogResult = 'Cancel'
+    $f.Controls.AddRange(@($lbl, $btnNow, $btnCancel))
+    $script:RebootLeft = $Seconds
+    $script:RebootLabel = $lbl
+    $script:RebootForm = $f
+    $script:RebootSetText = {
+        $script:RebootLabel.Text = "윈도우 업데이트를 적용하기 위해 $($script:RebootLeft)초 후 자동으로 재부팅합니다.`n설치 중인 프로그램이 없는 것을 확인했습니다.`n`n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다.`n(USB 는 꽂아둔 채로 두세요)"
+    }
+    & $script:RebootSetText
+    $t = New-Object System.Windows.Forms.Timer
+    $t.Interval = 1000
+    $t.Add_Tick({
+        $script:RebootLeft--
+        if ($script:RebootLeft -le 0) { $script:RebootForm.DialogResult = 'Yes'; return }
+        & $script:RebootSetText
+    })
+    $t.Start()
+    $r = $f.ShowDialog()
+    $t.Stop()
+    $t.Dispose()
+    $f.Dispose()
+    return ($r -ne 'Cancel')
+}
 $tvTasks.Add_AfterCheck({ Update-OrderWindow })
 
 # 끝난 뒤 아직 '대기/진행 중' 으로 남은 줄 정리 (중지 → 중지됨, 재부팅 → 재부팅 후 계속)
@@ -3107,10 +3254,11 @@ $timer.Add_Tick({
 
     # 윈도우 업데이트 재부팅: 로그인하면 자동으로 이어서 진행
     if ($script:Sync.ResumeRequested) {
-        $ans = [System.Windows.Forms.MessageBox]::Show(
-            "윈도우 업데이트를 적용하려면 재부팅해야 합니다.`n설치 중인 프로그램이 없는 것을 확인했습니다.`n`n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다.`n(USB 는 꽂아둔 채로 두세요)`n`n지금 재부팅할까요?",
-            'PC 셋팅 - 재부팅', 'YesNo', 'Question')
-        if ($ans -eq 'Yes') { Restart-Computer -Force }
+        $sec = if ($Config.windowsUpdate.autoRebootSeconds) { [int]$Config.windowsUpdate.autoRebootSeconds } else { 15 }
+        if (Show-RebootCountdown $sec) { Restart-Computer -Force }
+        else {
+            [System.Windows.Forms.MessageBox]::Show("재부팅을 취소했습니다.`n직접 재부팅하면 로그인 후 남은 작업을 자동으로 이어서 진행합니다.", 'PC 셋팅', 'OK', 'Information') | Out-Null
+        }
         return
     }
 
@@ -3119,8 +3267,11 @@ $timer.Add_Tick({
         $msg += "`n`n[확인이 필요한 항목]`n" + (($script:Sync.Notices | ForEach-Object { "• $_" }) -join "`n")
     }
 
+    # 직접 해야 할 일 체크리스트 (메인 화면의 [마무리 체크리스트] 로 언제든 다시 열 수 있음)
+    if (@($Config.finishChecklist).Count -gt 0) { Show-Checklist }
+
     if ($script:Sync.RebootRequired) {
-        $ans = [System.Windows.Forms.MessageBox]::Show("$msg`n`n재부팅이 필요한 항목이 있습니다. 지금 재부팅할까요?", 'PC 셋팅', 'YesNo', 'Question')
+        $ans = [System.Windows.Forms.MessageBox]::Show("$msg`n`n재부팅이 필요한 항목이 있습니다. 지금 재부팅할까요?`n(마무리 체크리스트를 먼저 확인하세요)", 'PC 셋팅', 'YesNo', 'Question')
         if ($ans -eq 'Yes') { Restart-Computer -Force }
     }
     else {
