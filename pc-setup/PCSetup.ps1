@@ -1596,13 +1596,19 @@ public struct POINT { public int X; public int Y; }
         $items = [ordered]@{
             ShowHomeButton             = '홈 단추 표시'
             FavoritesBarEnabled        = '즐겨찾기 모음 항상 표시'
-            ShowDownloadsToolbarButton = '다운로드 단추 표시'
             PromptForDownloadLocation  = '다운로드 전에 저장 위치 확인'
         }
         foreach ($name in $items.Keys) {
             try { Set-Reg $key $name 1; Write-Log "엣지: $($items[$name])" 'OK' }
             catch { Write-Log "엣지: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
+        # 도구 모음 '다운로드' 단추는 권장값을 엣지가 지원하지 않아 고정값으로 (항상 표시)
+        try {
+            Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'ShowDownloadsToolbarButton' 1
+            Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended' -Name 'ShowDownloadsToolbarButton' -ErrorAction SilentlyContinue
+            Write-Log '엣지: 도구 모음에 다운로드 단추 항상 표시' 'OK'
+        }
+        catch { Write-Log "엣지: 다운로드 단추 표시 실패 - $($_.Exception.Message)" 'ERROR' }
         Add-BrowserBookmarks 'edge' '엣지'
         # 직원이 바꿀 수 있게: 예전에 고정값(조직에서 관리)으로 넣은 것과 셋팅 중에만 필요한 설정은 지움
         $extra = @('StartupBoostEnabled', 'BackgroundModeEnabled', 'ManagedFavorites')
