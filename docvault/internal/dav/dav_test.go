@@ -110,3 +110,16 @@ func TestDAV(t *testing.T) {
 		t.Fatalf("copy to inaccessible drive %d", c)
 	}
 }
+
+func TestUnlimitedDriveReportsDiskSpace(t *testing.T) {
+	srv, v, tok := setup(t)
+	sys := vault.Actor{Client: "test"}
+	s, _ := v.ShareByName("영업")
+	if err := v.UpdateShare(sys, s.ID, "O", 0); err != nil {
+		t.Fatal(err)
+	}
+	_, body := do(t, srv, tok, "PROPFIND", "/", "", map[string]string{"Depth": "0"})
+	if !strings.Contains(body, "<D:quota-available-bytes>") || strings.Contains(body, "<D:quota-available-bytes>0<") {
+		t.Fatalf("no disk space reported: %s", body)
+	}
+}

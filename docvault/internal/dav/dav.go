@@ -219,11 +219,21 @@ func (h *Handler) propfind(w http.ResponseWriter, r *http.Request, a vault.Actor
 }
 
 func (h *Handler) driveEntry(d *vault.Drive, _ string) propEntry {
-	e := propEntry{href: h.href(d.Name, "/", true), name: d.Name, dir: true, quotaUsed: d.Used, quotaFree: -1, modified: time.Now().Unix()}
-	if d.QuotaBytes > 0 {
-		e.quotaFree = max(d.QuotaBytes-d.Used, 0)
-	}
+	e := propEntry{href: h.href(d.Name, "/", true), name: d.Name, dir: true, quotaUsed: d.Used, modified: time.Now().Unix()}
+	e.quotaFree = h.free(d)
 	return e
+}
+
+// free is the space left on a drive: its quota, or with no quota the free
+// space of the server's storage disk (so Explorer shows the NAS capacity).
+func (h *Handler) free(d *vault.Drive) int64 {
+	if d.QuotaBytes > 0 {
+		return max(d.QuotaBytes-d.Used, 0)
+	}
+	if _, free, err := h.V.Blobs.DiskSpace(); err == nil {
+		return int64(free)
+	}
+	return -1
 }
 
 func (h *Handler) nodeEntry(share, p string, n *vault.Node, d *vault.Drive) propEntry {
@@ -233,9 +243,7 @@ func (h *Handler) nodeEntry(share, p string, n *vault.Node, d *vault.Drive) prop
 		e.etag = `"d` + strconv.FormatInt(n.ID, 36) + "-" + strconv.FormatInt(n.ModifiedAt, 36) + `"`
 		if d != nil {
 			e.quotaUsed = d.Used
-			if d.QuotaBytes > 0 {
-				e.quotaFree = max(d.QuotaBytes-d.Used, 0)
-			}
+			e.quotaFree = h.free(d)
 		}
 		if n.ParentID == 0 {
 			e.name = share
