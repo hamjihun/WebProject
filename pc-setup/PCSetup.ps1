@@ -478,7 +478,7 @@ $Worker = {
     # 버튼을 프로그램이 찾을 수 없는 화면(반디집 등)용: 창 안의 비율 위치를 실제 마우스로 클릭
     # 창이 최소화됐거나 다른 창에 가려져 있으면 원래 크기로 꺼내 맨 앞으로 가져온 뒤,
     # 클릭할 위치에 정말 그 창이 있는지 확인하고 클릭. 확인이 안 되면 클릭하지 않고 $false (다음에 다시 시도)
-    function Invoke-ClickAt($Window, $Points, [string]$Name) {
+    function Invoke-ClickAt($Window, $Points, [string]$Name, [switch]$Force) {
         if (-not ('PCSetup.Mouse2' -as [type])) {
             Add-Type -Namespace PCSetup -Name Mouse2 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
@@ -491,6 +491,7 @@ $Worker = {
 [DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr hWnd, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
 [DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, System.IntPtr pid);
+[DllImport("user32.dll", EntryPoint = "GetWindowThreadProcessId")] public static extern uint GetWindowPid(System.IntPtr hWnd, out uint pid);
 [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
 [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint from, uint to, bool attach);
 [DllImport("user32.dll")] public static extern System.IntPtr WindowFromPoint(POINT p);
@@ -506,6 +507,11 @@ public struct POINT { public int X; public int Y; }
         $oldCtx = [IntPtr]::Zero
         try { $oldCtx = $M::SetThreadDpiAwarenessContext([IntPtr](-4)) } catch { }
         $h = [IntPtr]$Window.Current.NativeWindowHandle
+        # 설치 화면이 다른 창 안에 들어 있는 경우를 위해 맨 바깥 창 기준으로
+        $root = $M::GetAncestor($h, 2)
+        if ($root -ne [IntPtr]::Zero) { $h = $root }
+        $myPid = [uint32]0
+        [void]$M::GetWindowPid($h, [ref]$myPid)
         $topmost = $false
         try {
             # 1) 최소화돼 있으면 원래 크기로 (최대 5초 기다림)
@@ -539,7 +545,15 @@ public struct POINT { public int X; public int Y; }
                 $p = New-Object PCSetup.Mouse2+POINT
                 $p.X = $x; $p.Y = $y
                 $hit = $M::GetAncestor($M::WindowFromPoint($p), 2)
-                if ($hit -ne $h) { return $false }
+                $hitPid = [uint32]0
+                if ($hit -ne [IntPtr]::Zero) { [void]$M::GetWindowPid($hit, [ref]$hitPid) }
+                # 같은 창이거나 같은 설치 프로그램의 창이면 OK
+                if ($hit -ne $h -and $hitPid -ne $myPid -and -not $Force) {
+                    $who = ''
+                    try { $who = [System.Windows.Automation.AutomationElement]::FromHandle($hit).Current.Name } catch { }
+                    $script:ClickBlocker = $who
+                    return $false
+                }
                 $xy += , @($x, $y, $pt)
             }
 
@@ -650,14 +664,20 @@ public struct POINT { public int X; public int Y; }
                 if (-not $st.untilClosed -or $Job.ClickTries -ge 3) { Move-AutoStep $Job; return }
             }
             $ok = $false
-            try { $ok = Invoke-ClickAt $cands[0] $st.clickAt $name } catch { Write-Log "${name}: 위치 클릭 오류 - $($_.Exception.Message)" 'WARN' }
+            # 3번 연속 '가려짐' 으로 나오면 (창은 앞에 띄운 상태이므로) 확인 없이 그대로 클릭
+            $force = ([int]$Job.ClickFails -ge 3)
+            $script:ClickBlocker = ''
+            try { $ok = Invoke-ClickAt $cands[0] $st.clickAt $name -Force:$force } catch { Write-Log "${name}: 위치 클릭 오류 - $($_.Exception.Message)" 'WARN' }
             if (-not $ok) {
                 # 창을 앞으로 가져오지 못했거나 다른 창에 가려짐 → 클릭하지 않고 2초 뒤 다시 시도
-                if (-not $Job.ClickWarned) { Write-Log "${name}: 설치 창이 가려져 있어 앞으로 가져온 뒤 다시 시도합니다." 'WARN'; $Job.ClickWarned = $true }
+                $Job.ClickFails = [int]$Job.ClickFails + 1
+                $by = if ($script:ClickBlocker) { " (앞에 있는 창: $($script:ClickBlocker))" } else { '' }
+                Write-Log "${name}: 설치 창이 가려져 있어 앞으로 가져온 뒤 다시 시도합니다.$by" 'WARN'
                 $Job.PauseUntil = (Get-Date).AddSeconds(2)
                 return
             }
-            $Job.ClickWarned = $false
+            if ($force) { Write-Log "${name}: 창을 맨 앞에 띄운 뒤 위치를 그대로 클릭했습니다." }
+            $Job.ClickFails = 0
             $Job.ClickTries++
             $Job.LastClick = Get-Date
             if (-not $st.untilClosed) { Move-AutoStep $Job }
