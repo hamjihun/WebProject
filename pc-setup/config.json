@@ -269,7 +269,7 @@
     "edgeExtensions": [
       "nijboebkfeipcfjoohpkloahghaidpaj"
     ],
-    "enforceSettings": true,
+    "enforceSettings": false,
     "hideEdgeFirstRun": true,
     "closeAfterSettings": true
   },
