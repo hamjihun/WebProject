@@ -91,3 +91,7 @@ func hideConsole() {
 		showWindow.Call(h, 0) // SW_HIDE
 	}
 }
+
+func openBrowser(url string) {
+	exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+}

@@ -26,7 +26,7 @@ const ACTIONS = {
   admin_user_create: "[관리] 사용자 생성", admin_user_update: "[관리] 사용자 변경", admin_group_create: "[관리] 그룹 생성",
   admin_group_delete: "[관리] 그룹 삭제", admin_share_create: "[관리] 드라이브 생성", admin_share_update: "[관리] 드라이브 변경",
   admin_share_delete: "[관리] 드라이브 삭제", admin_share_acl: "[관리] 권한 변경", admin_setting: "[관리] 설정 변경",
-  admin_session_revoke: "[관리] 접속 강제 종료", admin_audit_export: "[관리] 로그 내보내기",
+  admin_session_revoke: "[관리] 접속 강제 종료", admin_audit_export: "[관리] 로그 내보내기", agent_pair: "PC 연결",
 };
 const CLIENTS = { drive: "가상드라이브", web: "웹", agent: "PC에이전트", system: "시스템" };
 
@@ -64,6 +64,8 @@ $("#modal").addEventListener("mousedown", (e) => { if (e.target.id === "modal") 
 function showLogin() {
   $("#app").classList.add("hidden");
   $("#login").classList.remove("hidden");
+  if (location.hash.startsWith("#/pair/")) $("#loginError").textContent = "PC를 연결하려면 먼저 로그인하세요";
+  fetch("/api/setup-available").then((r) => r.json()).then((d) => $("#setupLink").classList.toggle("hidden", !d.available)).catch(() => {});
 }
 $("#loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -99,6 +101,7 @@ async function loadSide() {
   h += "<h4>반출</h4>";
   h += `<a href="#/exports" data-nav="exports">내 반출 신청</a>`;
   if (canApprove) h += `<a href="#/approvals" data-nav="approvals">반출 결재함 ${pending ? `<span class="badge">${pending}</span>` : ""}</a>`;
+  h += `<h4>도움</h4><a href="/download/setup">💻 PC 프로그램 설치</a>`;
   if (me.isAdmin) {
     h += "<h4>관리자</h4>";
     h += `<a href="#/admin/users" data-nav="admin/users">사용자</a>`;
@@ -131,10 +134,32 @@ function route() {
     files: () => viewFiles(rest[0], "/" + rest.slice(1).join("/")),
     trash: () => viewTrash(rest[0]),
     exports: viewMyExports,
+    pair: () => viewPair(rest[0]),
     approvals: viewApprovals,
     admin: () => ({ users: adminUsers, groups: adminGroups, shares: adminShares, audit: adminAudit, sessions: adminSessions, settings: adminSettings }[rest[0]] || (() => {}))(),
   };
   (views[page] ? guard(views[page]) : () => {})();
+}
+
+// ---------- PC pairing ----------
+async function viewPair(code) {
+  const main = $("#main");
+  let info;
+  try { info = await api("GET", `/api/agent/pair/${encodeURIComponent(code)}`); }
+  catch (e) { main.innerHTML = `<div class="card pair-card"><h2>PC 연결</h2><p class="error">${esc(e.message)}</p></div>`; return; }
+  main.innerHTML = `<div class="card pair-card">
+    <h2>💻 PC 연결 요청</h2>
+    <div class="device">${esc(info.device || "이름 없는 PC")}</div>
+    <div class="muted">IP ${esc(info.ip)}</div>
+    <p>이 PC에서 <b>${esc(me.displayName || me.username)}</b> 계정으로 문서 드라이브를 사용합니다.<br>
+    <span class="muted">본인이 사용하는 PC가 아니면 연결하지 마세요.</span></p>
+    <div class="toolbar"><button id="pairOk" class="primary">이 PC 연결</button><button id="pairNo">취소</button></div></div>`;
+  $("#pairNo").onclick = () => { location.hash = ""; };
+  $("#pairOk").onclick = guard(async () => {
+    await api("POST", `/api/agent/pair/${encodeURIComponent(code)}/approve`);
+    main.innerHTML = `<div class="card pair-card"><h2>✅ 연결되었습니다</h2>
+      <p>잠시 후 PC의 <b>내 PC</b>에 문서 드라이브가 나타납니다.<br>이 창은 닫아도 됩니다.</p></div>`;
+  });
 }
 
 // ---------- files ----------

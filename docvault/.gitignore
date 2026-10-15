@@ -5,3 +5,5 @@ logs/
 docvault.json
 agent.json
 *.exe
+cmd/setup/payload/*
+!cmd/setup/payload/README.txt

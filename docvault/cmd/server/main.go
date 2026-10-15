@@ -38,6 +38,7 @@ type Config struct {
 	TLSCert    string `json:"tls_cert"`  // PEM certificate; empty = plain HTTP (test only)
 	TLSKey     string `json:"tls_key"`
 	TrustProxy bool   `json:"trust_proxy"` // behind a reverse proxy that sets X-Forwarded-For
+	PublicURL  string `json:"public_url"`  // address PCs use, e.g. http://192.168.50.10:8080 (optional)
 }
 
 func exeDir() string {
@@ -137,7 +138,10 @@ func newServer() (*server, error) {
 	dh := &dav.Handler{V: v, Prefix: "/dav", TrustProxy: cfg.TrustProxy}
 	mux.Handle("/dav/", dh)
 	mux.Handle("/dav", dh)
-	(&api.API{V: v, TrustProxy: cfg.TrustProxy, SecureCookie: cfg.TLSCert != ""}).Register(mux)
+	downloads := filepath.Join(exeDir(), "downloads")
+	os.MkdirAll(downloads, 0o755)
+	(&api.API{V: v, TrustProxy: cfg.TrustProxy, SecureCookie: cfg.TLSCert != "",
+		DownloadDir: downloads, PublicURL: cfg.PublicURL}).Register(mux)
 	mux.Handle("/", web.Handler())
 	return &server{cfg: cfg, vault: v, http: &http.Server{
 		Addr:              cfg.Listen,

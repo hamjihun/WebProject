@@ -39,16 +39,24 @@
 
 | 파일 | 설치 위치 | 설명 |
 |---|---|---|
-| `docvault-server.exe` | 서버 (테스트: Windows 10 PC / 운영: Windows Server 2019) | 서버 프로그램 하나에 웹 화면 포함 |
-| `docvault-agent.exe` | 직원 PC | 로그인, 드라이브 연결 |
-| `rclone.exe` | 직원 PC (agent와 같은 폴더) | 가상 드라이브 연결 도구 (무료, https://rclone.org/downloads/ → Windows Intel/AMD 64 Bit) |
-| WinFsp | 직원 PC | 가상 드라이브용 Windows 구성요소 (무료, https://winfsp.dev/rel/ → MSI 설치) |
+| `docvault-server.exe` | 서버 (테스트: Windows 10 PC / 운영: Windows Server 2019) | 서버 프로그램 (웹 화면 포함) |
+| `downloads\docvault-setup.exe` | 서버 폴더 안 (`docvault-server.exe` 옆의 `downloads` 폴더) | **직원 PC 통합 설치 파일**. 직원이 웹 로그인 화면의 [PC 프로그램 설치]로 내려받음 |
+
+통합 설치 파일 안에는 다음이 모두 들어 있어서, 직원 PC에 따로 받을 것이 없습니다.
+- **WinFsp**: Windows에 가상 드라이브를 만들 수 있게 해 주는 구성요소 (무료, 자동 설치)
+- **rclone**: 서버에 접속해 드라이브(O:, W: …)를 연결하는 도구 (무료)
+- **DocVault 에이전트**: 로그인하고 권한 있는 드라이브만 연결
+- **서버 주소**: 서버 웹에서 내려받을 때 자동으로 들어감
 
 ### 빌드 (exe 만들기)
 
 1. https://go.dev/dl/ 에서 Go (Windows MSI)를 설치합니다.
-2. 이 폴더(`docvault`)에서 `build.bat`을 더블클릭합니다.
-3. `dist\server\docvault-server.exe`, `dist\agent\docvault-agent.exe`가 생깁니다.
+2. 이 폴더(`docvault`)에서 `build.bat`을 더블클릭합니다. WinFsp와 rclone은 자동으로 내려받습니다.
+3. `dist\server` 폴더가 생깁니다. 이 폴더를 통째로 서버에 복사하면 됩니다.
+   ```
+   dist\server\docvault-server.exe
+   dist\server\downloads\docvault-setup.exe
+   ```
 
 ---
 
@@ -56,7 +64,7 @@
 
 ### 3-1. 서버 실행
 
-1. `C:\DocVault` 폴더를 만들고 `docvault-server.exe`를 넣습니다.
+1. `C:\DocVault` 폴더에 `docvault-server.exe`와 `downloads` 폴더(`docvault-setup.exe` 포함)를 넣습니다.
 2. `docvault-server.exe`를 더블클릭합니다. 처음 실행하면 다음이 자동으로 생깁니다.
    - `docvault.json` (설정 파일)
    - `data\` (DB, 감사 로그)
@@ -78,10 +86,12 @@
   "store_dir": "C:\\DocVault\\store",
   "tls_cert": "",
   "tls_key": "",
-  "trust_proxy": false
+  "trust_proxy": false,
+  "public_url": ""
 }
 ```
 - `store_dir`: 파일 내용이 저장되는 곳입니다. 운영 서버에서는 **NAS iSCSI로 연결한 디스크**(예: `E:\DocVaultStore`)로 지정합니다.
+- `public_url`: 직원 PC가 서버에 접속하는 주소입니다 (예: `http://192.168.50.10:8080`). 비워 두면 직원이 웹에 접속한 주소를 그대로 씁니다. 설치 파일에 들어가는 서버 주소가 이것입니다.
 - 설정을 바꾼 뒤에는 서버를 다시 시작합니다.
 
 ### 3-3. 기본 설정 (웹 관리자 화면)
@@ -93,20 +103,22 @@
    - 팀장 계정 → 관리(팀장·결재)
 4. **설정**에서 휴지통 보관 기간(기본 180일), 반출 기간, 랜섬웨어 기준 등을 확인합니다.
 
-### 3-4. 직원 PC 설정 (같은 PC에서 테스트해도 됨)
+### 3-4. 직원 PC 설치 (직원이 직접, 1분)
 
-1. **WinFsp** 설치 파일(MSI)을 실행해 설치합니다.
-2. `C:\Program Files\DocVault` 폴더에 `docvault-agent.exe`와 `rclone.exe`를 넣습니다.
-3. 같은 폴더에 `agent.json`을 만듭니다. 만들지 않으면 처음 로그인할 때 서버 주소를 물어봅니다.
-   ```json
-   { "server": "http://192.168.50.10:8080" }
-   ```
-4. 명령 프롬프트에서 `"C:\Program Files\DocVault\docvault-agent.exe" login` 을 실행하고 아이디와 비밀번호를 입력합니다.
-5. `docvault-agent.exe`를 더블클릭합니다. 창은 숨겨지고, 잠시 뒤 `내 PC`에 드라이브가 나타납니다.
-   - 탐색기에는 `일산영업 (\\DocVault) (O:)`처럼 네트워크 드라이브로 보이고, 사용 공간 막대도 표시됩니다 (드라이브에 용량 제한을 설정한 경우).
-6. **Windows 시작 시 자동 실행**: `scripts\install-agent-startup.bat`을 관리자 권한으로 실행하면 모든 사용자의 시작프로그램에 등록됩니다.
-7. 기타 명령: `docvault-agent status` (상태 확인), `docvault-agent logout` (로그아웃 → 1분 안에 드라이브 해제)
-8. 로그 위치: `%LOCALAPPDATA%\DocVault\logs\`
+1. 직원 PC의 브라우저로 `http://<서버 IP>:8080` 에 접속합니다.
+2. 로그인 화면 아래 **[💻 PC 프로그램 설치]** 를 눌러 `docvault-setup.exe`를 받고 실행합니다.
+   - "이 앱이 디바이스를 변경하도록 허용하시겠어요?" 창이 뜨면 [예]를 누릅니다. **PC 관리자 권한이 필요합니다.** 직원 계정에 관리자 권한이 없으면 IT 담당자가 대신 실행합니다.
+   - Windows에서 "PC 보호" 창이 뜨면 [추가 정보] → [실행]을 누릅니다. 인증서 서명이 없는 사내 프로그램이라서 나오는 경고입니다.
+3. 설치가 끝나면 브라우저가 자동으로 열립니다. 로그인하고 **[이 PC 연결]** 을 누릅니다.
+4. 잠시 후 `내 PC`에 권한 있는 드라이브가 나타납니다. 예: `일산영업 (\\DocVault) (O:)`
+5. 이후에는 Windows를 켤 때마다 자동으로 연결됩니다. 직원이 따로 할 일은 없습니다.
+
+| 할 일 | 방법 |
+|---|---|
+| 제거 | Windows [설정 → 앱 및 기능 → DocVault 문서 드라이브 → 제거] |
+| 다른 사람 계정으로 바꾸기 | 명령 프롬프트에서 `"C:\Program Files\DocVault\docvault-agent.exe" logout` 실행 후 PC 재로그인 |
+| 업데이트 | 새 `docvault-setup.exe`를 서버 `downloads` 폴더에 넣고, 직원 PC에서 다시 설치 |
+| 로그 위치 | `%LOCALAPPDATA%\DocVault\logs\` |
 
 ### 3-5. 테스트해 볼 것
 
@@ -163,7 +175,7 @@
 |---|---|---|
 | 로컬 PC로 복사 | 드라이브에서 바탕화면으로 복사하는 것은 막지 못함 (서버 로그에는 열람으로 기록) | 바탕화면 폴더 리디렉션 + PC 로그 수집(Sysmon) |
 | 카톡·메일 첨부 차단 | 미지원 | rclone 대신 WinFsp 기반 자체 드라이브로 바꾸면 KakaoTalk.exe 등 특정 프로그램의 파일 열기 거부 가능 |
-| 로그인 화면 | 에이전트는 명령창 로그인 | 트레이 아이콘 + 로그인 창(GUI) |
+| PC 상태 표시 | 창 없이 백그라운드 실행 | 트레이 아이콘 (연결 상태, 로그아웃) |
 | 계정 | 자체 계정 | AD(LDAP) 계정 연동 |
 | DB | SQLite (300명 규모 충분) | 필요하면 PostgreSQL |
 | 감사 로그 보관 | 영구 보관 | 보관 기간·외부 백업 정책 |
@@ -180,3 +192,5 @@ GOOS=windows GOARCH=amd64 go build ./cmd/server         # Windows용 빌드
 - `internal/api`: 웹 화면·에이전트용 JSON API
 - `internal/web/static`: 웹 화면 (서버 exe에 포함)
 - `cmd/agent`: PC 에이전트
+- `cmd/setup`: 직원 PC 통합 설치 파일 (WinFsp, rclone, 에이전트 포함)
+- `scripts/build-release.sh`: Linux/macOS에서 Windows용 전체 빌드

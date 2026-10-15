@@ -25,6 +25,8 @@ type API struct {
 	V            *vault.Vault
 	TrustProxy   bool
 	SecureCookie bool
+	DownloadDir  string // holds docvault-setup.exe for employees to download
+	PublicURL    string // address PCs use to reach the server (default: from the request)
 }
 
 type ctx struct {
@@ -58,6 +60,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/exports/{id}/download", s.auth(s.downloadExport))
 
 	mux.HandleFunc("POST /api/agent/heartbeat", s.auth(s.heartbeat))
+	s.registerPairing(mux)
 
 	mux.HandleFunc("GET /api/admin/users", s.admin(s.listUsers))
 	mux.HandleFunc("POST /api/admin/users", s.admin(s.createUser))
@@ -180,6 +183,8 @@ func pathID(r *http.Request) int64 {
 	n, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	return n
 }
+
+func itoa64(n int64) string { return strconv.FormatInt(n, 10) }
 
 func ok(w http.ResponseWriter) { writeJSON(w, http.StatusOK, map[string]bool{"ok": true}) }
 
@@ -742,5 +747,5 @@ var actionLabels = map[string]string{
 	"admin_share_create": "[관리] 드라이브 생성", "admin_share_update": "[관리] 드라이브 변경",
 	"admin_share_delete": "[관리] 드라이브 삭제", "admin_share_acl": "[관리] 권한 변경",
 	"admin_setting": "[관리] 설정 변경", "admin_session_revoke": "[관리] 접속 강제 종료",
-	"admin_audit_export": "[관리] 로그 내보내기",
+	"admin_audit_export": "[관리] 로그 내보내기", "agent_pair": "PC 연결",
 }

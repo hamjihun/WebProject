@@ -3,7 +3,8 @@
 // the set in sync with the permissions on the server, and reports to the
 // server once a minute so admins can see which PCs are connected.
 //
-//	docvault-agent login    sign in (asks for server address the first time)
+//	docvault-agent login    connect this PC to an account through the browser
+//	docvault-agent login --password   sign in on the console instead
 //	docvault-agent          connect drives and keep them in sync (run at Windows logon)
 //	docvault-agent logout   sign out; drives disconnect
 //	docvault-agent status   show the signed-in user and drives
@@ -168,18 +169,73 @@ func prompt(r *bufio.Reader, label string) string {
 	return strings.TrimSpace(s)
 }
 
+func ensureServer(cfg *Config) error {
+	if cfg.Server != "" {
+		return nil
+	}
+	s := prompt(bufio.NewReader(os.Stdin), "문서중앙화 서버 주소 (예: http://192.168.50.10:8080): ")
+	if s == "" {
+		return errors.New("서버 주소가 필요합니다")
+	}
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		s = "http://" + s
+	}
+	cfg.Server = strings.TrimRight(s, "/")
+	return saveConfig(cfg)
+}
+
+// cmdLogin connects this PC to the user's account through the browser: the
+// user signs in on the web page that opens and clicks "이 PC 연결".
 func cmdLogin(cfg *Config) error {
-	in := bufio.NewReader(os.Stdin)
-	if cfg.Server == "" {
-		s := prompt(in, "문서중앙화 서버 주소 (예: http://192.168.50.10:8080): ")
-		if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
-			s = "http://" + s
+	if err := ensureServer(cfg); err != nil {
+		return err
+	}
+	host, _ := os.Hostname()
+	c := newClient(cfg, "")
+	var start struct{ Code, Secret, URL string }
+	if err := c.call("POST", "/api/agent/pair", map[string]string{"device": host}, &start); err != nil {
+		return fmt.Errorf("서버에 연결할 수 없습니다 (%s): %w", cfg.Server, err)
+	}
+	link := cfg.Server + start.URL
+	fmt.Println()
+	fmt.Println("  ┌──────────────────────────────────────────────┐")
+	fmt.Println("  │  브라우저에서 로그인한 뒤 [이 PC 연결]을 누르세요  │")
+	fmt.Println("  └──────────────────────────────────────────────┘")
+	fmt.Println("  브라우저가 열리지 않으면 아래 주소로 접속하세요:")
+	fmt.Println("  " + link)
+	fmt.Println()
+	openBrowser(link)
+	deadline := time.Now().Add(10 * time.Minute)
+	for time.Now().Before(deadline) {
+		time.Sleep(2 * time.Second)
+		b, _ := json.Marshal(map[string]string{"code": start.Code, "secret": start.Secret})
+		resp, err := c.http.Post(cfg.Server+"/api/agent/pair/claim", "application/json", bytes.NewReader(b))
+		if err != nil {
+			continue
 		}
-		cfg.Server = strings.TrimRight(s, "/")
-		if err := saveConfig(cfg); err != nil {
-			return err
+		var out struct{ Token string }
+		json.NewDecoder(resp.Body).Decode(&out)
+		resp.Body.Close()
+		switch {
+		case resp.StatusCode == http.StatusOK && out.Token != "":
+			if err := saveToken(out.Token); err != nil {
+				return err
+			}
+			fmt.Println("연결되었습니다. 잠시 후 내 PC에 드라이브가 나타납니다.")
+			return nil
+		case resp.StatusCode == http.StatusNotFound:
+			return errors.New("연결 요청이 만료되었습니다. 다시 실행하세요")
 		}
 	}
+	return errors.New("시간이 초과되었습니다. 다시 실행하세요")
+}
+
+// cmdPasswordLogin is the console fallback: docvault-agent login --password
+func cmdPasswordLogin(cfg *Config) error {
+	if err := ensureServer(cfg); err != nil {
+		return err
+	}
+	in := bufio.NewReader(os.Stdin)
 	for attempt := 0; attempt < 3; attempt++ {
 		user := prompt(in, "아이디: ")
 		fmt.Print("비밀번호: ")
@@ -377,8 +433,11 @@ func (a *agent) mounted() string {
 
 func cmdRun(cfg *Config) error {
 	if cfg.Server == "" || loadToken() == "" {
-		fmt.Println("먼저 로그인하세요.")
+		fmt.Println("DocVault 문서 드라이브 – 이 PC를 계정에 연결합니다.")
 		if err := cmdLogin(cfg); err != nil {
+			fmt.Println("오류:", err)
+			fmt.Println("엔터를 누르면 닫힙니다.")
+			bufio.NewReader(os.Stdin).ReadString('\n')
 			return err
 		}
 	}
@@ -437,7 +496,11 @@ func main() {
 		case "run":
 			err = cmdRun(cfg)
 		case "login":
-			err = cmdLogin(cfg)
+			if len(os.Args) > 2 && os.Args[2] == "--password" {
+				err = cmdPasswordLogin(cfg)
+			} else {
+				err = cmdLogin(cfg)
+			}
 		case "logout":
 			err = cmdLogout(cfg)
 		case "status":

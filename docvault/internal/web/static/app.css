@@ -85,3 +85,6 @@ td.actions { white-space: nowrap; text-align: right; }
   .main { padding: 14px 16px; }
   .hide-sm { display: none; }
 }
+.setup-link { text-align: center; color: var(--accent); text-decoration: none; border-top: 1px solid var(--line); padding-top: 12px; }
+.pair-card { max-width: 480px; padding: 24px; display: grid; gap: 12px; }
+.pair-card .device { font-size: 18px; font-weight: 700; }

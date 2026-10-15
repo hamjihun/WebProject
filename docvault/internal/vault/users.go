@@ -298,16 +298,36 @@ func (v *Vault) Login(username, password, kind, device, ip string) (string, *Use
 		return "", nil, ErrUnauthorized
 	}
 	v.DB.Exec(`UPDATE users SET failed_logins=0, locked_until=0 WHERE id=?`, u.ID)
-	token := randomID(32)
-	if kind != "agent" {
-		kind = "web"
-	}
-	if _, err := v.DB.Exec(`INSERT INTO sessions(token_hash,user_id,kind,device,ip,created_at,expires_at,last_seen) VALUES(?,?,?,?,?,?,?,?)`,
-		tokenHash(token), u.ID, kind, device, ip, now, now+v.sessionTTL(kind), now); err != nil {
+	token, err := v.newSession(u, kind, device, ip)
+	if err != nil {
 		return "", nil, err
 	}
 	v.Audit(a, "login", "", "", device)
 	return token, u, nil
+}
+
+func (v *Vault) newSession(u *User, kind, device, ip string) (string, error) {
+	if kind != "agent" {
+		kind = "web"
+	}
+	now := v.Now()
+	token := randomID(32)
+	_, err := v.DB.Exec(`INSERT INTO sessions(token_hash,user_id,kind,device,ip,created_at,expires_at,last_seen) VALUES(?,?,?,?,?,?,?,?)`,
+		tokenHash(token), u.ID, kind, device, ip, now, now+v.sessionTTL(kind), now)
+	return token, err
+}
+
+// PairAgent opens a PC-agent session for a user who approved the PC in the
+// browser (they are already signed in there, so no password is asked again).
+func (v *Vault) PairAgent(a Actor, device, agentIP string) (string, error) {
+	if a.User == nil || a.User.Disabled {
+		return "", ErrUnauthorized
+	}
+	token, err := v.newSession(a.User, "agent", device, agentIP)
+	if err == nil {
+		v.Audit(a, "agent_pair", "", "", "PC 연결 승인: "+device+" ("+agentIP+")")
+	}
+	return token, err
 }
 
 func (v *Vault) sessionTTL(kind string) int64 {
