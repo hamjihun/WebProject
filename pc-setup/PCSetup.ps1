@@ -1439,20 +1439,68 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         if ($removed.Count -gt 0) { Write-Log "${Label}: 잠겨 있던 설정 $($removed.Count)개를 직원이 바꿀 수 있게 풀었습니다." 'OK' }
     }
 
-    # 회사 즐겨찾기: 즐겨찾기 모음 맨 앞에 폴더(예: '회사')로 추가 (엣지 ManagedFavorites / 크롬 ManagedBookmarks)
-    function Set-CompanyBookmarks([string]$Browser, [string]$Label) {
+    # 즐겨찾기 모음에 링크 추가 (직원이 지우거나 옮길 수 있는 일반 즐겨찾기)
+    # 브라우저의 즐겨찾기 파일(User Data\Default\Bookmarks)에 직접 추가 → 브라우저가 꺼져 있어야 함
+    function Add-BrowserBookmarks([string]$Browser, [string]$Label) {
         $list = @($Cfg.browser.bookmarks | Where-Object { $_.url })
         if ($list.Count -eq 0) { return }
-        $folder = if ($Cfg.browser.bookmarkFolder) { [string]$Cfg.browser.bookmarkFolder } else { '회사' }
-        $items = @([ordered]@{ toplevel_name = $folder }) + @($list | ForEach-Object { [ordered]@{ name = [string]$_.name; url = [string]$_.url } })
-        $json = ConvertTo-Json -InputObject $items -Compress -Depth 4
-        if ($Browser -eq 'chrome') { $key = 'HKLM:\SOFTWARE\Policies\Google\Chrome'; $value = 'ManagedBookmarks' }
-        else { $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; $value = 'ManagedFavorites' }
+        if ($Browser -eq 'chrome') { $proc = 'chrome'; $dir = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data\Default' }
+        else { $proc = 'msedge'; $dir = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data\Default' }
+        Get-Process -Name $proc -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        $file = Join-Path $dir 'Bookmarks'
+        $now = [string][long](([DateTime]::UtcNow - [DateTime]'1601-01-01').Ticks / 10)   # 크롬/엣지 시간 형식
         try {
-            Set-Reg $key $value $json 'String'
-            Write-Log "${Label}: 즐겨찾기 '$folder' 폴더에 $(($list | ForEach-Object { $_.name }) -join ', ') 추가" 'OK'
+            if (Test-Path -LiteralPath $file) {
+                $data = Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json
+            }
+            else {
+                # 브라우저를 아직 한 번도 열지 않은 새 PC: 기본 즐겨찾기 파일을 만듦
+                if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+                $root = { param($id, $guid, $name) [pscustomobject][ordered]@{ children = @(); date_added = $now; date_modified = '0'; guid = $guid; id = $id; name = $name; type = 'folder' } }
+                $data = [pscustomobject][ordered]@{
+                    roots   = [pscustomobject][ordered]@{
+                        bookmark_bar = & $root '1' '0bc5d13f-2cba-5d74-951f-3f233fe6c908' '즐겨찾기 모음'
+                        other        = & $root '2' '82b081ec-3dd3-529c-8475-ab6c344590dd' '기타 즐겨찾기'
+                        synced       = & $root '3' '4cf2e351-0e85-532b-bb37-df045d8f8d0f' '모바일 즐겨찾기'
+                    }
+                    version = 1
+                }
+            }
+
+            # 이미 있는 주소 / 가장 큰 id 찾기
+            $urls = New-Object System.Collections.Generic.HashSet[string]
+            $maxId = 3
+            $walk = {
+                param($node)
+                if ($node.id -match '^\d+$' -and [int]$node.id -gt $script:bmMax) { $script:bmMax = [int]$node.id }
+                if ($node.url) { [void]$urls.Add(([string]$node.url).TrimEnd('/').ToLower()) }
+                foreach ($c in @($node.children)) { if ($c) { & $walk $c } }
+            }
+            $script:bmMax = $maxId
+            foreach ($r in $data.roots.PSObject.Properties) { if ($r.Value -and $r.Value.PSObject.Properties['children']) { & $walk $r.Value } }
+
+            $bar = $data.roots.bookmark_bar
+            $added = @()
+            foreach ($b in @($list)) {
+                if ($urls.Contains(([string]$b.url).TrimEnd('/').ToLower())) { Write-Log "${Label}: 즐겨찾기 '$($b.name)' 이미 있음" 'OK'; continue }
+                $script:bmMax++
+                $item = [pscustomobject][ordered]@{
+                    date_added = $now; date_last_used = '0'; guid = [guid]::NewGuid().ToString()
+                    id = [string]$script:bmMax; name = [string]$b.name; type = 'url'; url = [string]$b.url
+                }
+                $bar.children = @($item) + @($bar.children | Where-Object { $_ })
+                $added += $b.name
+            }
+            if ($added.Count -gt 0) {
+                # 검사값(checksum)은 지우면 브라우저가 다시 계산함
+                if ($data.PSObject.Properties['checksum']) { $data.PSObject.Properties.Remove('checksum') }
+                $json = $data | ConvertTo-Json -Depth 100
+                [IO.File]::WriteAllText($file, $json, (New-Object System.Text.UTF8Encoding($false)))
+                Write-Log "${Label}: 즐겨찾기 모음에 $($added -join ', ') 추가" 'OK'
+            }
         }
-        catch { Write-Log "${Label}: 즐겨찾기 추가 실패 - $($_.Exception.Message)" 'ERROR' }
+        catch { Write-Log "${Label}: 즐겨찾기 추가 실패 - $($_.Exception.Message)" 'WARN' }
     }
 
     function Set-EdgeSettings {
@@ -1467,9 +1515,9 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             try { Set-Reg $key $name 1; Write-Log "엣지: $($items[$name])" 'OK' }
             catch { Write-Log "엣지: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
-        Set-CompanyBookmarks 'edge' '엣지'
+        Add-BrowserBookmarks 'edge' '엣지'
         # 직원이 바꿀 수 있게: 예전에 고정값(조직에서 관리)으로 넣은 것과 셋팅 중에만 필요한 설정은 지움
-        $extra = @('StartupBoostEnabled', 'BackgroundModeEnabled')
+        $extra = @('StartupBoostEnabled', 'BackgroundModeEnabled', 'ManagedFavorites')
         Clear-LockedPolicies 'edge' (@($items.Keys) + $extra) '엣지'
         Close-Browser 'msedge' '엣지'
     }
@@ -1495,8 +1543,8 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             try { Set-Reg $key $name 1; Write-Log "크롬: $($items[$name])" 'OK' }
             catch { Write-Log "크롬: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
-        Set-CompanyBookmarks 'chrome' '크롬'
-        Clear-LockedPolicies 'chrome' @($items.Keys) '크롬'
+        Add-BrowserBookmarks 'chrome' '크롬'
+        Clear-LockedPolicies 'chrome' (@($items.Keys) + @('ManagedBookmarks')) '크롬'
         Close-Browser 'chrome' '크롬'
     }
 
