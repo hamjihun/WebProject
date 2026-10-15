@@ -2999,6 +2999,7 @@ function Show-OrderWindow {
 $btnOrder.Add_Click({ Show-OrderWindow })
 
 # 셋팅이 끝난 뒤 직접 해야 할 일 (config.json 의 finishChecklist)
+# [항목 편집] 으로 그 자리에서 고치고 [저장] 하면 config.json 에 바로 저장됨
 function Show-Checklist {
     if ($script:CheckForm -and -not $script:CheckForm.IsDisposed) {
         Update-ChecklistActivation
@@ -3006,18 +3007,16 @@ function Show-Checklist {
         $script:CheckForm.Activate()
         return
     }
-    $items = @($Config.finishChecklist | Where-Object { $_ })
     $f = New-Object System.Windows.Forms.Form
     $f.Text = 'PC 셋팅 - 마무리 체크리스트 (직접 해야 할 일)'
-    $f.ClientSize = New-Object System.Drawing.Size(560, 560)
-    $f.StartPosition = 'CenterParent'
+    $f.ClientSize = New-Object System.Drawing.Size(580, 600)
+    $f.StartPosition = 'CenterScreen'
     $f.Font = $Font
     $f.ShowInTaskbar = $true
     $hdr = New-Object System.Windows.Forms.Label
-    $hdr.Text = '자동 셋팅이 끝났습니다. 아래 항목은 직접 진행하고 하나씩 체크하세요.'
     $hdr.Font = $BoldFont
     $hdr.Location = New-Object System.Drawing.Point(12, 10)
-    $hdr.Size = New-Object System.Drawing.Size(536, 22)
+    $hdr.Size = New-Object System.Drawing.Size(556, 22)
     $pnl = New-Object System.Windows.Forms.FlowLayoutPanel
     $pnl.FlowDirection = 'TopDown'
     $pnl.WrapContents = $false
@@ -3025,22 +3024,75 @@ function Show-Checklist {
     $pnl.BorderStyle = 'FixedSingle'
     $pnl.BackColor = [System.Drawing.Color]::White
     $pnl.Location = New-Object System.Drawing.Point(12, 36)
-    $pnl.Size = New-Object System.Drawing.Size(536, 470)
+    $pnl.Size = New-Object System.Drawing.Size(556, 506)
     $pnl.Anchor = 'Top, Bottom, Left, Right'
+    # 편집용 입력칸 (한 줄 = 한 항목, '-' 로 시작하는 줄 = 위 항목의 세부 내용)
+    $txt = New-Object System.Windows.Forms.TextBox
+    $txt.Multiline = $true
+    $txt.ScrollBars = 'Vertical'
+    $txt.AcceptsReturn = $true
+    $txt.Font = $BoldFont
+    $txt.Location = $pnl.Location
+    $txt.Size = $pnl.Size
+    $txt.Anchor = $pnl.Anchor
+    $txt.Visible = $false
     $lblCount = New-Object System.Windows.Forms.Label
-    $lblCount.Location = New-Object System.Drawing.Point(12, 522)
-    $lblCount.Size = New-Object System.Drawing.Size(300, 24)
+    $lblCount.Location = New-Object System.Drawing.Point(12, 558)
+    $lblCount.Size = New-Object System.Drawing.Size(200, 24)
     $lblCount.Font = $BoldFont
     $lblCount.Anchor = 'Bottom, Left'
+    $btnEdit = New-Object System.Windows.Forms.Button
+    $btnEdit.Text = '항목 편집'
+    $btnEdit.Location = New-Object System.Drawing.Point(252, 554)
+    $btnEdit.Size = New-Object System.Drawing.Size(100, 30)
+    $btnEdit.Anchor = 'Bottom, Right'
+    $btnEdit.Add_Click({ if ($script:CheckEditing) { Save-ChecklistEdit } else { Start-ChecklistEdit } })
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = '편집 취소'
+    $btnCancel.Location = New-Object System.Drawing.Point(358, 554)
+    $btnCancel.Size = New-Object System.Drawing.Size(100, 30)
+    $btnCancel.Anchor = 'Bottom, Right'
+    $btnCancel.Visible = $false
+    $btnCancel.Add_Click({ Stop-ChecklistEdit })
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = '닫기'
+    $btnClose.Location = New-Object System.Drawing.Point(468, 554)
+    $btnClose.Size = New-Object System.Drawing.Size(100, 30)
+    $btnClose.Anchor = 'Bottom, Right'
+    $btnClose.Add_Click({ $script:CheckForm.Close() })
+    $f.Controls.AddRange(@($hdr, $pnl, $txt, $lblCount, $btnEdit, $btnCancel, $btnClose))
+    # 닫기(X) 는 숨기기만 (다시 열어도 체크한 것이 그대로). 편집 중이면 편집은 취소
+    $f.Add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; if ($script:CheckEditing) { Stop-ChecklistEdit }; $s.Hide() } })
+    $script:CheckForm = $f
+    $script:CheckPanel = $pnl
+    $script:CheckText = $txt
+    $script:CheckHeader = $hdr
+    $script:CheckCountLabel = $lblCount
+    $script:CheckEditBtn = $btnEdit
+    $script:CheckCancelBtn = $btnCancel
+    $script:CheckEditing = $false
+    $script:CheckBoxes = @()
+    $hdr.Text = '자동 셋팅이 끝났습니다. 아래 항목은 직접 진행하고 하나씩 체크하세요.'
+    Build-ChecklistItems
+    $f.Show($form)
+}
+
+# 체크 항목 다시 그리기 (편집 후에도 같은 항목은 체크 상태 유지)
+function Build-ChecklistItems {
+    $pnl = $script:CheckPanel
+    $wasChecked = @($script:CheckBoxes | Where-Object { $_.Checked } | ForEach-Object { $_.Tag })
+    $pnl.SuspendLayout()
+    $pnl.Controls.Clear()
     $script:CheckBoxes = @()
     $script:CheckActLabel = $null
     $n = 0
-    foreach ($it in $items) {
+    foreach ($it in @($script:Config.finishChecklist | Where-Object { $_ })) {
         $n++
         $cb = New-Object System.Windows.Forms.CheckBox
         $cb.Text = "$n. $it"
+        $cb.Tag = [string]$it
         $cb.AutoSize = $true
-        $cb.MaximumSize = New-Object System.Drawing.Size(500, 0)
+        $cb.MaximumSize = New-Object System.Drawing.Size(510, 0)
         $cb.Margin = New-Object System.Windows.Forms.Padding(8, 10, 8, 2)
         $cb.Font = $BoldFont
         $cb.Add_CheckedChanged({
@@ -3051,6 +3103,7 @@ function Show-Checklist {
         })
         [void]$pnl.Controls.Add($cb)
         $script:CheckBoxes += $cb
+        if ($wasChecked -contains [string]$it) { $cb.Checked = $true }
         if ($it -like '*정품*' -and -not $script:CheckActLabel) {
             $al = New-Object System.Windows.Forms.Label
             $al.AutoSize = $true
@@ -3059,20 +3112,92 @@ function Show-Checklist {
             $script:CheckActLabel = $al
         }
     }
-    $btnClose = New-Object System.Windows.Forms.Button
-    $btnClose.Text = '닫기'
-    $btnClose.Location = New-Object System.Drawing.Point(448, 518)
-    $btnClose.Size = New-Object System.Drawing.Size(100, 30)
-    $btnClose.Anchor = 'Bottom, Right'
-    $btnClose.Add_Click({ $script:CheckForm.Hide() })
-    $f.Controls.AddRange(@($hdr, $pnl, $lblCount, $btnClose))
-    # 닫기(X) 는 숨기기만 (다시 열어도 체크한 것이 그대로)
-    $f.Add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; $s.Hide() } })
-    $script:CheckForm = $f
-    $script:CheckCountLabel = $lblCount
+    $pnl.ResumeLayout()
     Update-ChecklistActivation
     Update-ChecklistCount
-    $f.Show($form)
+}
+
+# 편집 화면: 지금 항목을 글로 보여줌 (세부 내용은 '-' 줄)
+function Start-ChecklistEdit {
+    $lines = foreach ($it in @($script:Config.finishChecklist | Where-Object { $_ })) {
+        $parts = ([string]$it) -split "`r?`n"
+        $parts[0].Trim()
+        foreach ($sub in ($parts | Select-Object -Skip 1)) { $t = $sub.Trim(); if ($t) { if ($t -notlike '-*') { $t = "- $t" }; "   $t" } }
+    }
+    $script:CheckText.Text = (@($lines) -join "`r`n")
+    $script:CheckPanel.Visible = $false
+    $script:CheckText.Visible = $true
+    $script:CheckText.Focus()
+    $script:CheckHeader.Text = "한 줄에 한 항목. 세부 내용은 줄 앞에 '-' 를 붙이세요. 번호는 자동으로 붙습니다."
+    $script:CheckEditBtn.Text = '저장'
+    $script:CheckEditBtn.Font = $BoldFont
+    $script:CheckCancelBtn.Visible = $true
+    $script:CheckEditing = $true
+}
+
+function Stop-ChecklistEdit {
+    $script:CheckText.Visible = $false
+    $script:CheckPanel.Visible = $true
+    $script:CheckHeader.Text = '자동 셋팅이 끝났습니다. 아래 항목은 직접 진행하고 하나씩 체크하세요.'
+    $script:CheckEditBtn.Text = '항목 편집'
+    $script:CheckEditBtn.Font = $Font
+    $script:CheckCancelBtn.Visible = $false
+    $script:CheckEditing = $false
+}
+
+# 편집한 내용을 항목으로 나눠 config.json 에 저장
+function Save-ChecklistEdit {
+    $items = New-Object System.Collections.ArrayList
+    foreach ($raw in ($script:CheckText.Text -split "`r?`n")) {
+        $t = $raw.Trim()
+        if (-not $t) { continue }
+        if ($t -like '-*' -or ($raw -match '^\s' -and $items.Count -gt 0)) {
+            if ($t -notlike '-*') { $t = "- $t" }
+            if ($items.Count -eq 0) { [void]$items.Add($t.TrimStart('-', ' ')); continue }
+            $items[$items.Count - 1] = "$($items[$items.Count - 1])`n   $t"
+        }
+        else {
+            [void]$items.Add(($t -replace '^\d+\s*[.)]\s*', ''))
+        }
+    }
+    $list = @($items)
+    if ($script:Config.PSObject.Properties.Name -contains 'finishChecklist') { $script:Config.finishChecklist = $list }
+    else { $script:Config | Add-Member -NotePropertyName finishChecklist -NotePropertyValue $list }
+    try {
+        Save-Config $script:Config
+        # 재부팅 후 이어하기(C:\ProgramData\PCSetup\app)로 실행 중이면 USB 의 config.json 에도 저장
+        $usbSaved = Save-ChecklistToUsb $list
+        $msg = '저장했습니다. 다음 PC부터 이 항목으로 표시됩니다.'
+        if ($usbSaved) { $msg += "`n(USB 의 config.json 에도 저장: $usbSaved)" }
+        [System.Windows.Forms.MessageBox]::Show($msg, '마무리 체크리스트', 'OK', 'Information') | Out-Null
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("저장하지 못했습니다.`n$($_.Exception.Message)", '마무리 체크리스트', 'OK', 'Error') | Out-Null
+        return
+    }
+    Stop-ChecklistEdit
+    Build-ChecklistItems
+}
+
+function Save-ChecklistToUsb($List) {
+    $app = Join-Path $env:ProgramData 'PCSetup\app'
+    if (-not $Root.TrimEnd('\').Equals($app, [StringComparison]::OrdinalIgnoreCase)) { return $null }
+    foreach ($d in @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=2' -ErrorAction SilentlyContinue)) {
+        $roots = @("$($d.DeviceID)\") + @(Get-ChildItem -LiteralPath "$($d.DeviceID)\" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+        foreach ($r in $roots) {
+            $cfgPath = Join-Path $r 'config.json'
+            if (-not ((Test-Path -LiteralPath (Join-Path $r 'PCSetup.ps1')) -and (Test-Path -LiteralPath $cfgPath))) { continue }
+            try {
+                $c = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($c.PSObject.Properties.Name -contains 'finishChecklist') { $c.finishChecklist = $List }
+                else { $c | Add-Member -NotePropertyName finishChecklist -NotePropertyValue $List }
+                $c | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+                return $cfgPath
+            }
+            catch { }
+        }
+    }
+    return $null
 }
 
 function Update-ChecklistCount {
@@ -3384,7 +3509,7 @@ $timer.Add_Tick({
     }
 
     # 직접 해야 할 일 체크리스트 (메인 화면의 [마무리 체크리스트] 로 언제든 다시 열 수 있음)
-    if (@($Config.finishChecklist).Count -gt 0) { Show-Checklist }
+    Show-Checklist
 
     if ($script:Sync.RebootRequired) {
         $ans = [System.Windows.Forms.MessageBox]::Show("$msg`n`n재부팅이 필요한 항목이 있습니다. 지금 재부팅할까요?`n(마무리 체크리스트를 먼저 확인하세요)", 'PC 셋팅', 'YesNo', 'Question')
