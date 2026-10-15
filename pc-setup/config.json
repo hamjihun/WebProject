@@ -155,11 +155,11 @@
         "*ahnlab*.exe"
       ],
       "args": "",
-      "installed": [
-        "%ProgramFiles%\\AhnLab\\*",
-        "%ProgramFiles(x86)%\\AhnLab\\*"
-      ],
-      "guide": "설치 창이 뜨면 그대로 진행하세요."
+      "installedName": "*Security Agent*|*시큐리티 에이전트*|*AhnLab*Agent*|*안랩*에이전트*|*EPP*",
+      "waitInstalled": 600,
+      "noRetry": true,
+      "logUninstall": "*AhnLab*|*안랩*|*V3*|*EPP*",
+      "guide": "설치 창이 뜨면 그대로 진행하세요.\n안랩 시큐리티 에이전트(EPP)가 먼저 설치되고, 그 뒤에 V3 가 자동으로 설치됩니다."
     },
     {
       "name": "ERP",

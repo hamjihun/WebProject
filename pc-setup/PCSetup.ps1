@@ -118,7 +118,17 @@ $Common = {
             if (-not $i) { continue }
             if (Test-Path -Path ([Environment]::ExpandEnvironmentVariables($i))) { return $true }
         }
+        # installedName: 프로그램 추가/제거 목록 이름으로 확인 (예: V3 는 'AhnLab' 폴더만으로는 EPP 에이전트 설치 여부를 알 수 없음)
+        if ($P.installedName) {
+            foreach ($pat in ([string]$P.installedName -split '\|')) {
+                if ($pat -and @(Get-UninstallEntries $pat).Count -gt 0) { return $true }
+            }
+        }
         return $false
+    }
+
+    function Test-HasInstallCheck($P) {
+        return ([bool]$P.installedName -or @($P.installed | Where-Object { $_ }).Count -gt 0)
     }
 
     # 프로그램 추가/제거 목록에서 이름이 맞는 항목 (제거 명령 포함)
@@ -897,12 +907,17 @@ public struct POINT { public int X; public int Y; }
         }
         # 설치 프로그램이 정상 종료 코드로 끝나도(창을 닫아도 0 이 나올 수 있음) 실제 설치 파일이 있는지 확인
         $code = $Job.Code
-        if ($code -in 0, 3010, 1641 -and @($Job.P.installed | Where-Object { $_ }).Count -gt 0 -and -not (Test-Installed $Job.P)) {
+        if ($code -in 0, 3010, 1641 -and (Test-HasInstallCheck $Job.P) -and -not (Test-Installed $Job.P)) {
             Start-Sleep -Seconds 5   # 설치 마무리가 조금 늦는 경우
             if (-not (Test-Installed $Job.P)) {
                 Write-Log "${name}: 설치 프로그램은 끝났지만(종료 코드 $code) 설치된 파일이 없습니다." 'WARN'
                 $code = -2
             }
+        }
+        # 설치 확인용으로 프로그램 추가/제거 목록의 관련 항목을 로그에 남김 (예: V3 → AhnLab 항목)
+        if ($Job.P.logUninstall) {
+            $names = @(foreach ($pat in ([string]$Job.P.logUninstall -split '\|')) { Get-UninstallEntries $pat | ForEach-Object { $_.DisplayName } }) | Select-Object -Unique
+            Write-Log "${name}: 프로그램 추가/제거 목록 - $(if ($names) { $names -join ' / ' } else { '(없음)' })"
         }
         switch ($code) {
             0       { Write-Log "${name}: 설치 완료 (설치 확인됨)" 'OK'; Set-ProgState $name 'done' '설치 완료' }
@@ -916,7 +931,7 @@ public struct POINT { public int X; public int Y; }
                 if (Test-Installed $Job.P) { Write-Log "${name}: 설치 완료 (종료 코드 $($Job.Code))" 'OK'; Set-ProgState $name 'done' '설치 완료' }
                 else {
                     $Job.Failed = $true
-                    $again = if (-not $Job.Retried) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
+                    $again = if (-not $Job.Retried -and -not $Job.P.noRetry) { ' - 마지막에 한 번 더 설치합니다' } else { '' }
                     $why = if ($code -eq -2) { '설치되지 않음' } else { "종료 코드 $($Job.Code)" }
                     Write-Log "${name}: 설치 실패 ($why)$again" $(if ($again) { 'WARN' } else { 'ERROR' })
                     if ($again) { Set-ProgState $name 'pending' "다시 설치 대기 ($why)" }
@@ -983,6 +998,21 @@ public struct POINT { public int X; public int Y; }
             }
             if ($Sync.GuideAck -eq $Job.P.name) { $Sync.GuideAck = ''; Complete-InstallJob $Job }
             return
+        }
+        # waitInstalled: 설치 프로그램이 먼저 끝나고 실제 설치는 뒤에서 이어지는 경우(예: V3 EPP 에이전트)
+        # 설치 확인이 될 때까지 최대 N초 기다림 (그동안 다시 실행하지 않음)
+        if ($Job.P.waitInstalled -and $Job.Proc.ExitCode -notin 1618) {
+            if (-not $Job.WaitSince) {
+                $Job.WaitSince = Get-Date
+                $Job.LastWaitCheck = [datetime]::MinValue
+                Write-Log "$($Job.P.name): 설치 프로그램이 끝났습니다. 설치가 마무리될 때까지 기다립니다."
+                Set-ProgState $Job.P.name 'running' '설치 마무리 대기 중'
+            }
+            if (((Get-Date) - $Job.WaitSince).TotalSeconds -lt [int]$Job.P.waitInstalled) {
+                if (((Get-Date) - $Job.LastWaitCheck).TotalSeconds -lt 5) { return }
+                $Job.LastWaitCheck = Get-Date
+                if (-not (Test-Installed $Job.P)) { return }
+            }
         }
         Complete-InstallJob $Job
     }
@@ -1134,7 +1164,8 @@ public struct POINT { public int X; public int Y; }
         # 다른 설치와 겹쳐서 실패한 것(1618)은 하나씩 다시 설치
         # 자동 설치가 실패한 것도 한 번 더 시도
         # fallbackUrl 이 있으면 (예: 크롬) 공식 오프라인 설치 파일을 내려받아서 다시 설치
-        $retry = @($jobs | Where-Object { $_.Code -eq 1618 -or ($_.Failed -and -not $_.P.uninstall) })
+        # (그사이 설치가 끝난 것과 다시 실행하면 안 되는 것(noRetry, 예: V3 에이전트)은 제외)
+        $retry = @($jobs | Where-Object { ($_.Code -eq 1618 -or ($_.Failed -and -not $_.P.uninstall -and -not $_.P.noRetry)) -and -not ((Test-HasInstallCheck $_.P) -and (Test-Installed $_.P)) })
         if ($retry.Count -gt 0 -and -not $Sync.Cancel) {
             Write-Log "겹치거나 실패한 프로그램을 하나씩 다시 설치합니다: $(($retry | ForEach-Object { $_.P.name }) -join ', ')"
             $again = @()
