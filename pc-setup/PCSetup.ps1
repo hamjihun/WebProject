@@ -1472,42 +1472,63 @@ public struct POINT { public int X; public int Y; }
         }
 
         # Windows 10: 엣지만 있는 레이아웃을 잠깐 강제로 적용한 뒤 잠금 해제
-        $xml = @'
+        # (정책으로 레이아웃을 고정 → 시작 메뉴를 다시 불러와 적용 → 고정 해제 → 다시 불러오기 → 정책 삭제)
+        $edgeLnk = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Microsoft Edge.lnk'
+        $tile = if (Test-Path -LiteralPath $edgeLnk) {
+            '<start:DesktopApplicationTile Size="2x2" Column="0" Row="0" DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\Microsoft Edge.lnk" />'
+        } else {
+            '<start:DesktopApplicationTile Size="2x2" Column="0" Row="0" DesktopApplicationID="MSEdge" />'
+        }
+        $xml = @"
 <LayoutModificationTemplate xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout" xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout" Version="1" xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification">
   <LayoutOptions StartTileGroupCellWidth="6" />
   <DefaultLayoutOverride>
     <StartLayoutCollection>
       <defaultlayout:StartLayout GroupCellWidth="6">
         <start:Group Name="">
-          <start:DesktopApplicationTile Size="2x2" Column="0" Row="0" DesktopApplicationLinkPath="%ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\Microsoft Edge.lnk" />
+          $tile
         </start:Group>
       </defaultlayout:StartLayout>
     </StartLayoutCollection>
   </DefaultLayoutOverride>
 </LayoutModificationTemplate>
-'@
+"@
         $dir = Join-Path $env:ProgramData 'PCSetup'
         if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
         $xmlPath = Join-Path $dir 'StartLayout.xml'
         Set-Content -LiteralPath $xmlPath -Value $xml -Encoding UTF8
 
-        $key = 'HKCU:\Software\Policies\Microsoft\Windows\Explorer'
+        $keys = @('HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer', 'HKCU:\Software\Policies\Microsoft\Windows\Explorer')
         $wsh = New-Object -ComObject WScript.Shell
-        Set-Reg $key 'LockedStartLayout' 1
-        Set-Reg $key 'StartLayoutFile' $xmlPath 'ExpandString'
-        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 8
-        $wsh.SendKeys('^{ESCAPE}')
-        Start-Sleep -Seconds 3
-        $wsh.SendKeys('^{ESCAPE}')
-
-        Set-Reg $key 'LockedStartLayout' 0
-        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 5
-        Remove-ItemProperty -Path $key -Name 'LockedStartLayout', 'StartLayoutFile' -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $xmlPath -Force -ErrorAction SilentlyContinue
+        # 탐색기와 시작 메뉴를 다시 띄우고 시작 메뉴를 한 번 열었다 닫아 레이아웃을 읽게 함
+        $reload = {
+            Stop-Process -Name StartMenuExperienceHost -Force -ErrorAction SilentlyContinue
+            Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+            for ($i = 0; $i -lt 20 -and -not (Get-Process -Name explorer -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Seconds 1 }
+            if (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+            Start-Sleep -Seconds 8
+            $wsh.SendKeys('^{ESCAPE}')
+            Start-Sleep -Seconds 4
+            $wsh.SendKeys('{ESCAPE}')
+            Start-Sleep -Seconds 2
+        }
+        try {
+            foreach ($k in $keys) {
+                Set-Reg $k 'LockedStartLayout' 1
+                Set-Reg $k 'StartLayoutFile' $xmlPath 'ExpandString'
+            }
+            & $reload
+            foreach ($k in $keys) { Set-Reg $k 'LockedStartLayout' 0 }
+            & $reload
+        }
+        finally {
+            # 정책은 반드시 지움 (남아 있으면 직원이 시작화면을 바꿀 수 없음)
+            foreach ($k in $keys) { Remove-ItemProperty -Path $k -Name 'LockedStartLayout', 'StartLayoutFile' -ErrorAction SilentlyContinue }
+            Remove-Item -LiteralPath $xmlPath -Force -ErrorAction SilentlyContinue
+        }
         $State.RestartExplorer = $false
         Write-Log '시작화면 정리 완료 (엣지만 고정)' 'OK'
+        Add-Notice '시작화면: 타일이 그대로 남아 있으면 로그아웃 후 다시 로그인하면 정리됩니다.'
     }
 
     # --- 10~12. 브라우저 --------------------------------------------------------
