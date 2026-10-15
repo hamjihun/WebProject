@@ -162,10 +162,13 @@ func doInstall() error {
 	stopRunning()
 
 	step(2, "가상 드라이브 구성요소(WinFsp) 확인")
+	installedByUs := previouslyInstalledWinFsp()
 	if winfspInstalled() {
 		fmt.Println("      이미 설치되어 있습니다.")
 	} else if err := installWinFsp(); err != nil {
 		return err
+	} else {
+		installedByUs = true
 	}
 
 	step(3, "프로그램 복사: "+installDir())
@@ -193,7 +196,7 @@ func doInstall() error {
 		return fmt.Errorf("시작프로그램 등록 실패: %w", err)
 	}
 	makeShortcut(startMenuLink(), agent)
-	registerUninstall(dir)
+	registerUninstall(dir, installedByUs)
 
 	step(5, "DocVault 시작")
 	// Started through Explorer so it runs as the signed-in user (not as
@@ -330,7 +333,7 @@ func makeShortcut(link, target string) error {
 }
 
 // registerUninstall lists DocVault in Windows "앱 및 기능" so it can be removed there.
-func registerUninstall(dir string) {
+func registerUninstall(dir string, installedWinFsp bool) {
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, uninstKey, registry.SET_VALUE|registry.WOW64_64KEY)
 	if err != nil {
 		return
@@ -343,23 +346,118 @@ func registerUninstall(dir string) {
 	k.SetStringValue("UninstallString", `"`+filepath.Join(dir, "docvault-setup.exe")+`" /uninstall`)
 	k.SetDWordValue("NoModify", 1)
 	k.SetDWordValue("NoRepair", 1)
+	// Remember whether WinFsp came with DocVault: only then is it removed
+	// together with DocVault (another program may rely on a WinFsp it brought).
+	var flag uint32
+	if installedWinFsp {
+		flag = 1
+	}
+	k.SetDWordValue("InstalledWinFsp", flag)
+}
+
+func previouslyInstalledWinFsp() bool {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, uninstKey, registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+	v, _, err := k.GetIntegerValue("InstalledWinFsp")
+	return err == nil && v == 1
 }
 
 func doUninstall() error {
-	fmt.Println("DocVault 문서 드라이브를 제거합니다.")
+	fmt.Println("==============================================")
+	fmt.Println("  DocVault 문서 드라이브 제거")
+	fmt.Println("==============================================")
+	dir := installDir()
+	removeWinFsp := previouslyInstalledWinFsp()
+
+	fmt.Println("[1/4] 드라이브 연결 해제, 로그아웃")
+	// Sign this PC out on the server (best effort) before the program goes away.
+	logout := exec.Command(filepath.Join(dir, "docvault-agent.exe"), "logout")
+	logout.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	logout.Run()
 	stopRunning()
+
+	fmt.Println("[2/4] 프로그램, 바로가기, 자동 실행 삭제")
 	os.Remove(startupLink())
 	os.Remove(startMenuLink())
-	registry.DeleteKey(registry.LOCAL_MACHINE, uninstKey)
-	dir := installDir()
 	for _, f := range []string{"docvault-agent.exe", "rclone.exe", "agent.json"} {
 		os.Remove(filepath.Join(dir, f))
 	}
+	removeUserData()
+
+	fmt.Println("[3/4] 가상 드라이브 구성요소(WinFsp) 제거")
+	restart := false
+	if removeWinFsp {
+		var err error
+		if restart, err = uninstallWinFsp(); err != nil {
+			fmt.Println("      WinFsp 제거 실패:", err, "(앱 및 기능에서 직접 제거하세요)")
+		}
+	} else {
+		fmt.Println("      DocVault 설치 전부터 있던 WinFsp라서 남겨 둡니다.")
+	}
+
+	fmt.Println("[4/4] 마무리")
+	registry.DeleteKey(registry.LOCAL_MACHINE, uninstKey)
 	// This program itself lives in dir: remove the folder after it exits.
-	c := exec.Command("cmd", "/c", "ping 127.0.0.1 -n 3 >nul & rmdir /s /q \""+dir+"\"")
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	// CmdLine is passed as-is: cmd.exe does not understand Go's \" quoting.
+	c := exec.Command("cmd")
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true,
+		CmdLine: `cmd /c ping 127.0.0.1 -n 3 >nul & rmdir /s /q "` + dir + `"`}
 	c.Start()
-	fmt.Println("✅ 제거했습니다. (WinFsp는 다른 프로그램이 쓸 수 있어 남겨 둡니다. 필요하면 '앱 및 기능'에서 제거하세요)")
-	time.Sleep(4 * time.Second)
+	fmt.Println()
+	fmt.Println("✅ DocVault를 모두 제거했습니다.")
+	if restart {
+		fmt.Println("   PC를 다시 시작하면 정리가 끝납니다.")
+	}
+	time.Sleep(5 * time.Second)
 	return nil
+}
+
+// removeUserData deletes every Windows user's DocVault data on this PC:
+// saved sign-in, the write cache of files being saved, and logs.
+func removeUserData() {
+	users := filepath.Join(os.Getenv("SystemDrive")+`\`, "Users")
+	entries, _ := os.ReadDir(users)
+	for _, e := range entries {
+		if e.IsDir() {
+			os.RemoveAll(filepath.Join(users, e.Name(), "AppData", "Local", "DocVault"))
+		}
+	}
+}
+
+// uninstallWinFsp removes WinFsp through its MSI product code, found in the
+// Windows list of installed programs.
+func uninstallWinFsp() (restart bool, err error) {
+	for _, view := range []uint32{registry.WOW64_64KEY, registry.WOW64_32KEY} {
+		root, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`,
+			registry.ENUMERATE_SUB_KEYS|view)
+		if err != nil {
+			continue
+		}
+		names, _ := root.ReadSubKeyNames(-1)
+		root.Close()
+		for _, n := range names {
+			if !strings.HasPrefix(n, "{") {
+				continue
+			}
+			k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\`+n, registry.QUERY_VALUE|view)
+			if err != nil {
+				continue
+			}
+			name, _, _ := k.GetStringValue("DisplayName")
+			k.Close()
+			if !strings.HasPrefix(name, "WinFsp") {
+				continue
+			}
+			err = exec.Command("msiexec", "/x", n, "/qn", "/norestart").Run()
+			var ee *exec.ExitError
+			if errors.As(err, &ee) && ee.ExitCode() == 3010 {
+				return true, nil
+			}
+			return false, err
+		}
+	}
+	return false, errors.New("설치 정보를 찾을 수 없습니다")
 }

@@ -115,7 +115,7 @@
 
 | 할 일 | 방법 |
 |---|---|
-| 제거 | Windows [설정 → 앱 및 기능 → DocVault 문서 드라이브 → 제거] |
+| 제거 | Windows [설정 → 앱 및 기능 → DocVault 문서 드라이브 → 제거]. 드라이브 연결 해제, 서버 로그아웃, 프로그램·rclone·자동 실행·사용자 데이터(로그인 정보, 캐시, 로그) 삭제, **함께 설치했던 WinFsp도 제거**합니다 (DocVault 설치 전부터 있던 WinFsp는 다른 프로그램을 위해 남김) |
 | 다른 사람 계정으로 바꾸기 | 명령 프롬프트에서 `"C:\Program Files\DocVault\docvault-agent.exe" logout` 실행 후 PC 재로그인 |
 | 업데이트 | 새 `docvault-setup.exe`를 서버 `downloads` 폴더에 넣고, 직원 PC에서 다시 설치 |
 | 로그 위치 | `%LOCALAPPDATA%\DocVault\logs\` |
