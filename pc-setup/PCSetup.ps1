@@ -1632,7 +1632,20 @@ public struct RECT { public int Left; public int Top; public int Right; public i
     }
 
     # --- 드라이버 / 윈도우 업데이트 ----------------------------------------------
+    # 진행 상황 표시판 / 진행 순서 창의 '윈도우 업데이트' 줄에 상세 진행 표시 (백그라운드 업데이트일 때)
+    function Set-UpdateProgress([string]$Text) {
+        if ($Plan.Background) { Set-TaskState 'update' 'running' $Text }
+    }
+
+    function Get-ShortTitle([string]$Title) {
+        if ($Title -match '\((KB\d+)\)') { $kb = $matches[1] } else { $kb = '' }
+        $t = if ($Title.Length -gt 28) { $Title.Substring(0, 28) + '…' } else { $Title }
+        if ($kb -and $t -notmatch $kb) { $t = "$kb $t" }
+        return $t
+    }
+
     function Invoke-WindowsUpdate([string]$Criteria, [string]$Label) {
+        Set-UpdateProgress "$($State.UpdateRoundNow)회차 · 업데이트 검색 중"
         Set-Status "$Label 검색 중... (몇 분 걸릴 수 있습니다)"
         Write-Log "$Label 검색 시작"
         try {
@@ -1654,30 +1667,37 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         }
         if ($updates.Count -eq 0) { Write-Log "${Label}: 설치할 항목이 없습니다." 'OK'; return 0 }
         Write-Log "${Label}: $($updates.Count)개 발견"
+        $okCount = 0
+        $failCount = 0
 
         for ($i = 0; $i -lt $updates.Count; $i++) {
             if ($Sync.Cancel) { Write-Log '중지 요청으로 업데이트 설치를 멈춥니다.' 'WARN'; break }
             $u = $updates[$i]
             Set-StepProgress $i $updates.Count
             Set-Status "$Label 설치 중 ($($i + 1)/$($updates.Count)): $($u.Title)"
+            $head = "$($State.UpdateRoundNow)회차 · $($i + 1)/$($updates.Count)"
+            $tail = "(완료 $okCount, 실패 $failCount) $(Get-ShortTitle $u.Title)"
             try {
                 if (-not $u.EulaAccepted) { $u.AcceptEula() }
                 $coll = New-Object -ComObject Microsoft.Update.UpdateColl
                 [void]$coll.Add($u)
                 if (-not $u.IsDownloaded) {
+                    Set-UpdateProgress "$head 내려받는 중 $tail"
                     $downloader = $session.CreateUpdateDownloader()
                     $downloader.Updates = $coll
                     [void]$downloader.Download()
                 }
+                Set-UpdateProgress "$head 설치 중 $tail"
                 $installer = $session.CreateUpdateInstaller()
                 $installer.Updates = $coll
                 $r = $installer.Install()
-                if ($r.ResultCode -eq 2 -or $r.ResultCode -eq 3) { Write-Log "설치 완료: $($u.Title)" 'OK' }
-                else { Write-Log "설치 실패 (결과 코드 $($r.ResultCode)): $($u.Title)" 'ERROR' }
+                if ($r.ResultCode -eq 2 -or $r.ResultCode -eq 3) { Write-Log "설치 완료: $($u.Title)" 'OK'; $okCount++ }
+                else { Write-Log "설치 실패 (결과 코드 $($r.ResultCode)): $($u.Title)" 'ERROR'; $failCount++ }
                 if ($r.RebootRequired) { $Sync.RebootRequired = $true; $State.UpdateReboot = $true }
             }
-            catch { Write-Log "설치 오류: $($u.Title) - $($_.Exception.Message)" 'ERROR' }
+            catch { Write-Log "설치 오류: $($u.Title) - $($_.Exception.Message)" 'ERROR'; $failCount++ }
         }
+        Set-UpdateProgress "$($State.UpdateRoundNow)회차 끝 (완료 $okCount, 실패 $failCount) · 다시 확인 중"
         return $updates.Count
     }
 
@@ -1786,6 +1806,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             }
             if ($Sync.Cancel) { return }
             Write-Log "윈도우 업데이트 $round 회차 (드라이버 포함)"
+            $State.UpdateRoundNow = $round
             $State.UpdateReboot = $false
             $n = Invoke-WindowsUpdate 'IsInstalled=0 and IsHidden=0' '윈도우 업데이트'
             if ($n -lt 0) { Add-Notice '윈도우 업데이트 검색에 실패했습니다. 인터넷 연결을 확인하고 설정 > Windows 업데이트 에서 진행하세요.'; return }
@@ -1802,7 +1823,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
     # 프로그램 설치와 동시에 진행하도록 윈도우 업데이트를 별도 런스페이스에서 실행
     function Start-BackgroundUpdate {
         $bg = [hashtable]::Synchronized(@{
-            Queue = $Sync.Queue; Notices = $Sync.Notices; LogLock = $Sync.LogLock
+            Queue = $Sync.Queue; Notices = $Sync.Notices; LogLock = $Sync.LogLock; TaskStates = $Sync.TaskStates
             Status = '윈도우 업데이트 준비 중'; Percent = 0; StepCount = 1; Done = $false; Cancel = $false
             RebootRequired = $false; NeedReboot = $false; ResumeRound = 0
             Guide = ''; GuideWait = ''; GuideAck = ''
@@ -2184,6 +2205,7 @@ function New-StatusList([int]$X, [int]$Y, [int]$W, [int]$H, [string]$Col1, [int]
     $lv.FullRowSelect = $true
     $lv.MultiSelect = $false
     $lv.HeaderStyle = 'Nonclickable'
+    $lv.ShowItemToolTips = $true
     $lv.Visible = $false
     [void]$lv.Columns.Add($Col1, $W1)
     [void]$lv.Columns.Add('상태', $W - $W1 - 24)
@@ -2595,6 +2617,7 @@ function Set-StatusRow($Item, [string]$Value) {
     if (-not $style) { return }
     $text = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { $style[1] }
     $Item.SubItems[1].Text = "$($style[0]) $text"
+    $Item.ToolTipText = "$($Item.Text) : $text"   # 글자가 잘려도 마우스를 올리면 전체 내용
     $Item.ForeColor = $style[2]
     $Item.BackColor = $style[3]
 }
@@ -2691,6 +2714,7 @@ function Update-OrderWindow {
             if (-not $style) { continue }
             $text = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { $style[1] }
             $it.SubItems[4].Text = "$($style[0]) $text"
+            $it.ToolTipText = $text
             $it.ForeColor = $style[2]
             $it.BackColor = $style[3]
         }
@@ -2707,25 +2731,26 @@ function Show-OrderWindow {
     }
     $f = New-Object System.Windows.Forms.Form
     $f.Text = 'PC 셋팅 - 진행 순서'
-    $f.ClientSize = New-Object System.Drawing.Size(820, 520)
+    $f.ClientSize = New-Object System.Drawing.Size(1000, 520)
     $f.StartPosition = 'CenterParent'
     $f.Font = $Font
     $f.ShowInTaskbar = $false
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Text = '체크한 작업이 아래 번호 순서대로 실행됩니다. (회색 = 체크 안 함)'
     $lbl.Location = New-Object System.Drawing.Point(12, 10)
-    $lbl.Size = New-Object System.Drawing.Size(796, 20)
+    $lbl.Size = New-Object System.Drawing.Size(976, 20)
     $lv = New-Object System.Windows.Forms.ListView
     $lv.View = 'Details'
     $lv.FullRowSelect = $true
     $lv.HeaderStyle = 'Nonclickable'
     $lv.Location = New-Object System.Drawing.Point(12, 34)
-    $lv.Size = New-Object System.Drawing.Size(796, 440)
+    $lv.Size = New-Object System.Drawing.Size(976, 440)
+    $lv.ShowItemToolTips = $true
     $lv.Anchor = 'Top, Bottom, Left, Right'
-    foreach ($col in @(@('순서', 48), @('작업', 250), @('분류', 95), @('설명', 250), @('상태', 130))) { [void]$lv.Columns.Add($col[0], $col[1]) }
+    foreach ($col in @(@('순서', 48), @('작업', 230), @('분류', 90), @('설명', 230), @('상태', 355))) { [void]$lv.Columns.Add($col[0], $col[1]) }
     $btnClose = New-Object System.Windows.Forms.Button
     $btnClose.Text = '닫기'
-    $btnClose.Location = New-Object System.Drawing.Point(708, 482)
+    $btnClose.Location = New-Object System.Drawing.Point(888, 482)
     $btnClose.Size = New-Object System.Drawing.Size(100, 30)
     $btnClose.Anchor = 'Bottom, Right'
     $btnClose.Add_Click({ $script:OrderForm.Hide() })
