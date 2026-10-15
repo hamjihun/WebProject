@@ -704,6 +704,8 @@ public struct POINT { public int X; public int Y; }
                     }
                     Invoke-UIButton $btn
                     Write-Log "${name}: [$bn] 자동 클릭" 'OK'
+                    # 재부팅 버튼을 눌렀으면 남은 작업은 재부팅 후 이어서 (지금 끝내면서 이어하기 예약을 지우지 않도록)
+                    if ($needWait) { $Sync.RebootStarted = $true }
                     Move-AutoStep $Job
                     return
                 }
@@ -1252,12 +1254,25 @@ public struct POINT { public int X; public int Y; }
             catch { Write-Log "작업표시줄: $($item.Desc) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
         if (@($t.unpin).Count -gt 0) {
+            try { Close-Leftovers } catch { }
             try { Remove-TaskbarPins @($t.unpin) } catch { Write-Log "작업표시줄 아이콘 제거 실패 - $($_.Exception.Message)" 'ERROR' }
         }
         $State.RestartExplorer = $true
     }
 
     # 작업표시줄에 고정된 아이콘 제거 (메일, Microsoft Store, 반디집 등)
+    # 설치 뒤에 열려 남아 있는 프로그램 창 닫기 (예: 반디집 '환경 설정' 창이 작업표시줄에 남는 것)
+    function Close-Leftovers {
+        foreach ($pn in @($Cfg.taskbar.closeProcesses | Where-Object { $_ })) {
+            $procs = @(Get-Process -Name $pn -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -ne 0 })
+            if ($procs.Count -eq 0) { continue }
+            foreach ($p in $procs) { try { [void]$p.CloseMainWindow() } catch { } }
+            Start-Sleep -Seconds 2
+            foreach ($p in $procs) { try { if (-not $p.HasExited) { $p.Kill() } } catch { } }
+            Write-Log "작업표시줄에 남아 있던 $pn 창을 닫았습니다." 'OK'
+        }
+    }
+
     function Remove-TaskbarPins([string[]]$Patterns) {
         $removed = @()
         $shell = New-Object -ComObject Shell.Application
@@ -2165,6 +2180,8 @@ public struct POINT { public int X; public int Y; }
                 # 문서중앙화 설치가 PC를 재부팅해도 남은 작업(정품 인증 확인 등)을 이어서 하도록 미리 예약
                 Restart-Explorer
                 $after = @($Plan.Steps | Select-Object -Skip ($s + 1) | ForEach-Object { $_.Id })
+                # 남은 작업이 없어도 재부팅 후 프로그램이 다시 떠서 마무리 체크리스트를 보여주도록
+                if ($after.Count -eq 0) { $after = @('activation') }
                 try { Register-Resume $after 0 } catch { Write-Log "이어하기 예약 실패: $($_.Exception.Message)" 'WARN' }
             }
             if (-not $Plan.Background) { Write-Log "===== $($step.Title) =====" }
@@ -2203,6 +2220,14 @@ public struct POINT { public int X; public int Y; }
                 elseif ([int]$Sync.WarnCount -gt $warn0) { Set-TaskState $step.Id 'warn' '확인 필요 (로그 참고)' }
                 else { Set-TaskState $step.Id 'done' }
             }
+
+            # 문서중앙화가 재부팅을 시작함 → 여기서 멈추고 로그인 후 남은 작업부터 이어서
+            if ($step.Id -eq 'docCentral' -and $Sync.RebootStarted) {
+                Write-Log '문서중앙화 설치로 재부팅합니다. 로그인하면 남은 작업을 자동으로 이어서 진행합니다.' 'OK'
+                $Sync.ResumeRequested = $true
+                $stoppedAt = $s + 1
+                break
+            }
         }
 
         if ($Plan.Background) {
@@ -2210,6 +2235,11 @@ public struct POINT { public int X; public int Y; }
             if ($State.ResumeHere) { $Sync.NeedReboot = $true; $Sync.ResumeRound = $State.ResumeRound }
             Write-Log '윈도우 업데이트 작업 끝'
             return
+        }
+
+        # 설치가 다 끝난 뒤 작업표시줄에 남은 창/아이콘 정리 (예: 반디집)
+        if (-not $Sync.RebootStarted -and -not $Sync.Cancel -and ($Plan.Steps | Where-Object { $_.Id -eq 'taskbar' })) {
+            try { Close-Leftovers; Remove-TaskbarPins @($Cfg.taskbar.unpin) } catch { }
         }
 
         # 모든 작업 뒤 (문서중앙화가 없을 때): 업데이트 마무리 확인
@@ -3036,7 +3066,7 @@ function Update-ChecklistActivation {
 $btnCheck.Add_Click({ Show-Checklist })
 
 # 윈도우 업데이트 재부팅: 묻지 않고 카운트다운 후 자동 재부팅 (취소만 가능)
-function Show-RebootCountdown([int]$Seconds) {
+function Show-RebootCountdown([int]$Seconds, [string]$Reason = '윈도우 업데이트를 적용하기 위해') {
     $f = New-Object System.Windows.Forms.Form
     $f.Text = 'PC 셋팅 - 자동 재부팅'
     $f.ClientSize = New-Object System.Drawing.Size(440, 170)
@@ -3061,10 +3091,11 @@ function Show-RebootCountdown([int]$Seconds) {
     $btnCancel.DialogResult = 'Cancel'
     $f.Controls.AddRange(@($lbl, $btnNow, $btnCancel))
     $script:RebootLeft = $Seconds
+    $script:RebootReason = $Reason
     $script:RebootLabel = $lbl
     $script:RebootForm = $f
     $script:RebootSetText = {
-        $script:RebootLabel.Text = "윈도우 업데이트를 적용하기 위해 $($script:RebootLeft)초 후 자동으로 재부팅합니다.`n설치 중인 프로그램이 없는 것을 확인했습니다.`n`n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다.`n(USB 는 꽂아둔 채로 두세요)"
+        $script:RebootLabel.Text = "$($script:RebootReason) $($script:RebootLeft)초 후 자동으로 재부팅합니다.`n설치 중인 프로그램이 없는 것을 확인했습니다.`n`n재부팅 후 로그인하면 남은 작업을 자동으로 이어서 진행합니다.`n(USB 는 꽂아둔 채로 두세요)"
     }
     & $script:RebootSetText
     $t = New-Object System.Windows.Forms.Timer
@@ -3212,7 +3243,7 @@ function Start-Setup([bool]$Auto = $false) {
         StepCount       = 1
         Done            = $false
         RebootRequired  = $false
-        ResumeRequested = $false
+        ResumeRequested = $false; RebootStarted = $false
         Guide           = ''
         GuideWait       = ''
         GuideAck        = ''
@@ -3311,7 +3342,9 @@ $timer.Add_Tick({
     # 윈도우 업데이트 재부팅: 로그인하면 자동으로 이어서 진행
     if ($script:Sync.ResumeRequested) {
         $sec = if ($Config.windowsUpdate.autoRebootSeconds) { [int]$Config.windowsUpdate.autoRebootSeconds } else { 15 }
-        if (Show-RebootCountdown $sec) { Restart-Computer -Force }
+        # 문서중앙화가 이미 재부팅을 시작했으면 보통 이 창이 뜨기 전에 꺼짐. 재부팅이 안 되면 카운트다운 후 직접 재부팅
+        $why = if ($script:Sync.RebootStarted) { '문서중앙화 설치를 마무리하기 위해' } else { '윈도우 업데이트를 적용하기 위해' }
+        if (Show-RebootCountdown $sec $why) { Restart-Computer -Force }
         else {
             [System.Windows.Forms.MessageBox]::Show("재부팅을 취소했습니다.`n직접 재부팅하면 로그인 후 남은 작업을 자동으로 이어서 진행합니다.", 'PC 셋팅', 'OK', 'Information') | Out-Null
         }

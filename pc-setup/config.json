@@ -198,6 +198,9 @@
       "Microsoft Store",
       "*Bandizip*",
       "*반디집*"
+    ],
+    "closeProcesses": [
+      "Bandizip"
     ]
   },
   "desktopIcons": [
