@@ -896,6 +896,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         $needUia = @($Jobs | Where-Object { $_.P.auto }).Count -gt 0
         if ($needUia) { Initialize-UIA }
         $next = Get-Date
+        $batchStart = Get-Date
         $total = $Jobs.Count
         while ($true) {
             $open = @($Jobs | Where-Object { $_.State -ne 'done' })
@@ -931,7 +932,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
 
             $done = @($Jobs | Where-Object { $_.State -eq 'done' }).Count
             $names = (@($Jobs | Where-Object { $_.State -in 'running', 'waitAck' } | ForEach-Object { $_.P.name })) -join ', '
-            Set-Status "프로그램 설치 중: $names  (완료 $done/$total, 대기 $($pending.Count))"
+            Set-Status "프로그램 설치 중: $names  (완료 $done/$total, 대기 $($pending.Count)) · $(Get-Eta $batchStart $done $total)"
             Set-StepProgress $done $total
             Start-Sleep -Milliseconds 800
         }
@@ -1633,6 +1634,16 @@ public struct RECT { public int Left; public int Top; public int Right; public i
 
     # --- 드라이버 / 윈도우 업데이트 ----------------------------------------------
     # 진행 상황 표시판 / 진행 순서 창의 '윈도우 업데이트' 줄에 상세 진행 표시 (백그라운드 업데이트일 때)
+    # 남은 시간: 지금까지 끝난 항목의 평균 시간 × 남은 개수
+    function Get-Eta([datetime]$Start, [int]$Done, [int]$Total) {
+        if ($Done -le 0) { return '남은 시간 계산 중' }
+        $sec = ((Get-Date) - $Start).TotalSeconds / $Done * ($Total - $Done)
+        if ($sec -lt 60) { return '1분 이내 남음' }
+        $m = [math]::Ceiling($sec / 60)
+        if ($m -ge 60) { return "약 $([math]::Floor($m / 60))시간 $($m % 60)분 남음" }
+        return "약 $($m)분 남음"
+    }
+
     function Set-UpdateProgress([string]$Text) {
         if ($Plan.Background) { Set-TaskState 'update' 'running' $Text }
     }
@@ -1668,15 +1679,17 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         if ($updates.Count -eq 0) { Write-Log "${Label}: 설치할 항목이 없습니다." 'OK'; return 0 }
         Write-Log "${Label}: $($updates.Count)개 발견"
         $okCount = 0
+        $updStart = Get-Date
         $failCount = 0
 
         for ($i = 0; $i -lt $updates.Count; $i++) {
             if ($Sync.Cancel) { Write-Log '중지 요청으로 업데이트 설치를 멈춥니다.' 'WARN'; break }
             $u = $updates[$i]
             Set-StepProgress $i $updates.Count
-            Set-Status "$Label 설치 중 ($($i + 1)/$($updates.Count)): $($u.Title)"
+            Set-Status "$Label 설치 중 ($($i + 1)/$($updates.Count), $(Get-Eta $updStart $i $updates.Count)): $($u.Title)"
             $head = "$($State.UpdateRoundNow)회차 · $($i + 1)/$($updates.Count)"
-            $tail = "(완료 $okCount, 실패 $failCount) $(Get-ShortTitle $u.Title)"
+            $eta = Get-Eta $updStart $i $updates.Count
+            $tail = "(완료 $okCount, 실패 $failCount, $eta) $(Get-ShortTitle $u.Title)"
             try {
                 if (-not $u.EulaAccepted) { $u.AcceptEula() }
                 $coll = New-Object -ComObject Microsoft.Update.UpdateColl
@@ -2927,6 +2940,7 @@ function Start-Setup([bool]$Auto = $false) {
     Update-StatusView
 
     $txtLog.Clear()
+    $script:RunStart = Get-Date
     foreach ($c in $controlsToLock) { $c.Enabled = $false }
     $btnStop.Enabled = $true
     $script:Running = $true
@@ -2952,6 +2966,10 @@ $timer.Add_Tick({
     # 줄마다 길이를 잘라서 두 줄이 서로 밀리지 않게 (전체 내용은 마우스를 올리면 보임)
     $cut = { param($t) $t = [string]$t; if ($t.Length -gt 85) { $t.Substring(0, 84) + '…' } else { $t } }
     $full = [string]$script:Sync.Status
+    if ($script:RunStart -and $script:Running) {
+        $el = (Get-Date) - $script:RunStart
+        $full = ('[경과 {0}:{1:00}:{2:00}]  ' -f [int][math]::Floor($el.TotalHours), $el.Minutes, $el.Seconds) + $full
+    }
     $status = & $cut $full
     $bg = $script:Sync.Bg
     if ($bg -and -not $bg.Done) {
