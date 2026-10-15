@@ -1439,6 +1439,22 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         if ($removed.Count -gt 0) { Write-Log "${Label}: 잠겨 있던 설정 $($removed.Count)개를 직원이 바꿀 수 있게 풀었습니다." 'OK' }
     }
 
+    # 회사 즐겨찾기: 즐겨찾기 모음 맨 앞에 폴더(예: '회사')로 추가 (엣지 ManagedFavorites / 크롬 ManagedBookmarks)
+    function Set-CompanyBookmarks([string]$Browser, [string]$Label) {
+        $list = @($Cfg.browser.bookmarks | Where-Object { $_.url })
+        if ($list.Count -eq 0) { return }
+        $folder = if ($Cfg.browser.bookmarkFolder) { [string]$Cfg.browser.bookmarkFolder } else { '회사' }
+        $items = @([ordered]@{ toplevel_name = $folder }) + @($list | ForEach-Object { [ordered]@{ name = [string]$_.name; url = [string]$_.url } })
+        $json = ConvertTo-Json -InputObject $items -Compress -Depth 4
+        if ($Browser -eq 'chrome') { $key = 'HKLM:\SOFTWARE\Policies\Google\Chrome'; $value = 'ManagedBookmarks' }
+        else { $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'; $value = 'ManagedFavorites' }
+        try {
+            Set-Reg $key $value $json 'String'
+            Write-Log "${Label}: 즐겨찾기 '$folder' 폴더에 $(($list | ForEach-Object { $_.name }) -join ', ') 추가" 'OK'
+        }
+        catch { Write-Log "${Label}: 즐겨찾기 추가 실패 - $($_.Exception.Message)" 'ERROR' }
+    }
+
     function Set-EdgeSettings {
         $key = Get-PolicyRoot 'edge'
         $items = [ordered]@{
@@ -1451,6 +1467,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             try { Set-Reg $key $name 1; Write-Log "엣지: $($items[$name])" 'OK' }
             catch { Write-Log "엣지: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
+        Set-CompanyBookmarks 'edge' '엣지'
         # 직원이 바꿀 수 있게: 예전에 고정값(조직에서 관리)으로 넣은 것과 셋팅 중에만 필요한 설정은 지움
         $extra = @('StartupBoostEnabled', 'BackgroundModeEnabled')
         Clear-LockedPolicies 'edge' (@($items.Keys) + $extra) '엣지'
@@ -1478,6 +1495,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             try { Set-Reg $key $name 1; Write-Log "크롬: $($items[$name])" 'OK' }
             catch { Write-Log "크롬: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
+        Set-CompanyBookmarks 'chrome' '크롬'
         Clear-LockedPolicies 'chrome' @($items.Keys) '크롬'
         Close-Browser 'chrome' '크롬'
     }

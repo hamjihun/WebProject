@@ -271,7 +271,14 @@
     ],
     "enforceSettings": false,
     "hideEdgeFirstRun": true,
-    "closeAfterSettings": true
+    "closeAfterSettings": true,
+    "bookmarkFolder": "회사",
+    "bookmarks": [
+      {
+        "name": "그룹웨어",
+        "url": "http://gw.ilsancorp.co.kr"
+      }
+    ]
   },
   "printer": {
     "driverFolder": "5. IV C2263N(김해2F 1.133, 1F 1.11 부산0.7)\\C3060드라이버",
