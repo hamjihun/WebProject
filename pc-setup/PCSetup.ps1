@@ -272,7 +272,15 @@ $Worker = {
 
     function Find-UIControl($Window, $ControlType) {
         $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $ControlType)
-        return @($Window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond))
+        $all = @($Window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond))
+        # 목록 항목은 스크롤로 가려져 있어도 처리해야 하므로 그대로 둠
+        if ($ControlType -in [System.Windows.Automation.ControlType]::ListItem, [System.Windows.Automation.ControlType]::TreeItem, [System.Windows.Automation.ControlType]::DataItem) { return $all }
+        # 창 자체가 최소화 등으로 안 보이면 걸러내지 않음
+        $winOff = $false
+        try { $winOff = $Window.Current.IsOffscreen } catch { }
+        if ($winOff) { return $all }
+        # 화면에 실제로 보이는 것만 (InstallShield 등은 다른 페이지의 [설치]/[닫기] 버튼을 숨긴 채 갖고 있음)
+        return @($all | Where-Object { try { -not $_.Current.IsOffscreen } catch { $false } })
     }
 
     # 창 제목줄의 최소화/최대화/닫기(X) 버튼인지 (이름이 '닫기' 라서 설치 창을 닫아버리는 것 방지)
@@ -478,7 +486,10 @@ public struct RECT { public int Left; public int Top; public int Right; public i
 '@
         }
         # 화면 배율(125%, 150%)에서도 좌표가 맞도록 이 작업 스레드만 DPI 인식으로
-        try { [void][PCSetup.Mouse]::SetThreadDpiAwarenessContext([IntPtr](-4)) } catch { }
+        # (클릭이 끝나면 원래대로 되돌림 - 그대로 두면 이후 창/화면이 작게 보일 수 있음)
+        $oldCtx = [IntPtr]::Zero
+        try { $oldCtx = [PCSetup.Mouse]::SetThreadDpiAwarenessContext([IntPtr](-4)) } catch { }
+        try {
         $h = [IntPtr]$Window.Current.NativeWindowHandle
         [void][PCSetup.Mouse]::ShowWindow($h, 9)
         [void][PCSetup.Mouse]::SetForegroundWindow($h)
@@ -494,6 +505,10 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             [PCSetup.Mouse]::mouse_event(0x04, 0, 0, 0, [IntPtr]::Zero)   # 뗌
             Write-Log "${Name}: 창 위치 ($($pt[0]), $($pt[1])) 클릭" 'OK'
             Start-Sleep -Milliseconds 800
+        }
+        }
+        finally {
+            if ($oldCtx -ne [IntPtr]::Zero) { try { [void][PCSetup.Mouse]::SetThreadDpiAwarenessContext($oldCtx) } catch { } }
         }
     }
 
@@ -843,6 +858,8 @@ public struct RECT { public int Left; public int Top; public int Right; public i
             if ($Job.P.dismiss -and ((Get-Date) - $Job.LastDismiss).TotalSeconds -ge 1) {
                 foreach ($w in $mine) {
                     try {
+                        # dismissWhen 이 있으면 그 문구가 있는 창에서만 (예: '취소하시겠습니까?' → 아니오)
+                        if ($Job.P.dismissWhen -and -not (Test-WindowText $w $Job.P.dismissWhen)) { continue }
                         $b = Find-UIButton $w $Job.P.dismiss
                         if ($b) {
                             $bn = $b.Current.Name
@@ -2064,7 +2081,7 @@ public struct RECT { public int Left; public int Top; public int Right; public i
         if (-not $path -or -not (Test-Path -LiteralPath $path)) { throw '문서중앙화 설치파일을 찾지 못했습니다.' }
 
         $p = [pscustomobject]@{
-            name = '문서중앙화'; args = $dc.args; guide = $dc.guide; auto = $dc.auto; dismiss = $dc.dismiss
+            name = '문서중앙화'; args = $dc.args; guide = $dc.guide; auto = $dc.auto; dismiss = $dc.dismiss; dismissWhen = $dc.dismissWhen
         }
         Write-Log "문서중앙화 설치 시작: $path (재부팅이 여러 번 될 수 있습니다)"
         Invoke-InstallJobs @(New-InstallJob $p $path) 0 $false
