@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -20,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -217,7 +219,7 @@ func main() {
 		err = fmt.Errorf("알 수 없는 명령: %s (run | install | uninstall | start | stop | reset-password | maintain)", cmd)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "오류:", err)
+		reportStartupError(err)
 		os.Exit(1)
 	}
 }
@@ -263,4 +265,29 @@ func maintainNow() error {
 	fmt.Printf("휴지통 영구삭제 %d건, 이전 버전 정리 %d건, 반출 만료 %d건, 파일내용 정리 %d건\n",
 		r.PurgedItems, r.PrunedVersions, r.ExpiredExports, r.DeletedBlobs)
 	return err
+}
+
+// reportStartupError shows why the server stopped and keeps the window open,
+// so a double-clicked server does not just flash and disappear. The message
+// is also saved next to the program.
+func reportStartupError(err error) {
+	msg := "오류: " + err.Error()
+	low := strings.ToLower(err.Error())
+	if strings.Contains(err.Error(), "store_dir") || strings.Contains(low, "access is denied") ||
+		strings.Contains(err.Error(), "액세스") || strings.Contains(low, "network") || strings.Contains(err.Error(), "네트워크") {
+		msg += "\n\n[확인할 것]\n" +
+			" 1. 탐색기 주소창에 docvault.json의 store_dir 경로(예: \\\\192.168.50.201\\DocVaultStore)를 입력해 열리는지\n" +
+			" 2. 열릴 때 NAS 계정으로 로그인하고 '자격 증명 기억'을 체크했는지\n" +
+			" 3. 그 계정에 이 폴더 쓰기 권한이 있는지 (새 파일을 만들어 보기)\n" +
+			" 4. docvault.json에서 역슬래시를 두 번씩 썼는지: \"\\\\\\\\192.168.50.201\\\\DocVaultStore\""
+	} else if strings.Contains(low, "only one usage of each socket") || strings.Contains(low, "address already in use") {
+		msg += "\n\n[확인할 것] 서버가 이미 실행 중이거나 다른 프로그램이 같은 포트(listen)를 쓰고 있습니다.\n" +
+			" 작업 관리자에서 docvault-server.exe가 이미 떠 있는지 확인하세요."
+	} else if strings.Contains(err.Error(), "docvault.json") {
+		msg += "\n\n[확인할 것] docvault.json 형식 오류입니다. 쉼표(,)와 따옴표(\"), 역슬래시(\\\\) 개수를 확인하세요."
+	}
+	fmt.Fprintln(os.Stderr, msg)
+	os.WriteFile(filepath.Join(exeDir(), "시작오류.txt"), []byte(time.Now().Format("2006-01-02 15:04:05")+"\r\n"+strings.ReplaceAll(msg, "\n", "\r\n")+"\r\n"), 0o644)
+	fmt.Fprintln(os.Stderr, "\n(이 내용은 서버 폴더의 시작오류.txt 에도 저장했습니다)\n엔터를 누르면 창이 닫힙니다.")
+	bufio.NewReader(os.Stdin).ReadString('\n')
 }
