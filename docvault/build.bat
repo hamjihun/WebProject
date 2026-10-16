@@ -12,7 +12,7 @@ if not exist %P%\rclone.zip powershell -NoProfile -Command "Invoke-WebRequest -U
 if not exist %P%\winfsp.msi powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -OutFile '%P%\winfsp.msi' 'https://github.com/winfsp/winfsp/releases/download/%WINFSP_TAG%/%WINFSP_MSI%'" || goto :err
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w" -o %P%\docvault-agent.exe .\cmd\agent || goto :err
+go build -trimpath -ldflags "-s -w -H windowsgui" -o %P%\docvault-agent.exe .\cmd\agent || goto :err
 go build -trimpath -ldflags "-s -w" -o dist\server\docvault-server.exe .\cmd\server || goto :err
 go build -trimpath -ldflags "-s -w" -o dist\server\downloads\docvault-setup.exe .\cmd\setup || goto :err
 if not exist dist\agent mkdir dist\agent

@@ -33,7 +33,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 type Config struct {
 	Server   string `json:"server"`    // e.g. http://docvault.ilsan.local:8080
@@ -230,6 +230,18 @@ func cmdLogin(cfg *Config) error {
 	return errors.New("시간이 초과되었습니다. 다시 실행하세요")
 }
 
+// passwordLogin signs this PC in with an ID and password and saves the session.
+func passwordLogin(cfg *Config, user, pw string) error {
+	host, _ := os.Hostname()
+	var out struct{ Token string }
+	err := newClient(cfg, "").call("POST", "/api/login",
+		map[string]string{"username": strings.TrimSpace(user), "password": pw, "kind": "agent", "device": host}, &out)
+	if err != nil {
+		return err
+	}
+	return saveToken(out.Token)
+}
+
 // cmdPasswordLogin is the console fallback: docvault-agent login --password
 func cmdPasswordLogin(cfg *Config) error {
 	if err := ensureServer(cfg); err != nil {
@@ -244,16 +256,9 @@ func cmdPasswordLogin(cfg *Config) error {
 		if err != nil {
 			pw = []byte(prompt(in, ""))
 		}
-		host, _ := os.Hostname()
-		var out struct{ Token string }
-		err = newClient(cfg, "").call("POST", "/api/login",
-			map[string]string{"username": user, "password": string(pw), "kind": "agent", "device": host}, &out)
-		if err != nil {
+		if err := passwordLogin(cfg, user, string(pw)); err != nil {
 			fmt.Println("로그인 실패:", err)
 			continue
-		}
-		if err := saveToken(out.Token); err != nil {
-			return err
 		}
 		fmt.Println("로그인했습니다.")
 		return nil
@@ -266,8 +271,12 @@ func cmdLogout(cfg *Config) error {
 		newClient(cfg, tok).call("POST", "/api/logout", map[string]string{}, nil)
 	}
 	os.Remove(tokenPath())
+	// Disconnect the drives now instead of waiting for the next heartbeat.
+	stopOtherAgents()
 	os.RemoveAll(cfg.CacheDir)
-	fmt.Println("로그아웃했습니다. 실행 중인 에이전트는 1분 안에 드라이브 연결을 해제합니다.")
+	fmt.Println("로그아웃했습니다. 문서 드라이브 연결을 해제했습니다.")
+	fmt.Println("다시 사용하려면 시작 메뉴의 'DocVault 문서 드라이브'를 실행하세요.")
+	time.Sleep(3 * time.Second)
 	return nil
 }
 
@@ -431,6 +440,35 @@ func (a *agent) mounted() string {
 	return strings.Join(s, ", ")
 }
 
+func openLog() func() {
+	logDir := filepath.Join(stateDir(), "logs")
+	os.MkdirAll(logDir, 0o700)
+	f, err := os.OpenFile(filepath.Join(logDir, "agent.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return func() {}
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	return func() { f.Close() }
+}
+
+func newAgent(cfg *Config) *agent {
+	return &agent{cfg: cfg, client: newClient(cfg, loadToken()), mounts: map[string]*mount{}}
+}
+
+// heartbeat reports to the server and makes the mounted drives match the
+// drives the user may access now. It returns errUnauthorized when the
+// session has ended.
+func (a *agent) heartbeat() ([]Drive, error) {
+	var drives []Drive
+	err := a.client.call("POST", "/api/agent/heartbeat", map[string]string{"version": version, "mounted": a.mounted()}, &drives)
+	if err != nil {
+		return nil, err
+	}
+	a.sync(drives)
+	a.sync(drives) // sync stops crashed mounts; start them again right away
+	return drives, nil
+}
+
 func cmdRun(cfg *Config) error {
 	if cfg.Server == "" || loadToken() == "" {
 		fmt.Println("DocVault 문서 드라이브 – 이 PC를 계정에 연결합니다.")
@@ -444,36 +482,30 @@ func cmdRun(cfg *Config) error {
 	if _, err := os.Stat(cfg.Rclone); err != nil {
 		return fmt.Errorf("rclone을 찾을 수 없습니다: %s (agent.json의 rclone 경로 확인)", cfg.Rclone)
 	}
-	logDir := filepath.Join(stateDir(), "logs")
-	os.MkdirAll(logDir, 0o700)
-	if f, err := os.OpenFile(filepath.Join(logDir, "agent.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-		defer f.Close()
-		log.SetOutput(io.MultiWriter(os.Stderr, f))
-	}
-	// Runs at Windows logon: keep working in the background without a window.
-	hideConsole()
-	a := &agent{cfg: cfg, client: newClient(cfg, loadToken()), mounts: map[string]*mount{}}
+	defer openLog()()
+	a := newAgent(cfg)
 	os.RemoveAll(cfg.CacheDir)
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	defer a.stopAll()
 	log.Printf("DocVault 에이전트 %s 시작 (서버 %s)", version, cfg.Server)
 	for {
-		var drives []Drive
-		err := a.client.call("POST", "/api/agent/heartbeat", map[string]string{"version": version, "mounted": a.mounted()}, &drives)
+		_, err := a.heartbeat()
 		switch {
 		case errors.Is(err, errUnauthorized):
-			log.Printf("%v → 드라이브 연결 해제", err)
+			// The session ended on the server (expired, revoked by an admin,
+			// server reset): disconnect, then ask to connect this PC again.
+			log.Printf("%v → 드라이브 연결 해제 후 다시 연결 요청", err)
 			a.stopAll()
 			os.Remove(tokenPath())
-			return err
+			if err := cmdLogin(cfg); err != nil {
+				return err
+			}
+			a.client = newClient(cfg, loadToken())
+			continue
 		case err != nil:
 			// Server unreachable: keep current drives; rclone retries on its own.
 			log.Printf("서버 연결 실패: %v", err)
-		default:
-			a.sync(drives)
-			// sync stops crashed mounts; start them again right away
-			a.sync(drives)
 		}
 		select {
 		case <-sig:
@@ -494,7 +526,7 @@ func main() {
 		}
 		switch cmd {
 		case "run":
-			err = cmdRun(cfg)
+			err = runApp(cfg)
 		case "login":
 			if len(os.Args) > 2 && os.Args[2] == "--password" {
 				err = cmdPasswordLogin(cfg)

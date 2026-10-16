@@ -51,6 +51,10 @@ func startupLink() string {
 	return filepath.Join(os.Getenv("ProgramData"), `Microsoft\Windows\Start Menu\Programs\StartUp`, appName+".lnk")
 }
 
+func logoutLink() string {
+	return filepath.Join(os.Getenv("ProgramData"), `Microsoft\Windows\Start Menu\Programs`, "DocVault 로그아웃.lnk")
+}
+
 func startMenuLink() string {
 	return filepath.Join(os.Getenv("ProgramData"), `Microsoft\Windows\Start Menu\Programs`, "DocVault 문서 드라이브.lnk")
 }
@@ -192,10 +196,11 @@ func doInstall() error {
 
 	step(4, "Windows 시작 시 자동 실행 등록")
 	agent := filepath.Join(dir, "docvault-agent.exe")
-	if err := makeShortcut(startupLink(), agent); err != nil {
+	if err := makeShortcut(startupLink(), agent, ""); err != nil {
 		return fmt.Errorf("시작프로그램 등록 실패: %w", err)
 	}
-	makeShortcut(startMenuLink(), agent)
+	makeShortcut(startMenuLink(), agent, "")
+	os.Remove(logoutLink()) // replaced by the menu of the notification-area icon
 	registerUninstall(dir, installedByUs)
 
 	step(5, "DocVault 시작")
@@ -205,8 +210,9 @@ func doInstall() error {
 
 	fmt.Println()
 	fmt.Println("✅ 설치가 끝났습니다.")
-	fmt.Println("   잠시 후 브라우저가 열리면 로그인하고 [이 PC 연결]을 누르세요.")
+	fmt.Println("   잠시 후 DocVault 로그인 창이 뜨면 아이디와 비밀번호를 입력하세요.")
 	fmt.Println("   그다음부터는 Windows를 켤 때마다 드라이브가 자동으로 연결됩니다.")
+	fmt.Println("   작업 표시줄 오른쪽 아래 DocVault 아이콘에서 상태 확인, 로그아웃을 할 수 있습니다.")
 	time.Sleep(8 * time.Second)
 	return nil
 }
@@ -319,10 +325,10 @@ func extractRclone(dst string) error {
 	return errors.New("rclone.zip 안에 rclone.exe가 없습니다")
 }
 
-func makeShortcut(link, target string) error {
+func makeShortcut(link, target, args string) error {
 	os.MkdirAll(filepath.Dir(link), 0o755)
-	ps := fmt.Sprintf(`$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s'); $s.TargetPath='%s'; $s.WorkingDirectory='%s'; $s.Description='DocVault 문서 드라이브'; $s.Save()`,
-		strings.ReplaceAll(link, "'", "''"), strings.ReplaceAll(target, "'", "''"), strings.ReplaceAll(filepath.Dir(target), "'", "''"))
+	ps := fmt.Sprintf(`$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s'); $s.TargetPath='%s'; $s.Arguments='%s'; $s.WorkingDirectory='%s'; $s.Description='DocVault 문서 드라이브'; $s.Save()`,
+		strings.ReplaceAll(link, "'", "''"), strings.ReplaceAll(target, "'", "''"), args, strings.ReplaceAll(filepath.Dir(target), "'", "''"))
 	c := exec.Command("powershell", "-NoProfile", "-Command", ps)
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := c.CombinedOutput()
@@ -382,6 +388,7 @@ func doUninstall() error {
 	fmt.Println("[2/4] 프로그램, 바로가기, 자동 실행 삭제")
 	os.Remove(startupLink())
 	os.Remove(startMenuLink())
+	os.Remove(logoutLink())
 	for _, f := range []string{"docvault-agent.exe", "rclone.exe", "agent.json"} {
 		os.Remove(filepath.Join(dir, f))
 	}

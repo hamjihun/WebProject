@@ -72,26 +72,18 @@ func hideWindow(cmd *exec.Cmd) {
 // WinFsp unmounts the drive when the rclone process ends.
 func stopProcess(cmd *exec.Cmd) { cmd.Process.Kill() }
 
-var (
-	kernel32         = windows.NewLazySystemDLL("kernel32.dll")
-	user32           = windows.NewLazySystemDLL("user32.dll")
-	getConsoleWindow = kernel32.NewProc("GetConsoleWindow")
-	getConsolePList  = kernel32.NewProc("GetConsoleProcessList")
-	showWindow       = user32.NewProc("ShowWindow")
-)
-
-// hideConsole hides the console window, but only when it was opened just for
-// this program (double-click / startup), not a command prompt the user typed in.
-func hideConsole() {
-	var pids [4]uint32
-	if n, _, _ := getConsolePList.Call(uintptr(unsafe.Pointer(&pids[0])), 4); n != 1 {
-		return
-	}
-	if h, _, _ := getConsoleWindow.Call(); h != 0 {
-		showWindow.Call(h, 0) // SW_HIDE
-	}
-}
-
 func openBrowser(url string) {
 	exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+}
+
+// stopOtherAgents ends a running DocVault agent and the drives it mounted.
+func stopOtherAgents() {
+	self := os.Getpid()
+	c := exec.Command("taskkill", "/F", "/FI", fmt.Sprintf("PID ne %d", self), "/IM", "docvault-agent.exe")
+	hideWindow(c)
+	c.Run()
+	c = exec.Command("powershell", "-NoProfile", "-Command",
+		`Get-Process rclone -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '`+exeDir()+`\*' } | Stop-Process -Force`)
+	hideWindow(c)
+	c.Run()
 }

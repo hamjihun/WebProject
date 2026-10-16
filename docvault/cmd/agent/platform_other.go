@@ -37,10 +37,12 @@ func hideWindow(*exec.Cmd) {}
 
 func stopProcess(cmd *exec.Cmd) { cmd.Process.Signal(syscall.SIGTERM) }
 
-func hideConsole() {}
+func runApp(cfg *Config) error { return cmdRun(cfg) }
 
 func openBrowser(url string) {
 	if p, err := exec.LookPath("xdg-open"); err == nil {
 		exec.Command(p, url).Start()
 	}
 }
+
+func stopOtherAgents() {}
