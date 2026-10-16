@@ -14,8 +14,12 @@ var (
 
 // Policy is the block list the PC agent applies for user u: exe name -> kind
 // (copy, messenger, upload, custom).
+// Administrators are never blocked.
 func (v *Vault) Policy(u *User) map[string]string {
 	block := map[string]string{}
+	if u.IsAdmin {
+		return block
+	}
 	add := func(list []string, kind string) {
 		for _, p := range list {
 			block[p] = kind

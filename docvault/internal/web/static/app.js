@@ -549,7 +549,7 @@ const BLOCK_LABELS = {
 async function adminSettings() {
   const s = await api("GET", "/api/admin/settings");
   let h = `<h2>설정</h2><form id="sForm" class="form card" style="padding:18px;max-width:620px">`;
-  h += `<h3 style="margin:0">유출 차단 (PC 프로그램)</h3>`;
+  h += `<h3 style="margin:0">유출 차단 (PC 프로그램)</h3><p class="muted" style="margin:0">일반 사용자에게만 적용됩니다. 관리자 계정은 모두 허용됩니다.</p>`;
   for (const [k, [label, help]] of Object.entries(BLOCK_LABELS)) {
     h += `<label class="row" style="align-items:flex-start"><input type="checkbox" name="${k}" ${s[k] ? "checked" : ""}><span><b>${esc(label)}</b><br><span class="muted">${esc(help)}</span></span></label>`;
   }

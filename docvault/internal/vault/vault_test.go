@@ -377,3 +377,18 @@ func TestMoveIntoOwnSubfolderRejected(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestPolicyBlocksUsersButNotAdmins(t *testing.T) {
+	e := newEnv(t)
+	if p := e.v.Policy(e.admin.User); len(p) != 0 {
+		t.Fatalf("admin should have no blocks: %v", p)
+	}
+	p := e.v.Policy(e.kim.User)
+	if p["kakaotalk.exe"] != "messenger" || p["explorer.exe"] != "copy" {
+		t.Fatalf("user policy %v", p)
+	}
+	e.kim.User.AllowCopy = true
+	if p := e.v.Policy(e.kim.User); p["explorer.exe"] != "" || p["kakaotalk.exe"] != "messenger" {
+		t.Fatalf("copy exemption %v", p)
+	}
+}
