@@ -225,6 +225,7 @@ type gui struct {
 	serverErr bool
 	loginMsg  string
 	balloon   [2]string
+	warn      bool
 	loggedIn  bool
 	stop      chan struct{}
 	refresh   chan struct{}
@@ -271,8 +272,10 @@ func runApp(cfg *Config) error {
 		return err
 	}
 
-	g := &gui{cfg: cfg, ag: newAgent(cfg), refresh: make(chan struct{}, 1)}
+	g := &gui{cfg: cfg, refresh: make(chan struct{}, 1)}
 	ui = g
+	notifyBlocked = func(title, text string) { g.queueWarning(title, text) }
+	g.ag = newAgent(cfg)
 	g.inst, _, _ = pGetModuleHandleW.Call(0)
 	hdc, _, _ := pGetDC.Call(0)
 	dpi, _, _ := pGetDeviceCaps.Call(hdc, logPixelsY)
@@ -403,6 +406,15 @@ func (g *gui) showBalloon(title, text string, warn bool) {
 func (g *gui) queueBalloon(title, text string) {
 	g.mu.Lock()
 	g.balloon = [2]string{title, text}
+	g.warn = false
+	g.mu.Unlock()
+	g.post(wmBalloon)
+}
+
+func (g *gui) queueWarning(title, text string) {
+	g.mu.Lock()
+	g.balloon = [2]string{title, text}
+	g.warn = true
 	g.mu.Unlock()
 	g.post(wmBalloon)
 }
@@ -766,9 +778,9 @@ func trayProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		return 0
 	case wmBalloon:
 		g.mu.Lock()
-		b := g.balloon
+		b, warn := g.balloon, g.warn
 		g.mu.Unlock()
-		g.showBalloon(b[0], b[1], false)
+		g.showBalloon(b[0], b[1], warn)
 		return 0
 	case wmEndSession:
 		if wparam != 0 { // Windows is signing out or shutting down

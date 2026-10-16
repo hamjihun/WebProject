@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
 	is_admin      INTEGER NOT NULL DEFAULT 0,
 	disabled      INTEGER NOT NULL DEFAULT 0,
 	write_blocked INTEGER NOT NULL DEFAULT 0,
+	allow_copy    INTEGER NOT NULL DEFAULT 0,
 	failed_logins INTEGER NOT NULL DEFAULT 0,
 	locked_until  INTEGER NOT NULL DEFAULT 0,
 	created_at    INTEGER NOT NULL
@@ -165,5 +166,35 @@ func Open(path string) (*sql.DB, error) {
 		d.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	// Columns added after the first release: add them to existing databases.
+	for _, c := range []struct{ table, column, def string }{
+		{"users", "allow_copy", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if err := ensureColumn(d, c.table, c.column, c.def); err != nil {
+			d.Close()
+			return nil, err
+		}
+	}
 	return d, nil
+}
+
+func ensureColumn(d *sql.DB, table, column, def string) error {
+	rows, err := d.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var name string
+		rows.Scan(&name)
+		if name == column {
+			found = true
+		}
+	}
+	rows.Close()
+	if found {
+		return nil
+	}
+	_, err = d.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err
 }

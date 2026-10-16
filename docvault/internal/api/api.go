@@ -60,6 +60,8 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/exports/{id}/download", s.auth(s.downloadExport))
 
 	mux.HandleFunc("POST /api/agent/heartbeat", s.auth(s.heartbeat))
+	mux.HandleFunc("GET /api/agent/policy", s.auth(s.agentPolicy))
+	mux.HandleFunc("POST /api/agent/event", s.auth(s.agentEvent))
 	s.registerPairing(mux)
 
 	mux.HandleFunc("GET /api/admin/users", s.admin(s.listUsers))
@@ -696,17 +698,41 @@ func (s *API) revokeSession(w http.ResponseWriter, r *http.Request, c *ctx) {
 }
 
 func (s *API) getSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
-	writeJSON(w, http.StatusOK, s.V.Settings())
+	out := map[string]any{}
+	for k, v := range s.V.Settings() {
+		out[k] = v
+	}
+	out["block_extra_processes"] = s.V.StringSetting("block_extra_processes")
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
-	var in map[string]int64
+	var in map[string]json.RawMessage
 	if err := readJSON(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
 	cur := s.V.Settings()
-	for k, v := range in {
+	for k, raw := range in {
+		if k == "block_extra_processes" {
+			var v string
+			if json.Unmarshal(raw, &v) != nil {
+				fail(w, vault.ErrBadRequest)
+				return
+			}
+			if v != s.V.StringSetting(k) {
+				if err := s.V.SetStringSetting(c.a, k, v); err != nil {
+					fail(w, err)
+					return
+				}
+			}
+			continue
+		}
+		var v int64
+		if json.Unmarshal(raw, &v) != nil {
+			fail(w, vault.ErrBadRequest)
+			return
+		}
 		if cur[k] == v {
 			continue
 		}
@@ -715,6 +741,22 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 			return
 		}
 	}
+	ok(w)
+}
+
+// agentPolicy tells the PC agent which programs may not read drive files.
+func (s *API) agentPolicy(w http.ResponseWriter, r *http.Request, c *ctx) {
+	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User)})
+}
+
+// agentEvent records a refusal the PC agent applied.
+func (s *API) agentEvent(w http.ResponseWriter, r *http.Request, c *ctx) {
+	var in struct{ Kind, Proc, Drive, Path string }
+	if err := readJSON(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	s.V.RecordBlocked(c.a, in.Kind, in.Proc, in.Drive, in.Path)
 	ok(w)
 }
 
@@ -748,4 +790,5 @@ var actionLabels = map[string]string{
 	"admin_share_delete": "[관리] 드라이브 삭제", "admin_share_acl": "[관리] 권한 변경",
 	"admin_setting": "[관리] 설정 변경", "admin_session_revoke": "[관리] 접속 강제 종료",
 	"admin_audit_export": "[관리] 로그 내보내기", "agent_pair": "PC 연결",
+	"block_copy": "PC 복사 차단", "block_messenger": "메신저 첨부 차단", "block_upload": "웹 업로드 차단", "block_custom": "프로그램 차단",
 }

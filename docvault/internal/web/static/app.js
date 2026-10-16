@@ -26,7 +26,7 @@ const ACTIONS = {
   admin_user_create: "[관리] 사용자 생성", admin_user_update: "[관리] 사용자 변경", admin_group_create: "[관리] 그룹 생성",
   admin_group_delete: "[관리] 그룹 삭제", admin_share_create: "[관리] 드라이브 생성", admin_share_update: "[관리] 드라이브 변경",
   admin_share_delete: "[관리] 드라이브 삭제", admin_share_acl: "[관리] 권한 변경", admin_setting: "[관리] 설정 변경",
-  admin_session_revoke: "[관리] 접속 강제 종료", admin_audit_export: "[관리] 로그 내보내기", agent_pair: "PC 연결",
+  admin_session_revoke: "[관리] 접속 강제 종료", admin_audit_export: "[관리] 로그 내보내기", agent_pair: "PC 연결", block_copy: "PC 복사 차단", block_messenger: "메신저 첨부 차단", block_upload: "웹 업로드 차단", block_custom: "프로그램 차단",
 };
 const CLIENTS = { drive: "가상드라이브", web: "웹", agent: "PC에이전트", system: "시스템" };
 
@@ -345,7 +345,7 @@ async function adminUsers() {
   let h = `<h2>사용자</h2><div class="toolbar"><button id="newUser" class="primary">+ 사용자 추가</button></div>
     <table><thead><tr><th>아이디</th><th>이름</th><th>그룹</th><th>상태</th><th></th></tr></thead><tbody>`;
   for (const u of users) {
-    const st = [u.isAdmin ? "관리자" : "", u.disabled ? "사용중지" : "", u.writeBlocked ? "⚠쓰기차단" : ""].filter(Boolean).join(", ");
+    const st = [u.isAdmin ? "관리자" : "", u.disabled ? "사용중지" : "", u.writeBlocked ? "⚠쓰기차단" : "", u.allowCopy ? "PC복사허용" : ""].filter(Boolean).join(", ");
     h += `<tr><td>${esc(u.username)}</td><td>${esc(u.displayName)}</td><td>${esc((u.groups || []).join(", "))}</td><td>${esc(st)}</td>
       <td class="actions"><button class="small" data-edit="${u.id}">수정</button></td></tr>`;
   }
@@ -374,10 +374,11 @@ async function adminUsers() {
       <label class="row"><input type="checkbox" name="isAdmin" ${u.isAdmin ? "checked" : ""}> 관리자</label>
       <label class="row"><input type="checkbox" name="disabled" ${u.disabled ? "checked" : ""}> 사용 중지 (퇴사 등 – 즉시 모든 접속 차단)</label>
       <label class="row"><input type="checkbox" name="writeBlocked" ${u.writeBlocked ? "checked" : ""}> 쓰기 차단 (랜섬웨어 의심 시 자동 설정됨)</label>
+      <label class="row"><input type="checkbox" name="allowCopy" ${u.allowCopy ? "checked" : ""}> PC로 복사 허용 (탐색기 복사 차단 예외)</label>
       <div class="buttons"><button type="button" data-close>취소</button><button class="primary">저장</button></div></form>`, (box) => {
       box.querySelector("form").onsubmit = guard(async (e) => {
         e.preventDefault(); const f = e.target;
-        const body = { displayName: f.displayName.value, isAdmin: f.isAdmin.checked, disabled: f.disabled.checked, writeBlocked: f.writeBlocked.checked, groupIds: checked(f) };
+        const body = { displayName: f.displayName.value, isAdmin: f.isAdmin.checked, disabled: f.disabled.checked, writeBlocked: f.writeBlocked.checked, allowCopy: f.allowCopy.checked, groupIds: checked(f) };
         if (f.password.value) body.password = f.password.value;
         await api("POST", `/api/admin/users/${u.id}`, body);
         closeModal(); toast("저장했습니다"); route();
@@ -539,9 +540,21 @@ const SETTING_LABELS = {
   guard_window_sec: ["랜섬웨어 감지 시간 (초)", ""],
 };
 
+const BLOCK_LABELS = {
+  block_copy_out: ["PC로 복사 차단", "탐색기 복사·붙여넣기·드래그, 명령창 복사, 압축 프로그램(반디집·알집·7-Zip·WinRAR)이 문서함 파일을 읽지 못하게 합니다. 사용자별 예외는 [사용자 → 수정 → PC로 복사 허용]"],
+  block_messenger: ["메신저 첨부 차단", "카카오톡, 텔레그램, 라인, 왓츠앱, 디스코드에 문서함 파일을 첨부하지 못하게 합니다"],
+  block_browser_upload: ["웹브라우저 업로드 차단", "크롬·엣지·웨일·파이어폭스가 문서함 파일을 읽지 못하게 합니다 (웹메일 첨부, 웹 업로드 차단). 문서함의 PDF를 브라우저로 여는 것도 막힙니다"],
+};
+
 async function adminSettings() {
   const s = await api("GET", "/api/admin/settings");
   let h = `<h2>설정</h2><form id="sForm" class="form card" style="padding:18px;max-width:620px">`;
+  h += `<h3 style="margin:0">유출 차단 (PC 프로그램)</h3>`;
+  for (const [k, [label, help]] of Object.entries(BLOCK_LABELS)) {
+    h += `<label class="row" style="align-items:flex-start"><input type="checkbox" name="${k}" ${s[k] ? "checked" : ""}><span><b>${esc(label)}</b><br><span class="muted">${esc(help)}</span></span></label>`;
+  }
+  h += `<label>추가로 차단할 프로그램 (쉼표로 구분)<input name="block_extra_processes" value="${esc(s.block_extra_processes || "")}" placeholder="예: slack.exe, teams.exe"><span class="muted">작업 관리자의 [세부 정보] 탭에 보이는 실행 파일 이름</span></label>`;
+  h += `<h3 style="margin:10px 0 0">보관·보안</h3>`;
   for (const [k, [label, help]] of Object.entries(SETTING_LABELS)) {
     h += `<label>${esc(label)}<input type="number" min="0" name="${k}" value="${s[k]}">${help ? `<span class="muted">${esc(help)}</span>` : ""}</label>`;
   }
@@ -550,6 +563,8 @@ async function adminSettings() {
   $("#sForm").onsubmit = guard(async (e) => {
     e.preventDefault();
     const body = {}; for (const k of Object.keys(SETTING_LABELS)) body[k] = Number(e.target[k].value);
+    for (const k of Object.keys(BLOCK_LABELS)) body[k] = e.target[k].checked ? 1 : 0;
+    body.block_extra_processes = e.target.block_extra_processes.value;
     await api("POST", "/api/admin/settings", body); toast("저장했습니다");
   });
   $("#mtBtn").onclick = guard(async () => {

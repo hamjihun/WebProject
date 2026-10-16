@@ -5,10 +5,15 @@ rem 결과: dist\server\docvault-server.exe, dist\server\downloads\docvault-setu
 cd /d "%~dp0"
 where go >nul 2>nul || (echo Go가 설치되어 있지 않습니다. https://go.dev/dl/ 에서 설치하세요. & pause & exit /b 1)
 set P=cmd\setup\payload
-set RCLONE_VER=v1.68.2
 set WINFSP_TAG=v2.0
 set WINFSP_MSI=winfsp-2.0.23075.msi
-if not exist %P%\rclone.zip powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -OutFile '%P%\rclone.zip' 'https://github.com/rclone/rclone/releases/download/%RCLONE_VER%/rclone-%RCLONE_VER%-windows-amd64.zip'" || goto :err
+rem 드라이브 프로그램 (rclone 기반 + DocVault 프로그램 차단 기능, tools\dvmount)
+set CGO_ENABLED=0
+pushd tools\dvmount
+go build -tags cmount -trimpath -ldflags "-s -w" -o ..\..\%P%\rclone.exe . || (popd & goto :err)
+popd
+powershell -NoProfile -Command "Compress-Archive -Force -Path '%P%\rclone.exe' -DestinationPath '%P%\rclone.zip'" || goto :err
+del %P%\rclone.exe
 if not exist %P%\winfsp.msi powershell -NoProfile -Command "Invoke-WebRequest -UseBasicParsing -OutFile '%P%\winfsp.msi' 'https://github.com/winfsp/winfsp/releases/download/%WINFSP_TAG%/%WINFSP_MSI%'" || goto :err
 set GOOS=windows
 set GOARCH=amd64

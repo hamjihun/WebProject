@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -108,12 +109,40 @@ var defaultSettings = map[string]int64{
 	"session_agent_days":   30,
 	"guard_threshold":      200, // 랜섬웨어 의심: 이 건수 이상 수정하면(삭제는 2건=1건) 쓰기 차단 (0=끔)
 	"guard_window_sec":     300, // 위 횟수를 세는 시간(초)
+	"block_copy_out":       1,   // 탐색기·명령창·압축 프로그램으로 PC에 복사 차단
+	"block_messenger":      1,   // 카카오톡 등 메신저 첨부 차단
+	"block_browser_upload": 0,   // 웹브라우저 업로드(웹메일 첨부 등) 차단
+}
+
+// String settings (stored in the same table).
+var defaultStringSettings = map[string]string{
+	"block_extra_processes": "", // 추가로 차단할 프로그램 (쉼표로 구분, 예: slack.exe, teams.exe)
+}
+
+func (v *Vault) StringSetting(key string) string {
+	var s string
+	if err := v.DB.QueryRow(`SELECT value FROM settings WHERE key=?`, key).Scan(&s); err == nil {
+		return s
+	}
+	return defaultStringSettings[key]
+}
+
+func (v *Vault) SetStringSetting(a Actor, key, val string) error {
+	if _, ok := defaultStringSettings[key]; !ok {
+		return ErrBadRequest
+	}
+	val = strings.TrimSpace(val)
+	_, err := v.DB.Exec(`INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, val)
+	if err == nil {
+		v.Audit(a, "admin_setting", "", "", key+"="+val)
+	}
+	return err
 }
 
 func SettingKeys() []string {
 	return []string{"retention_days", "version_keep_days", "version_keep_count",
 		"export_valid_days", "export_max_downloads", "session_web_hours", "session_agent_days",
-		"guard_threshold", "guard_window_sec"}
+		"guard_threshold", "guard_window_sec", "block_copy_out", "block_messenger", "block_browser_upload"}
 }
 
 func (v *Vault) Setting(key string) int64 {

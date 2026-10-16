@@ -18,6 +18,7 @@ type User struct {
 	IsAdmin      bool     `json:"isAdmin"`
 	Disabled     bool     `json:"disabled"`
 	WriteBlocked bool     `json:"writeBlocked"`
+	AllowCopy    bool     `json:"allowCopy"` // exempt from the PC copy-out block
 	Groups       []string `json:"groups,omitempty"`
 	GroupIDs     []int64  `json:"groupIds,omitempty"`
 }
@@ -33,13 +34,13 @@ func (u *User) Label() string {
 	return u.Username
 }
 
-const userCols = `id, username, display_name, is_admin, disabled, write_blocked`
+const userCols = `id, username, display_name, is_admin, disabled, write_blocked, allow_copy`
 
 type rowScanner interface{ Scan(...any) error }
 
 func scanUser(r rowScanner) (*User, error) {
 	u := &User{}
-	err := r.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked)
+	err := r.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -103,6 +104,7 @@ type UserUpdate struct {
 	IsAdmin      *bool   `json:"isAdmin"`
 	Disabled     *bool   `json:"disabled"`
 	WriteBlocked *bool   `json:"writeBlocked"`
+	AllowCopy    *bool   `json:"allowCopy"`
 	GroupIDs     []int64 `json:"groupIds"`
 }
 
@@ -144,6 +146,10 @@ func (v *Vault) UpdateUser(a Actor, id int64, up UserUpdate) error {
 		if up.WriteBlocked != nil {
 			tx.Exec(`UPDATE users SET write_blocked=? WHERE id=?`, *up.WriteBlocked, id)
 			changes = append(changes, "쓰기차단")
+		}
+		if up.AllowCopy != nil {
+			tx.Exec(`UPDATE users SET allow_copy=? WHERE id=?`, *up.AllowCopy, id)
+			changes = append(changes, "PC복사허용")
 		}
 		if up.GroupIDs != nil {
 			if _, err := tx.Exec(`DELETE FROM group_members WHERE user_id=?`, id); err != nil {
@@ -270,7 +276,7 @@ func (v *Vault) Login(username, password, kind, device, ip string) (string, *Use
 	var lockedUntil int64
 	row := v.DB.QueryRow(`SELECT `+userCols+`, password_hash, failed_logins, locked_until FROM users WHERE username=?`, strings.TrimSpace(username))
 	u = &User{}
-	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &hash, &failed, &lockedUntil)
+	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &hash, &failed, &lockedUntil)
 	if err != nil {
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		v.Audit(a, "login_fail", "", "", "없는 아이디: "+username)
@@ -355,9 +361,9 @@ func (v *Vault) Authenticate(token string) (*User, *Session, error) {
 	var sid, expires, lastSeen int64
 	var kind string
 	u := &User{}
-	err := v.DB.QueryRow(`SELECT s.id, s.kind, s.expires_at, s.last_seen, u.id, u.username, u.display_name, u.is_admin, u.disabled, u.write_blocked
+	err := v.DB.QueryRow(`SELECT s.id, s.kind, s.expires_at, s.last_seen, u.id, u.username, u.display_name, u.is_admin, u.disabled, u.write_blocked, u.allow_copy
 		FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`, tokenHash(token)).
-		Scan(&sid, &kind, &expires, &lastSeen, &u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked)
+		Scan(&sid, &kind, &expires, &lastSeen, &u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy)
 	now := v.Now()
 	if err != nil || expires <= now || u.Disabled {
 		return nil, nil, ErrUnauthorized
@@ -383,7 +389,7 @@ func (v *Vault) AuthenticateBasic(username, password string) (*User, error) {
 	var lockedUntil int64
 	u = &User{}
 	err := v.DB.QueryRow(`SELECT `+userCols+`, password_hash, locked_until FROM users WHERE username=?`, username).
-		Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &hash, &lockedUntil)
+		Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &hash, &lockedUntil)
 	if err != nil || u.Disabled || lockedUntil > now {
 		return nil, ErrUnauthorized
 	}

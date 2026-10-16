@@ -336,6 +336,7 @@ func (a *agent) start(d Drive) error {
 	}
 	cache := filepath.Join(a.cfg.CacheDir, letter)
 	os.RemoveAll(cache) // never leave old document copies behind
+	os.Remove(eventsPath(letter))
 	logDir := filepath.Join(stateDir(), "logs")
 	os.MkdirAll(logDir, 0o700)
 	args := []string{"mount", remote + ":", target,
@@ -360,6 +361,8 @@ func (a *agent) start(d Drive) error {
 		"RCLONE_CONFIG_"+remote+"_URL="+a.cfg.Server+"/dav/"+url.PathEscape(d.Name),
 		"RCLONE_CONFIG_"+remote+"_VENDOR=other",
 		"RCLONE_CONFIG_"+remote+"_BEARER_TOKEN="+a.client.token,
+		"DOCVAULT_POLICY="+policyPath(),
+		"DOCVAULT_EVENTS="+eventsPath(letter),
 	)
 	hideWindow(cmd)
 	if err := cmd.Start(); err != nil {
@@ -452,7 +455,9 @@ func openLog() func() {
 }
 
 func newAgent(cfg *Config) *agent {
-	return &agent{cfg: cfg, client: newClient(cfg, loadToken()), mounts: map[string]*mount{}}
+	a := &agent{cfg: cfg, client: newClient(cfg, loadToken()), mounts: map[string]*mount{}}
+	go a.watchEvents()
+	return a
 }
 
 // heartbeat reports to the server and makes the mounted drives match the
@@ -464,6 +469,7 @@ func (a *agent) heartbeat() ([]Drive, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.updatePolicy()
 	a.sync(drives)
 	a.sync(drives) // sync stops crashed mounts; start them again right away
 	return drives, nil
