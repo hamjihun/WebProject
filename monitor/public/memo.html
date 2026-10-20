@@ -594,40 +594,6 @@ function magnet(o, k, x, y) {
   }
   return { x: Math.max(0, Math.round(bx.d <= MAG ? bx.v : snap(x))), y: Math.max(0, Math.round(by.d <= MAG ? by.v : snap(y))) };
 }
-const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-function unstack(o, k) {                         // 겹쳐 있으면 가장 가까운 쪽으로 밀어 딱 붙인다
-  if (k === 'a' || !prefs.magnet) return;
-  const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'))
-    .concat(cur().links.filter((l) => l.id !== o.id).map((l) => geo(l, 'l')));
-  if (!list.some((b) => hits(me, b))) return;
-  // 모든 메모 가장자리 중, 옮겨도 아무것과 겹치지 않는 가장 가까운 자리 (한 방향으로만 이동)
-  let best = null;
-  for (const t of list) {
-    for (const p of [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]) {
-      if (p.v < 0) continue;
-      const d = Math.abs(p.v - me[p.a]); if (best && d >= best.d) continue;
-      const c = { ...me, [p.a]: p.v };
-      if (!list.some((b) => hits(c, b))) best = { ...p, d };
-    }
-  }
-  if (best) { o.x = Math.max(0, Math.round(best.a === 'x' ? best.v : me.x)); o.y = Math.max(0, Math.round(best.a === 'y' ? best.v : me.y)); return; }
-  for (let i = 0; i < 8; i++) {                  // 빈자리가 없으면 예전처럼 가까운 쪽으로 몇 번 민다
-    const t = list.find((b) => hits(me, b)); if (!t) break;
-    const c = [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]
-      .filter((p) => p.v >= 0).map((p) => ({ ...p, d: Math.abs(p.v - me[p.a]) })).sort((a, b) => a.d - b.d)[0];
-    if (!c) break;
-    me[c.a] = c.v;
-  }
-  o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
-}
-function pushOut(o) {                            // o 가 덮은 메모·바로가기를 o 밖으로 밀어낸다 (크기 키울 때)
-  if (!prefs.magnet) return;
-  const me = geo(o, 'n');
-  for (const [k, arr] of [['n', cur().notes], ['l', cur().links]]) {
-    for (const t of arr) if (t !== o && hits(me, geo(t, k))) unstack(t, k);
-  }
-}
-
 const find = (k, id) => (k === 'n' ? cur().notes : k === 'l' ? cur().links : cur().areas).find((o) => o.id === id);
 const zOf = (n) => 10 + (n.z || 1) + (n.min ? 100000 : 0);   // 접힌 메모는 늘 펼친 메모 위
 const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
@@ -636,7 +602,7 @@ function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLe
 // ---- 만들기 ----
 function newNote(x, y) {
   const n = { id: uid(), x: Math.max(0, snap(x)), y: Math.max(0, snap(y)), w: prefs.w, h: prefs.h, title: '', text: '', color: prefs.color, z: topZ() + 1, fs: prefs.fs };
-  cur().notes.push(n); unstack(n, 'n'); sel = n.id; touch(); render();
+  cur().notes.push(n); sel = n.id; touch(); render();
   const el = document.querySelector(`.note[data-id="${n.id}"] .tx`); if (el) el.focus();
 }
 $('#addNote').onclick = () => {
@@ -658,7 +624,7 @@ $('#etc').onclick = (e) => {
 };
 function newLink(x, y) {
   const l = { id: uid(), x: Math.max(0, snap(x - 48)), y: Math.max(0, snap(y - 44)), w: 96, h: 88, name: '', url: '', icon: '', color: 'gray' };
-  cur().links.push(l); unstack(l, 'l'); sel = l.id; touch(); render();
+  cur().links.push(l); sel = l.id; touch(); render();
   const el = document.querySelector(`.lnk[data-id="${l.id}"]`); if (el) openLnkEd(el, l.id);
 }
 let lnkFor = null;
@@ -1170,8 +1136,6 @@ document.addEventListener('mouseup', () => {
   pend = null;
   if (!drag) return;
   drag.box.classList.remove('mv');
-  if (drag.mode === 'mv') unstack(drag.o, drag.k);
-  else if (drag.k === 'n') pushOut(drag.o);
   drag = null; document.body.style.userSelect = ''; touch(); render();
 });
 
@@ -1430,8 +1394,8 @@ $('#binMask').onclick = (e) => {
     if (t.p && (home.pages || []).some((g) => g.id === t.p)) home.ap = t.p;
   }
   if (t.k === 'a') cur().areas.push(o);
-  else if (t.k === 'l') { cur().links.push(o); unstack(o, 'l'); sel = o.id; }
-  else { o.z = topZ() + 1; cur().notes.push(o); unstack(o, 'n'); sel = o.id; }
+  else if (t.k === 'l') { cur().links.push(o); sel = o.id; }
+  else { o.z = topZ() + 1; cur().notes.push(o); sel = o.id; }
   touch(); render(); $('#binMask').hidden = true;
   const el = document.querySelector(`[data-id="${o.id}"]`); if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 };
@@ -1552,7 +1516,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.41.2';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.41.3';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {

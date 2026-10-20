@@ -48,6 +48,7 @@ ILSAN IMS 서버 모니터링. 300인 제조업 사내 서버(Windows Server 201
 `POST /api/metrics`(수신, X-Token) · `GET /api/servers` · `GET /api/history?host=` · `GET /api/health`(version) · `POST /api/unregister` · `PUT /api/order` · `POST /api/mute` · `GET /api/alerts` · `GET /api/alerts/log?month=&download=1` · `GET/PUT /api/settings` · `POST /api/alerts/test` · `POST /api/alerts/discover` · `GET /api/hourly?host=&days=` · `GET/PUT /api/topology` · `GET /api/stats?days=|month=YYYY-MM|from=&to=`(서버별 series/가동률/디스크 증감 + 알림 로그 집계 `alerts.countEvents`) · `GET /api/report.csv?(같은 파라미터)`
 
 ## 진행 상태
+- 2026-10-21: 메모 화면 1.41.3 — 사용자 요청 "겹겹이 있어도 되니 다 밀리지 않게": 겹침 밀어내기(`unstack`/`pushOut`)를 **모두 없앰**(옮겨 놓을 때·크기 조절·새 메모·바로가기·휴지통 되살리기). 옮길 때 가장자리에 붙는 자석(`magnet`)과 접힌 메모를 늘 위에 그리는 `zOf()` 는 그대로.
 - 2026-10-21: 메모 화면 1.41.2 — 접힌 메모를 두 번 눌러 펼 때는 주변 메모를 밀지 않음(사용자 요청: 밑으로 밀려 내려감). 펼친 메모가 덮어도 접힌 메모는 `zOf()` 로 위에 보여 잡을 수 있다. `pushOut()` 은 크기 조절이 끝날 때만.
 - 2026-10-21: 설치 스크립트 — `deploy/backup-cred.txt` 가 있으면 공유 폴더 백업 경고(방법 1~3) 대신 "backup-cred.txt 계정으로 연결" 한 줄만 표시(실제로는 잘 되는데 경고가 떠 헷갈림). 참고: daily 폴더는 data 의 *.json·*.log 만, 메모 사진(`data/memo-img`)은 `full` 폴더에만 들어간다.
 - 2026-10-20: **메모가 다른 메모 안에 갇히는 문제** (메모 화면 1.41.1). 접힌 메모(26px)끼리 붙여 쌓은 뒤 하나를 펴거나 크기를 키우면 아래 메모를 덮었는데 정리가 없었음 → 펼칠 때·크기 조절이 끝날 때 `pushOut()` 으로 덮인 메모·바로가기를 밖으로 밀고, `unstack()` 은 모든 메모 가장자리 중 **아무것과도 안 겹치는 가장 가까운 자리**를 고름(예전 8번 밀기는 여러 개가 겹치면 제자리로 돌아오곤 함 — 빈자리가 없을 때만 씀). 접힌 메모는 `zOf()` 로 늘 펼친 메모 위에 그려 밑에 깔리지 않음.
