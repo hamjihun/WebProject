@@ -85,7 +85,9 @@ if (Test-Path $bkScript) {
   } else {
     Register-ScheduledTask -TaskName $BackupTask -Action $ba -Trigger $bt -Settings $bs -Principal $principal -Description "서버 모니터 데이터 백업 (매일 01:00)" | Out-Null
     Write-Host "데이터 백업 작업 등록: 매일 01:00 (SYSTEM 계정)"
-    if ($needsUser) {
+    if ($needsUser -and (Test-Path (Join-Path $PSScriptRoot "backup-cred.txt"))) {
+      Write-Host "  공유 폴더는 deploy\backup-cred.txt 의 계정으로 연결해 백업합니다"
+    } elseif ($needsUser) {
       Write-Warning "백업 위치에 공유 폴더가 있습니다. SYSTEM 계정은 공유 폴더에 접근하지 못합니다."
       Write-Warning "  -> 방법 1: deploy\backup-cred.txt 에 '공유경로|계정|비밀번호' 한 줄을 적는다 (권장)"
       Write-Warning "  -> 방법 2: setup-collector.cmd 의 BACKUPUSER 에 계정만 적으면 '로그온 중일 때만 실행'으로 등록된다"
