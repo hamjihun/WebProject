@@ -620,7 +620,7 @@ function unstack(o, k) {                         // 겹쳐 있으면 가장 가�
   }
   o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
 }
-function pushOut(o) {                            // o 가 덮은 메모·바로가기를 o 밖으로 밀어낸다 (펼칠 때·크기 키울 때)
+function pushOut(o) {                            // o 가 덮은 메모·바로가기를 o 밖으로 밀어낸다 (크기 키울 때)
   if (!prefs.magnet) return;
   const me = geo(o, 'n');
   for (const [k, arr] of [['n', cur().notes], ['l', cur().links]]) {
@@ -1016,7 +1016,7 @@ $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 �
   const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.target.dataset.pal) return;
   const box = e.target.closest('[data-k]'); if (!box || box.dataset.k !== 'n') return;
   const o = find('n', box.dataset.id); if (!o) return;
-  o.min = !o.min; if (!o.min) pushOut(o); touch(); render();
+  o.min = !o.min; touch(); render();                  // 펼쳐도 주변 메모는 그대로 (접힌 메모는 늘 위에 보여 다시 잡을 수 있음)
 });
 // 글자를 끌어서 고를 때: 커서가 메모 밖으로 나가도 선택이 풀리지 않게 그 방향 끝까지 이어 준다
 let selHost = null;
@@ -1552,7 +1552,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.41.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.41.2';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
