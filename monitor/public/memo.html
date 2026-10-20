@@ -454,7 +454,7 @@ function render() {
       <button class="x px" title="사진 지우기 (Del)">✕</button>
       <div class="rz se"></div><div class="rz sw"></div><div class="rz e"></div><div class="rz w"></div><div class="rz s"></div>
     </div>` : `
-    <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${10 + (n.z || 1)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
+    <div class="note ${sel === n.id ? 'sel' : ''} ${n.min ? 'min' : ''}" data-k="n" data-id="${n.id}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;z-index:${zOf(n)};--bg2:${COLORS[n.color] ? COLORS[n.color].bg : '#fde68a'};--fs:${n.fs || 13}px">
       <div class="hd" title="두 번 누르면 접었다 폈다 합니다"><button class="hb plus" title="옆에 새 메모">＋</button>
         <span class="nt ${n.title ? '' : 'no'}">${esc(n.title || '제목 없음')}</span>
         <button class="hb ed" title="제목 정하기 (오른쪽 단추 = 색·글자 크기)">✎</button>
@@ -599,7 +599,19 @@ function unstack(o, k) {                         // 겹쳐 있으면 가장 가�
   if (k === 'a' || !prefs.magnet) return;
   const me = geo(o, k), list = cur().notes.filter((n) => n.id !== o.id).map((n) => geo(n, 'n'))
     .concat(cur().links.filter((l) => l.id !== o.id).map((l) => geo(l, 'l')));
-  for (let i = 0; i < 8; i++) {
+  if (!list.some((b) => hits(me, b))) return;
+  // 모든 메모 가장자리 중, 옮겨도 아무것과 겹치지 않는 가장 가까운 자리 (한 방향으로만 이동)
+  let best = null;
+  for (const t of list) {
+    for (const p of [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]) {
+      if (p.v < 0) continue;
+      const d = Math.abs(p.v - me[p.a]); if (best && d >= best.d) continue;
+      const c = { ...me, [p.a]: p.v };
+      if (!list.some((b) => hits(c, b))) best = { ...p, d };
+    }
+  }
+  if (best) { o.x = Math.max(0, Math.round(best.a === 'x' ? best.v : me.x)); o.y = Math.max(0, Math.round(best.a === 'y' ? best.v : me.y)); return; }
+  for (let i = 0; i < 8; i++) {                  // 빈자리가 없으면 예전처럼 가까운 쪽으로 몇 번 민다
     const t = list.find((b) => hits(me, b)); if (!t) break;
     const c = [{ a: 'x', v: t.x + t.w }, { a: 'x', v: t.x - me.w }, { a: 'y', v: t.y + t.h }, { a: 'y', v: t.y - me.h }]
       .filter((p) => p.v >= 0).map((p) => ({ ...p, d: Math.abs(p.v - me[p.a]) })).sort((a, b) => a.d - b.d)[0];
@@ -608,8 +620,16 @@ function unstack(o, k) {                         // 겹쳐 있으면 가장 가�
   }
   o.x = Math.max(0, Math.round(me.x)); o.y = Math.max(0, Math.round(me.y));
 }
+function pushOut(o) {                            // o 가 덮은 메모·바로가기를 o 밖으로 밀어낸다 (펼칠 때·크기 키울 때)
+  if (!prefs.magnet) return;
+  const me = geo(o, 'n');
+  for (const [k, arr] of [['n', cur().notes], ['l', cur().links]]) {
+    for (const t of arr) if (t !== o && hits(me, geo(t, k))) unstack(t, k);
+  }
+}
 
 const find = (k, id) => (k === 'n' ? cur().notes : k === 'l' ? cur().links : cur().areas).find((o) => o.id === id);
+const zOf = (n) => 10 + (n.z || 1) + (n.min ? 100000 : 0);   // 접힌 메모는 늘 펼친 메모 위
 const topZ = () => cur().notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
 function viewCenter() { const b = $('#board'); return { x: Math.round(b.scrollLeft + b.clientWidth / 2), y: Math.round(b.scrollTop + b.clientHeight / 2) }; }
 
@@ -753,7 +773,7 @@ $('#canvas').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (sel !== n.id) {                                       // 첫 번째 누름은 고르기만 (점이 찍히지 않게)
     const prev = document.querySelector('[data-k].sel'); if (prev) prev.classList.remove('sel');
-    sel = n.id; n.z = topZ() + 1; box.style.zIndex = 10 + n.z; box.classList.add('sel');
+    sel = n.id; n.z = topZ() + 1; box.style.zIndex = zOf(n); box.classList.add('sel');
     openPen(box, n.id); touch(); return;
   }
   const r = el.getBoundingClientRect();
@@ -961,7 +981,7 @@ $('#canvas').addEventListener('click', (e) => {
   if (e.target.dataset.pal) { openPal(e.target, k, id); return; }
   if (k === 'n' && sel !== id) {                   // 다시 그리면 글자 선택이 풀리므로 그 자리에서만 바꾼다
     const prev = document.querySelector('.note.sel'); if (prev) prev.classList.remove('sel');
-    sel = id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch();
+    sel = id; o.z = topZ() + 1; box.style.zIndex = zOf(o); box.classList.add('sel'); touch();
   }
   if (k === 'n' && o.draw) openPen(box, id);      // 그림 메모를 고르면 펜 창
 });
@@ -996,7 +1016,7 @@ $('#canvas').addEventListener('dblclick', (e) => {          // 제목 줄 두 �
   const hd = e.target.closest('.hd'); if (!hd || e.target.closest('button') || e.target.dataset.pal) return;
   const box = e.target.closest('[data-k]'); if (!box || box.dataset.k !== 'n') return;
   const o = find('n', box.dataset.id); if (!o) return;
-  o.min = !o.min; touch(); render();
+  o.min = !o.min; if (!o.min) pushOut(o); touch(); render();
 });
 // 글자를 끌어서 고를 때: 커서가 메모 밖으로 나가도 선택이 풀리지 않게 그 방향 끝까지 이어 준다
 let selHost = null;
@@ -1108,7 +1128,7 @@ $('#canvas').addEventListener('mousedown', (e) => {
   else pend = { ...base, mode: 'mv' };
   moved = false;
   if (k === 'l' && sel !== o.id) { sel = o.id; box.classList.add('sel'); }
-  if (k === 'n' && sel !== o.id) { sel = o.id; o.z = topZ() + 1; box.style.zIndex = 10 + o.z; box.classList.add('sel'); touch(); }
+  if (k === 'n' && sel !== o.id) { sel = o.id; o.z = topZ() + 1; box.style.zIndex = zOf(o); box.classList.add('sel'); touch(); }
 });
 document.addEventListener('mousemove', (e) => {
   if (pend && (Math.abs(e.clientX - pend.sx) > 4 || Math.abs(e.clientY - pend.sy) > 4)) {
@@ -1151,6 +1171,7 @@ document.addEventListener('mouseup', () => {
   if (!drag) return;
   drag.box.classList.remove('mv');
   if (drag.mode === 'mv') unstack(drag.o, drag.k);
+  else if (drag.k === 'n') pushOut(drag.o);
   drag = null; document.body.style.userSelect = ''; touch(); render();
 });
 
@@ -1531,7 +1552,7 @@ $('#helpMask').onclick = (e) => {
   if (e.target === $('#helpMask') || e.target.dataset.a === 'close') $('#helpMask').hidden = true;
 };
 
-const UIV = '1.40.3';                                  // 이 화면 파일의 버전 (갱신 확인용)
+const UIV = '1.41.1';                                  // 이 화면 파일의 버전 (갱신 확인용)
 const SZ = [{ n: '작게', w: 160, h: 160 }, { n: '보통', w: 200, h: 200 }, { n: '크게', w: 280, h: 280 }];
 $('#cfgBtn').onclick = () => { if ($('#cfg').hidden) openCfg(); else $('#cfg').hidden = true; };
 function openCfg() {
