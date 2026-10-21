@@ -88,6 +88,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/settings", s.admin(s.setSettings))
 	mux.HandleFunc("POST /api/admin/maintain", s.admin(s.maintain))
 	mux.HandleFunc("GET /api/admin/store-check", s.admin(s.storeCheck))
+	mux.HandleFunc("GET /api/admin/overview", s.admin(s.overview))
 	mux.HandleFunc("GET /api/admin/backup", s.admin(s.backupStatus))
 	mux.HandleFunc("POST /api/admin/backup", s.admin(s.runBackup))
 }
@@ -803,6 +804,15 @@ func (s *API) storeCheck(w http.ResponseWriter, r *http.Request, c *ctx) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"checked": checked, "missing": missing})
+}
+
+func (s *API) overview(w http.ResponseWriter, r *http.Request, c *ctx) {
+	out := map[string]any{"stats": s.V.Overview(), "setupVersion": s.setupVersion()}
+	if s.BackupDir != "" {
+		out["backup"] = backup.LoadLast(s.BackupDir)
+		out["backupConfigured"] = true
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *API) backupStatus(w http.ResponseWriter, r *http.Request, c *ctx) {

@@ -104,6 +104,7 @@ async function loadSide() {
   h += `<h4>도움</h4><a href="/download/setup">💻 PC 프로그램 설치</a>`;
   if (me.isAdmin) {
     h += "<h4>관리자</h4>";
+    h += `<a href="#/admin/overview" data-nav="admin/overview">현황</a>`;
     h += `<a href="#/admin/users" data-nav="admin/users">사용자</a>`;
     h += `<a href="#/admin/groups" data-nav="admin/groups">그룹(팀)</a>`;
     h += `<a href="#/admin/shares" data-nav="admin/shares">드라이브·권한</a>`;
@@ -125,6 +126,7 @@ function route() {
   const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
   const main = $("#main");
   if (!h) {
+    if (me.isAdmin) { location.hash = "#/admin/overview"; return; }
     if (drives.length) { location.hash = "#/files/" + encodeURIComponent(drives[0].name) + "/"; return; }
     main.innerHTML = `<h2>환영합니다</h2><p class="muted">관리자에게 드라이브 권한을 요청하세요.</p>`;
     return;
@@ -137,7 +139,7 @@ function route() {
     exports: viewMyExports,
     pair: () => viewPair(rest[0]),
     approvals: viewApprovals,
-    admin: () => ({ users: adminUsers, groups: adminGroups, shares: adminShares, audit: adminAudit, sessions: adminSessions, backup: adminBackup, settings: adminSettings }[rest[0]] || (() => {}))(),
+    admin: () => ({ overview: adminOverview, users: adminUsers, groups: adminGroups, shares: adminShares, audit: adminAudit, sessions: adminSessions, backup: adminBackup, settings: adminSettings }[rest[0]] || (() => {}))(),
   };
   (views[page] ? guard(views[page]) : () => {})();
 }
@@ -552,6 +554,34 @@ const BLOCK_LABELS = {
   allow_post_export: ["후결재 반출 허용", "반출 신청 때 [후결재]를 고르면 바로 개인문서함\\반출 폴더에 넣고 결재는 나중에 받습니다. 결재자가 반려하면 반출 폴더에서 회수됩니다 (이미 밖으로 복사한 것은 감사 로그로 확인)"],
   block_browser_upload: ["웹브라우저 업로드 차단", "크롬·엣지·웨일·파이어폭스가 문서함 파일을 읽지 못하게 합니다 (웹메일 첨부, 웹 업로드 차단). 문서함의 PDF를 브라우저로 여는 것도 막힙니다"],
 };
+
+async function adminOverview() {
+  const d = await api("GET", "/api/admin/overview");
+  const st = d.stats;
+  const tile = (label, value, sub, cls) => `<div class="tile ${cls || ""}"><div class="tile-v">${value}</div><div class="tile-l">${esc(label)}</div>${sub ? `<div class="tile-s">${sub}</div>` : ""}</div>`;
+  const bk = d.backupConfigured
+    ? (d.backup ? `<span class="ok">${fmtTime(Date.parse(d.backup.finishedAt) / 1000)}</span>` : `<span class="warn">아직 없음</span>`)
+    : `<span class="muted">미설정</span>`;
+  let h = `<h2>현황</h2><p class="muted">사내 문서중앙화 상태를 한눈에 봅니다.</p>
+    <div class="tiles">
+      ${tile("사용 중인 계정", st.users)}
+      ${tile("팀(그룹)", st.groups)}
+      ${tile("드라이브", st.shares)}
+      ${tile("지금 접속한 PC", st.connectedPCs, "최근 5분")}
+      ${tile("반출 결재 대기", st.pendingExports, "", st.pendingExports ? "attn" : "")}
+      ${tile("쓰기 차단 계정", st.writeBlocked, "랜섬웨어 의심", st.writeBlocked ? "danger" : "")}
+      ${tile("휴지통", st.trashItems, "복원 가능")}
+      ${tile("문서 사용량", fmtSize(st.storeBytes), "현재 버전")}
+    </div>
+    <div class="cards2">
+      <div class="card ov"><h3>백업</h3><div class="ov-row"><span class="muted">마지막 백업</span>${bk}</div>
+        <a class="btnlink" href="#/admin/backup" data-nav="admin/backup">백업·복구 열기</a></div>
+      <div class="card ov"><h3>PC 프로그램</h3><div class="ov-row"><span class="muted">서버가 배포하는 버전</span><b>v${esc(d.setupVersion || "-")}</b></div>
+        <a class="btnlink" href="#/admin/sessions" data-nav="admin/sessions">접속 PC 보기</a></div>
+    </div>`;
+  if (st.pendingExports) h = h.replace("</p>", `</p><div class="warnbox">반출 결재가 <b>${st.pendingExports}건</b> 대기 중입니다. <a href="#/approvals" data-nav="approvals">결재함 열기</a></div>`);
+  $("#main").innerHTML = h;
+}
 
 async function adminBackup() {
   const b = await api("GET", "/api/admin/backup");

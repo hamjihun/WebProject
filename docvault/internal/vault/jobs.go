@@ -187,3 +187,36 @@ func (v *Vault) CheckStore() (missing []MissingFile, checked int, err error) {
 	}
 	return missing, checked, nil
 }
+
+// Overview is the admin dashboard summary.
+type Overview struct {
+	Users          int   `json:"users"`
+	Groups         int   `json:"groups"`
+	Shares         int   `json:"shares"`
+	PendingExports int   `json:"pendingExports"`
+	ConnectedPCs   int   `json:"connectedPCs"` // agent sessions seen in the last 5 min
+	WriteBlocked   int   `json:"writeBlocked"` // accounts auto-blocked (ransomware guard)
+	TrashItems     int   `json:"trashItems"`
+	StoreBytes     int64 `json:"storeBytes"` // size of current file versions (not trash)
+}
+
+func (v *Vault) Overview() Overview {
+	var o Overview
+	q := func(sql string) int {
+		var n int
+		v.DB.QueryRow(sql).Scan(&n)
+		return n
+	}
+	o.Users = q(`SELECT COUNT(*) FROM users WHERE disabled=0`)
+	o.Groups = q(`SELECT COUNT(*) FROM groups`)
+	o.Shares = q(`SELECT COUNT(*) FROM shares`)
+	o.PendingExports = q(`SELECT COUNT(*) FROM exports WHERE status IN ('pending','post')`)
+	o.WriteBlocked = q(`SELECT COUNT(*) FROM users WHERE write_blocked=1`)
+	o.TrashItems = q(`SELECT COUNT(*) FROM nodes WHERE delete_root=1 AND deleted_at IS NOT NULL`)
+	cutoff := v.Now() - 300
+	var n int
+	v.DB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE kind='agent' AND last_seen>?`, cutoff).Scan(&n)
+	o.ConnectedPCs = n
+	v.DB.QueryRow(`SELECT COALESCE(SUM(size),0) FROM nodes WHERE is_dir=0 AND deleted_at IS NULL`).Scan(&o.StoreBytes)
+	return o
+}

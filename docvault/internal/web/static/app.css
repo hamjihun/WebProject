@@ -95,3 +95,18 @@ code, pre, .codeblock { background: var(--code-bg); color: var(--code-text); bor
   border-radius: 6px; font-family: ui-monospace, Consolas, "D2Coding", monospace; }
 code { padding: 1px 6px; }
 pre, .codeblock { padding: 12px 14px; margin: 8px 0; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+/* Admin overview dashboard */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.tile-v { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.tile-l { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.tile-s { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.tile.attn { border-color: var(--warn); } .tile.attn .tile-v { color: var(--warn); }
+.tile.danger { border-color: var(--danger); } .tile.danger .tile-v { color: var(--danger); }
+.cards2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; max-width: 760px; }
+.card.ov { padding: 16px 18px; } .card.ov h3 { margin: 0 0 10px; font-size: 15px; }
+.ov-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.ov-row .ok { color: var(--ok); } .ov-row .warn { color: var(--warn); }
+.btnlink { display: inline-block; margin-top: 10px; color: var(--accent); text-decoration: none; font-size: 13px; }
+.btnlink:hover { text-decoration: underline; }
