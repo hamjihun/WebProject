@@ -185,6 +185,57 @@ func (v *Vault) DecideExport(a Actor, id int64, approve bool, note string) error
 		return errors.New("이미 처리된 신청입니다")
 	}
 	v.Audit(a, action, e.ShareName, e.FilePath, "신청자: "+e.Requester+" / "+note)
+	if approve {
+		v.deliverExport(e)
+	}
+	return nil
+}
+
+// deliverExport puts the approved file version in the requester's export
+// folder (개인문서함\반출), from where it may be taken out of the system.
+func (v *Vault) deliverExport(e *Export) {
+	u, err := v.UserByID(e.RequesterID)
+	if err != nil {
+		return
+	}
+	s := v.personalShare()
+	if s == nil {
+		return
+	}
+	a := Actor{User: u, Client: "export"}
+	if err := v.Mkdir(a, s.Name, "/"+ExportFolder); err != nil && err != ErrExists {
+		v.Audit(a, "export_deliver_fail", s.Name, "/"+ExportFolder, err.Error())
+		return
+	}
+	name := e.FileName
+	base, ext := name, ""
+	if i := strings.LastIndex(name, "."); i > 0 {
+		base, ext = name[:i], name[i:]
+	}
+	for i := 2; i < 100; i++ {
+		if _, err := v.Stat(a, s.Name, "/"+ExportFolder+"/"+name); err == ErrNotFound {
+			break
+		}
+		name = base + " (" + itoa(int64(i)) + ")" + ext
+	}
+	f, err := v.Blobs.Open(e.blobSHA)
+	if err != nil {
+		v.Audit(a, "export_deliver_fail", s.Name, "/"+ExportFolder+"/"+name, err.Error())
+		return
+	}
+	defer f.Close()
+	if _, _, err := v.Put(a, s.Name, "/"+ExportFolder+"/"+name, f); err != nil {
+		v.Audit(a, "export_deliver_fail", s.Name, "/"+ExportFolder+"/"+name, err.Error())
+	}
+}
+
+func (v *Vault) personalShare() *Share {
+	shares, _ := v.ListShares()
+	for _, s := range shares {
+		if s.Personal {
+			return s
+		}
+	}
 	return nil
 }
 

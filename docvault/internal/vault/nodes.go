@@ -142,6 +142,21 @@ type loc struct {
 
 func (l *loc) path() string { return joinPath(l.parts) }
 
+// ExportFolder is the folder in each personal space that receives approved
+// exports (반출). Only the system puts files there; users may open, copy out
+// and delete them, but not add, change or rename anything in it, so whatever
+// is in it has been approved.
+const ExportFolder = "반출"
+
+// exportLocked reports a write into the export folder by a user. Office lock
+// and temporary files are let through so opening a file there works.
+func exportLocked(a Actor, l *loc) bool {
+	if !l.share.Personal || len(l.parts) == 0 || !strings.EqualFold(l.parts[0], ExportFolder) || a.Client == "export" {
+		return false
+	}
+	return len(l.parts) == 1 || !isTransient(l.parts[len(l.parts)-1])
+}
+
 // locate resolves a share for the actor and checks it has at least level need.
 func (v *Vault) locate(a Actor, shareName, p string, need int) (*loc, error) {
 	if a.User == nil {
@@ -341,6 +356,9 @@ func (v *Vault) Put(a Actor, shareName, p string, r io.Reader) (n *Node, created
 	if len(l.parts) == 0 {
 		return nil, false, ErrIsDir
 	}
+	if exportLocked(a, l) {
+		return nil, false, ErrForbidden
+	}
 	if err := validName(l.parts[len(l.parts)-1]); err != nil {
 		return nil, false, err
 	}
@@ -482,6 +500,9 @@ func (v *Vault) Mkdir(a Actor, shareName, p string) error {
 	if err != nil {
 		return err
 	}
+	if exportLocked(a, l) {
+		return ErrForbidden
+	}
 	now := v.Now()
 	return v.withTx(func(tx *sql.Tx) error {
 		parent, name, err := v.resolveParent(tx, l)
@@ -598,7 +619,7 @@ func (v *Vault) Move(a Actor, srcShare, srcPath, dstShare, dstPath string, overw
 	if err != nil {
 		return false, err
 	}
-	if len(sl.parts) == 0 {
+	if len(sl.parts) == 0 || exportLocked(a, dl) || (exportLocked(a, sl) && len(sl.parts) == 1) {
 		return false, ErrForbidden
 	}
 	now := v.Now()
@@ -688,6 +709,9 @@ func (v *Vault) Copy(a Actor, srcShare, srcPath, dstShare, dstPath string, overw
 	dl, err := v.locate(a, dstShare, dstPath, LevelWrite)
 	if err != nil {
 		return false, err
+	}
+	if exportLocked(a, dl) {
+		return false, ErrForbidden
 	}
 	now := v.Now()
 	uid := a.User.ID

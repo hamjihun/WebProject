@@ -302,6 +302,9 @@ func (fsys *FS) OpenEx(path string, fi *fuse.FileInfo_t) (errc int) {
 
 	// translate the fuse flags to os flags
 	flags := translateOpenFlags(fi.Flags)
+	if flags&(os.O_WRONLY|os.O_RDWR|os.O_TRUNC|os.O_CREATE) != 0 && dvWriteLocked(path) { // DocVault: export folder is read-only
+		return -fuse.EACCES
+	}
 	handle, err := fsys.VFS.OpenFile(path, flags, 0777)
 	if err != nil {
 		return translateError(err)
@@ -333,6 +336,9 @@ func (fsys *FS) Open(path string, flags int) (errc int, fh uint64) {
 func (fsys *FS) CreateEx(filePath string, mode uint32, fi *fuse.FileInfo_t) (errc int) {
 	defer log.Trace(filePath, "flags=0x%X, mode=0%o", fi.Flags, mode)("errc=%d, fh=0x%X", &errc, &fi.Fh)
 	fi.Fh = fhUnset
+	if dvWriteLocked(filePath) { // DocVault: export folder is read-only
+		return -fuse.EACCES
+	}
 	leaf, parentDir, errc := fsys.lookupParentDir(filePath)
 	if errc != 0 {
 		return errc
@@ -446,6 +452,9 @@ func (fsys *FS) Unlink(filePath string) (errc int) {
 // Mkdir creates a directory.
 func (fsys *FS) Mkdir(dirPath string, mode uint32) (errc int) {
 	defer log.Trace(dirPath, "mode=0%o", mode)("errc=%d", &errc)
+	if dvWriteLocked(dirPath) { // DocVault: export folder is read-only
+		return -fuse.EACCES
+	}
 	leaf, parentDir, errc := fsys.lookupParentDir(dirPath)
 	if errc != 0 {
 		return errc
@@ -467,6 +476,9 @@ func (fsys *FS) Rmdir(dirPath string) (errc int) {
 // Rename renames a file.
 func (fsys *FS) Rename(oldPath string, newPath string) (errc int) {
 	defer log.Trace(oldPath, "newPath=%q", newPath)("errc=%d", &errc)
+	if dvWriteLocked(newPath) || dvIsAllowRoot(oldPath) { // DocVault: export folder is read-only
+		return -fuse.EACCES
+	}
 	return translateError(fsys.VFS.Rename(oldPath, newPath))
 }
 

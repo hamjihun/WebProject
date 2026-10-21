@@ -13,6 +13,9 @@ package cmount
 // fail with "access denied". Opening for delete or rename never reads, so
 // those keep working. Each refusal is appended as a JSON line to the file
 // named by DOCVAULT_EVENTS so the agent can tell the user and the server.
+//
+// Files under the folder named by DOCVAULT_ALLOW (the export folder of the
+// personal drive, holding approved exports) are never refused.
 
 import (
 	"encoding/json"
@@ -32,6 +35,7 @@ type dvProc struct {
 var dv = struct {
 	mu         sync.Mutex
 	policyPath string
+	allow      string // lower-case folder (no slashes) whose files stay readable
 	eventsPath string
 	block      map[string]string // lower-case exe name -> kind
 	policyMod  time.Time
@@ -41,6 +45,7 @@ var dv = struct {
 	reported   map[uint64]bool
 }{
 	policyPath: os.Getenv("DOCVAULT_POLICY"),
+	allow:      strings.ToLower(strings.Trim(os.Getenv("DOCVAULT_ALLOW"), "/")),
 	eventsPath: os.Getenv("DOCVAULT_EVENTS"),
 	block:      map[string]string{},
 	procs:      map[int]dvProc{},
@@ -93,12 +98,38 @@ func procName(pid int) string {
 	return name
 }
 
+// dvInAllow reports a path inside (or equal to) the export folder.
+func dvInAllow(path string) bool {
+	if dv.allow == "" {
+		return false
+	}
+	low := strings.ToLower(strings.TrimLeft(path, "/"))
+	return low == dv.allow || strings.HasPrefix(low, dv.allow+"/")
+}
+
+func dvIsAllowRoot(path string) bool {
+	return dv.allow != "" && strings.ToLower(strings.Trim(path, "/")) == dv.allow
+}
+
+// dvWriteLocked: nothing may be added to or changed in the export folder
+// (the server refuses it too) except Office lock and temporary files.
+func dvWriteLocked(path string) bool {
+	if !dvInAllow(path) || dvIsAllowRoot(path) {
+		return false
+	}
+	name := strings.ToLower(path[strings.LastIndex(path, "/")+1:])
+	return !(strings.HasPrefix(name, "~$") || strings.HasSuffix(name, ".tmp"))
+}
+
 func dvOnOpen(path string, fi *fuse.FileInfo_t) {
 	_, _, pid := fuse.Getcontext()
 	dv.mu.Lock()
 	defer dv.mu.Unlock()
 	reloadPolicy()
 	if len(dv.block) == 0 {
+		return
+	}
+	if dvInAllow(path) {
 		return
 	}
 	name := procName(pid)

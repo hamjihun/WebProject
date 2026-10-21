@@ -265,7 +265,7 @@ async function fileAction(act, share, p, name) {
       box.querySelector("form").onsubmit = guard(async (e) => {
         e.preventDefault();
         await api("POST", "/api/exports", { share, path: p, reason: e.target.reason.value });
-        closeModal(); toast("반출 신청했습니다. 결재 후 '내 반출 신청'에서 받을 수 있습니다");
+        closeModal(); toast("반출 신청했습니다. 승인되면 개인문서함의 [반출] 폴더에 들어갑니다");
       });
     });
   }
@@ -317,7 +317,7 @@ function exportRow(e, mode) {
 
 async function viewMyExports() {
   const list = await api("GET", "/api/exports?scope=mine");
-  let h = `<h2>내 반출 신청</h2><p class="muted">파일 목록에서 [반출 신청]을 누르면 팀장에게 결재가 올라갑니다. 승인되면 여기서 다운로드합니다.</p>`;
+  let h = `<h2>내 반출 신청</h2><p class="muted">파일 목록의 [반출 신청] 또는 탐색기에서 파일 오른쪽 클릭 → [DocVault 반출 신청]을 하면 팀장에게 결재가 올라갑니다. 승인되면 <b>개인문서함의 [반출] 폴더</b>에 파일이 들어가고, 그 폴더의 파일은 바탕화면·USB 등 PC로 복사할 수 있습니다. 여기서 다운로드할 수도 있습니다.</p>`;
   h += list.length ? `<table><thead><tr><th>신청일</th><th>파일</th><th>사유</th><th>상태</th><th></th></tr></thead><tbody>${list.map((e) => exportRow(e, "mine")).join("")}</tbody></table>` : `<div class="card empty">반출 신청 내역이 없습니다</div>`;
   $("#main").innerHTML = h;
   $("#main").querySelectorAll("[data-dl]").forEach((b) => b.onclick = () => { location.href = `/api/exports/${b.dataset.dl}/download`; setTimeout(route, 1500); });

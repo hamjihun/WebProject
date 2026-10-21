@@ -34,7 +34,11 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
+
+// exportFolder is the folder of the personal drive that holds approved
+// exports (vault.ExportFolder).
+const exportFolder = "반출"
 
 type Config struct {
 	Server   string `json:"server"`    // e.g. http://docvault.ilsan.local:8080
@@ -360,7 +364,11 @@ func (a *agent) start(d Drive) error {
 		args = append(args, "--read-only")
 	}
 	cmd := exec.Command(a.cfg.Rclone, args...)
-	cmd.Env = append(os.Environ(),
+	cmd.Env = os.Environ()
+	if d.Personal {
+		cmd.Env = append(cmd.Env, "DOCVAULT_ALLOW=/"+exportFolder) // approved exports may leave
+	}
+	cmd.Env = append(cmd.Env,
 		"RCLONE_CONFIG="+os.DevNull,
 		"RCLONE_CONFIG_"+remote+"_TYPE=webdav",
 		"RCLONE_CONFIG_"+remote+"_URL="+a.cfg.Server+"/dav/"+url.PathEscape(d.Name),
@@ -553,6 +561,12 @@ func main() {
 			err = cmdLogout(cfg)
 		case "status":
 			err = cmdStatus(cfg)
+		case "export": // 탐색기 오른쪽 클릭 → DocVault 반출 신청
+			if len(os.Args) < 3 {
+				err = errors.New("반출 신청할 파일을 지정하세요")
+			} else {
+				err = cmdExport(cfg, os.Args[2])
+			}
 		case "version":
 			fmt.Println(version)
 		default:

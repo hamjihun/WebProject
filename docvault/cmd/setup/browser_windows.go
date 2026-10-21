@@ -73,3 +73,27 @@ func removeBrowserPolicies() {
 		}
 	}
 }
+
+// Explorer's right-click menu on files: "DocVault 반출 신청".
+const exportMenuKey = `SOFTWARE\Classes\*\shell\DocVaultExport`
+
+func addExportMenu(agent string) {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, exportMenuKey, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	k.SetStringValue("", "DocVault 반출 신청")
+	k.SetStringValue("Icon", `"`+agent+`",0`)
+	k.Close()
+	c, _, err := registry.CreateKey(registry.LOCAL_MACHINE, exportMenuKey+`\command`, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	c.SetStringValue("", `"`+agent+`" export "%1"`)
+	c.Close()
+}
+
+func removeExportMenu() {
+	registry.DeleteKey(registry.LOCAL_MACHINE, exportMenuKey+`\command`)
+	registry.DeleteKey(registry.LOCAL_MACHINE, exportMenuKey)
+}

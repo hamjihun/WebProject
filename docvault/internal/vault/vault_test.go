@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -283,6 +284,74 @@ func TestExportApproval(t *testing.T) {
 	}
 }
 
+func TestApprovedExportGoesToExportFolder(t *testing.T) {
+	e := newEnv(t)
+	e.put(t, e.kim, "영업", "/견적.xlsx", "v1")
+	approve := func() {
+		t.Helper()
+		ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.v.DecideExport(e.boss, ex.ID, true, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	approve()
+	approve()
+	got := e.list(t, e.kim, "개인문서함", "/반출")
+	if len(got) != 2 || got[0] != "견적 (2).xlsx" || got[1] != "견적.xlsx" {
+		t.Fatalf("export folder: %v", got)
+	}
+	if _, f, err := e.v.Open(e.kim, "개인문서함", "/반출/견적.xlsx"); err != nil {
+		t.Fatal(err)
+	} else {
+		b, _ := io.ReadAll(f)
+		f.Close()
+		if string(b) != "v1" {
+			t.Fatalf("content %q", b)
+		}
+	}
+	// a rejected request delivers nothing
+	ex, _ := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "x")
+	e.v.DecideExport(e.boss, ex.ID, false, "")
+	if n := len(e.list(t, e.kim, "개인문서함", "/반출")); n != 2 {
+		t.Fatalf("after reject: %d files", n)
+	}
+
+	// users cannot add to, change or rename the folder; deleting is fine
+	if _, _, err := e.v.Put(e.kim, "개인문서함", "/반출/몰래.xlsx", strings.NewReader("x")); err != ErrForbidden {
+		t.Fatalf("put into export folder: %v", err)
+	}
+	if _, _, err := e.v.Put(e.kim, "개인문서함", "/반출/견적.xlsx", strings.NewReader("changed")); err != ErrForbidden {
+		t.Fatalf("overwrite in export folder: %v", err)
+	}
+	if err := e.v.Mkdir(e.kim, "개인문서함", "/반출/sub"); err != ErrForbidden {
+		t.Fatalf("mkdir in export folder: %v", err)
+	}
+	e.put(t, e.kim, "개인문서함", "/내것.xlsx", "mine")
+	if _, err := e.v.Move(e.kim, "개인문서함", "/내것.xlsx", "개인문서함", "/반출/내것.xlsx", false); err != ErrForbidden {
+		t.Fatalf("move into export folder: %v", err)
+	}
+	if _, err := e.v.Copy(e.kim, "영업", "/견적.xlsx", "개인문서함", "/반출/복사.xlsx", false); err != ErrForbidden {
+		t.Fatalf("copy into export folder: %v", err)
+	}
+	if _, err := e.v.Move(e.kim, "개인문서함", "/반출", "개인문서함", "/다른이름", false); err != ErrForbidden {
+		t.Fatalf("rename export folder: %v", err)
+	}
+	if _, _, err := e.v.Put(e.kim, "개인문서함", "/반출/~$견적.xlsx", strings.NewReader("lock")); err != nil {
+		t.Fatalf("office lock file: %v", err)
+	}
+	if err := e.v.Delete(e.kim, "개인문서함", "/반출/견적 (2).xlsx"); err != nil {
+		t.Fatalf("delete from export folder: %v", err)
+	}
+	// the copy-out check lets exported content leave the system
+	h := sha256.Sum256([]byte("v1"))
+	if _, _, found := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), 2); found {
+		t.Fatal("exported content should be allowed out")
+	}
+}
+
 func TestRansomwareGuard(t *testing.T) {
 	e := newEnv(t)
 	e.v.SetSetting(e.admin, "guard_threshold", 5)
@@ -439,4 +508,18 @@ func TestRecycleBinFolderRefused(t *testing.T) {
 	if _, _, err := e.v.Put(e.kim, "영업", "/System Volume Information", strings.NewReader("x")); err != ErrForbidden {
 		t.Fatalf("put system folder: %v", err)
 	}
+}
+
+func (e *env) list(t *testing.T, a Actor, share, p string) []string {
+	t.Helper()
+	nodes, err := e.v.List(a, share, p)
+	if err != nil {
+		t.Fatalf("list %s: %v", p, err)
+	}
+	var names []string
+	for _, n := range nodes {
+		names = append(names, n.Name)
+	}
+	sort.Strings(names)
+	return names
 }

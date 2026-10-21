@@ -107,11 +107,8 @@ func (v *Vault) BlockDownload(u *User) bool {
 // DownloadDrive is the drive letter browsers save downloads to: the
 // personal drive.
 func (v *Vault) DownloadDrive() string {
-	shares, _ := v.ListShares()
-	for _, s := range shares {
-		if s.Personal {
-			return s.DriveLetter
-		}
+	if s := v.personalShare(); s != nil {
+		return s.DriveLetter
 	}
 	return ""
 }
