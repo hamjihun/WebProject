@@ -333,6 +333,9 @@ func maintainNow() error {
 func startupErrorText(err error) string {
 	msg := "오류: " + err.Error()
 	low := strings.ToLower(err.Error())
+	if strings.Contains(err.Error(), "[확인할 것]") {
+		return msg // already explained (service start relays the saved error)
+	}
 	if strings.Contains(err.Error(), "store_dir") || strings.Contains(err.Error(), "NAS") || strings.Contains(low, "access is denied") ||
 		strings.Contains(err.Error(), "액세스") || strings.Contains(low, "network") || strings.Contains(err.Error(), "네트워크") {
 		msg += "\n\n[확인할 것]\n" +
