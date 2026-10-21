@@ -86,8 +86,15 @@ func serviceCommand(cmd string) error {
 			return err
 		}
 		if s, err := m.OpenService(serviceName); err == nil {
-			s.Close()
-			return fmt.Errorf("이미 설치되어 있습니다")
+			// Already registered (earlier install): point it at this exe and start it.
+			defer s.Close()
+			if c, err := s.Config(); err == nil {
+				c.BinaryPathName = exe
+				c.StartType = mgr.StartAutomatic
+				s.UpdateConfig(c)
+			}
+			fmt.Println("서비스가 이미 설치되어 있어 설정을 갱신했습니다. (부팅 시 자동 시작)")
+			return startAndCheck(s)
 		}
 		s, err := m.CreateService(serviceName, exe, mgr.Config{
 			DisplayName: "DocVault 문서중앙화 서버",
@@ -138,9 +145,18 @@ func serviceCommand(cmd string) error {
 // startAndCheck starts the service and reports whether it is really serving,
 // showing the startup error when it is not.
 func startAndCheck(s *mgr.Service) error {
+	if st, err := s.Query(); err == nil && st.State == svc.Running {
+		if url, ok := probe(); ok {
+			fmt.Println("\n✅ 서버가 이미 정상적으로 실행 중입니다: " + url)
+			return nil
+		}
+	}
+	if url, ok := probe(); ok {
+		return errors.New("다른 DocVault 서버가 이미 실행 중입니다 (" + url + ").\n검은 창으로 실행한 docvault-server.exe 를 먼저 닫은 뒤 다시 실행하세요.")
+	}
 	os.Remove(startupErrorFile())
 	fmt.Println("서비스를 시작하는 중...")
-	if err := s.Start(); err != nil {
+	if err := s.Start(); err != nil && !strings.Contains(err.Error(), "already running") {
 		return fmt.Errorf("서비스를 시작할 수 없습니다: %w", err)
 	}
 	for i := 0; i < 30; i++ {
