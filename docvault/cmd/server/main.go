@@ -42,6 +42,10 @@ type Config struct {
 	TLSKey     string `json:"tls_key"`
 	TrustProxy bool   `json:"trust_proxy"` // behind a reverse proxy that sets X-Forwarded-For
 	PublicURL  string `json:"public_url"`  // address PCs use, e.g. http://192.168.50.10:8080 (optional)
+	// NAS account for a store_dir on a network share. The Windows service runs
+	// as the system account, which cannot use passwords saved in Explorer.
+	StoreUser     string `json:"store_user"`
+	StorePassword string `json:"store_password"`
 }
 
 func exeDir() string {
@@ -129,7 +133,9 @@ func defaultConfigText(cfg *Config) string {
 		"  \"tls_cert\": \"\",\r\n" +
 		"  \"tls_key\": \"\",\r\n" +
 		"  \"trust_proxy\": false,\r\n" +
-		"  \"public_url\": \"\"\r\n" +
+		"  \"public_url\": \"\",\r\n" +
+		"  \"store_user\": \"\",\r\n" +
+		"  \"store_password\": \"\"\r\n" +
 		"}\r\n"
 }
 
@@ -146,6 +152,9 @@ func open(cfg *Config) (*vault.Vault, error) {
 	d, err := db.Open(filepath.Join(cfg.DataDir, "docvault.db"))
 	if err != nil {
 		return nil, err
+	}
+	if err := connectStore(cfg); err != nil {
+		return nil, fmt.Errorf("NAS 로그인에 실패했습니다 (docvault.json의 store_user, store_password 확인): %w", err)
 	}
 	bs, err := blob.New(cfg.StoreDir)
 	if err != nil {
@@ -320,27 +329,39 @@ func maintainNow() error {
 	return err
 }
 
-// reportStartupError shows why the server stopped and keeps the window open,
-// so a double-clicked server does not just flash and disappear. The message
-// is also saved next to the program.
-func reportStartupError(err error) {
+// startupErrorText explains why the server could not start and what to check.
+func startupErrorText(err error) string {
 	msg := "오류: " + err.Error()
 	low := strings.ToLower(err.Error())
-	if strings.Contains(err.Error(), "store_dir") || strings.Contains(low, "access is denied") ||
+	if strings.Contains(err.Error(), "store_dir") || strings.Contains(err.Error(), "NAS") || strings.Contains(low, "access is denied") ||
 		strings.Contains(err.Error(), "액세스") || strings.Contains(low, "network") || strings.Contains(err.Error(), "네트워크") {
 		msg += "\n\n[확인할 것]\n" +
-			" 1. 탐색기 주소창에 docvault.json의 store_dir 경로(예: \\\\192.168.50.201\\DocVaultStore)를 입력해 열리는지\n" +
-			" 2. 열릴 때 NAS 계정으로 로그인하고 '자격 증명 기억'을 체크했는지\n" +
-			" 3. 그 계정에 이 폴더 쓰기 권한이 있는지 (새 파일을 만들어 보기)\n" +
-			" 4. docvault.json의 store_dir가 탐색기 주소와 같은지: \"\\\\192.168.50.201\\DocVaultStore\""
+			" 1. docvault.json의 store_dir가 탐색기 주소와 같은지: \"\\\\192.168.50.201\\DocVaultStore\"\n" +
+			" 2. 서비스로 실행할 때는 docvault.json에 NAS 계정을 넣어야 합니다:\n" +
+			"      \"store_user\": \"NAS 아이디\",  \"store_password\": \"NAS 비밀번호\"\n" +
+			" 3. 그 NAS 계정에 DocVaultStore 폴더 읽기/쓰기 권한이 있는지"
 	} else if strings.Contains(low, "only one usage of each socket") || strings.Contains(low, "address already in use") {
 		msg += "\n\n[확인할 것] 서버가 이미 실행 중이거나 다른 프로그램이 같은 포트(listen)를 쓰고 있습니다.\n" +
 			" 작업 관리자에서 docvault-server.exe가 이미 떠 있는지 확인하세요."
 	} else if strings.Contains(err.Error(), "docvault.json") {
 		msg += "\n\n[확인할 것] docvault.json 형식 오류입니다. 각 줄 끝의 쉼표(,)와 따옴표(\")를 확인하세요."
 	}
+	return msg
+}
+
+func startupErrorFile() string { return filepath.Join(exeDir(), "시작오류.txt") }
+
+func saveStartupError(msg string) {
+	os.WriteFile(startupErrorFile(), []byte("\xef\xbb\xbf"+time.Now().Format("2006-01-02 15:04:05")+"\r\n"+strings.ReplaceAll(msg, "\n", "\r\n")+"\r\n"), 0o644)
+}
+
+// reportStartupError shows why the server stopped and keeps the window open,
+// so a double-clicked server does not just flash and disappear. The message
+// is also saved next to the program.
+func reportStartupError(err error) {
+	msg := startupErrorText(err)
 	fmt.Fprintln(os.Stderr, msg)
-	os.WriteFile(filepath.Join(exeDir(), "시작오류.txt"), []byte(time.Now().Format("2006-01-02 15:04:05")+"\r\n"+strings.ReplaceAll(msg, "\n", "\r\n")+"\r\n"), 0o644)
+	saveStartupError(msg)
 	fmt.Fprintln(os.Stderr, "\n(이 내용은 서버 폴더의 시작오류.txt 에도 저장했습니다)\n엔터를 누르면 창이 닫힙니다.")
 	bufio.NewReader(os.Stdin).ReadString('\n')
 }

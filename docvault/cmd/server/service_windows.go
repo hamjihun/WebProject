@@ -4,10 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/windows/svc"
@@ -28,6 +32,7 @@ func (winService) Execute(args []string, req <-chan svc.ChangeRequest, status ch
 	s, err := newServer()
 	if err != nil {
 		log.Printf("시작 실패: %v", err)
+		saveStartupError(startupErrorText(err))
 		return true, 1
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,10 +103,8 @@ func serviceCommand(cmd string) error {
 			{Type: mgr.ServiceRestart, Delay: 30 * time.Second},
 			{Type: mgr.ServiceRestart, Delay: time.Minute},
 		}, 86400)
-		if err := s.Start(); err != nil {
-			return err
-		}
-		fmt.Println("서비스를 설치하고 시작했습니다. (부팅 시 자동 시작)")
+		fmt.Println("서비스를 설치했습니다. (부팅 시 자동 시작)")
+		return startAndCheck(s)
 	case "uninstall":
 		s, err := m.OpenService(serviceName)
 		if err != nil {
@@ -119,7 +122,7 @@ func serviceCommand(cmd string) error {
 			return err
 		}
 		defer s.Close()
-		return s.Start()
+		return startAndCheck(s)
 	case "stop":
 		s, err := m.OpenService(serviceName)
 		if err != nil {
@@ -130,4 +133,61 @@ func serviceCommand(cmd string) error {
 		return err
 	}
 	return nil
+}
+
+// startAndCheck starts the service and reports whether it is really serving,
+// showing the startup error when it is not.
+func startAndCheck(s *mgr.Service) error {
+	os.Remove(startupErrorFile())
+	fmt.Println("서비스를 시작하는 중...")
+	if err := s.Start(); err != nil {
+		return fmt.Errorf("서비스를 시작할 수 없습니다: %w", err)
+	}
+	for i := 0; i < 30; i++ {
+		time.Sleep(500 * time.Millisecond)
+		st, err := s.Query()
+		if err != nil {
+			break
+		}
+		if st.State == svc.Stopped {
+			msg := "서비스가 시작되자마자 멈췄습니다."
+			if b, err := os.ReadFile(startupErrorFile()); err == nil {
+				msg += "\n\n" + strings.TrimPrefix(string(b), "\xef\xbb\xbf")
+			} else {
+				msg += " " + filepath.Join(exeDir(), "logs") + " 의 로그를 확인하세요."
+			}
+			return errors.New(msg)
+		}
+		if st.State == svc.Running {
+			if url, ok := probe(); ok {
+				fmt.Println("\n✅ 서버가 정상적으로 실행 중입니다: " + url)
+				return nil
+			}
+		}
+	}
+	return errors.New("서버가 응답하지 않습니다. " + filepath.Join(exeDir(), "logs") + " 의 로그와 시작오류.txt 를 확인하세요.")
+}
+
+// probe checks that the web server answers on the configured port.
+func probe() (string, bool) {
+	cfg, _, err := loadConfig()
+	if err != nil {
+		return "", false
+	}
+	port := cfg.Listen
+	if i := strings.LastIndex(port, ":"); i >= 0 {
+		port = port[i+1:]
+	}
+	scheme := "http"
+	if cfg.TLSCert != "" {
+		scheme = "https"
+	}
+	url := scheme + "://localhost:" + port
+	c := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	resp, err := c.Get(url + "/api/setup-available")
+	if err != nil {
+		return url, false
+	}
+	resp.Body.Close()
+	return url, true
 }
