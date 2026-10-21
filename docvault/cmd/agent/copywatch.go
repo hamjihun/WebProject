@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	copySettle   = 2 * time.Second // wait until the file stops changing
-	copyMaxTries = 30              // file still being written / locked
+	copySettle   = 400 * time.Millisecond // wait until the file stops changing
+	copyMaxTries = 30                     // file still being written / locked
 	copyMaxSize  = 4 << 30
 )
 
@@ -77,7 +77,7 @@ func skipLocal(path string) bool {
 
 // copyWatchLoop processes files that have settled.
 func (a *agent) copyWatchLoop() {
-	for range time.Tick(time.Second) {
+	for range time.Tick(200 * time.Millisecond) {
 		var ready []string
 		copyQueue.Lock()
 		for p, e := range copyQueue.m {
@@ -145,11 +145,8 @@ func (a *agent) checkLocal(path string) (retry bool) {
 		return true
 	}
 	log.Printf("PC로 복사된 문서함 파일 삭제: %s (%s %s)", path, res.Drive, res.Path)
-	if time.Since(lastNotice) >= 5*time.Second {
-		lastNotice = time.Now()
-		notifyBlocked("PC로 복사가 차단되었습니다",
-			"문서함 파일("+filepath.Base(path)+")은 바탕화면 등 PC로 복사할 수 없어 삭제했습니다.\n필요하면 웹에서 반출 신청을 하세요.")
-	}
+	notifyBlockedPopup("PC로 복사할 수 없습니다",
+		"문서함 파일("+filepath.Base(path)+")은 바탕화면 등 PC로 복사할 수 없습니다.\n\n필요하면 문서함에서 파일을 오른쪽 클릭 → [DocVault 반출 신청]을 하세요.\n승인되면 개인문서함의 [반출] 폴더에서 PC로 복사할 수 있습니다.")
 	return false
 }
 

@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -290,6 +291,7 @@ func runApp(cfg *Config) error {
 	g := &gui{cfg: cfg, refresh: make(chan struct{}, 1)}
 	ui = g
 	notifyBlocked = func(title, text string) { g.queueWarning(title, text) }
+	notifyBlockedPopup = g.popupBlocked
 	g.ag = newAgent(cfg)
 	g.inst, _, _ = pGetModuleHandleW.Call(0)
 	hdc, _, _ := pGetDC.Call(0)
@@ -440,6 +442,20 @@ func (g *gui) queueWarning(title, text string) {
 	g.warn = true
 	g.mu.Unlock()
 	g.post(wmBalloon)
+}
+
+var popupShowing atomic.Bool
+
+// popupBlocked shows a modal popup window telling the user the action is not
+// allowed. Only one shows at a time (a burst of blocked files is one popup).
+func (g *gui) popupBlocked(title, text string) {
+	if !popupShowing.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer popupShowing.Store(false)
+		msgBox(0, title+"\n\n"+text, mbIconWarning)
+	}()
 }
 
 func (g *gui) showMenu() {

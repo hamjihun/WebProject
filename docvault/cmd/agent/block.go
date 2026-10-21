@@ -25,6 +25,11 @@ func eventsPath(letter string) string { return filepath.Join(stateDir(), "events
 // app replaces it with a notification balloon.
 var notifyBlocked = func(title, text string) { log.Printf("%s: %s", title, text) }
 
+// notifyBlockedPopup shows a modal popup window (not just a balloon), used
+// for PC-copy and PC-download blocks the user must notice. Rate-limited so a
+// burst of blocked files shows one popup. The Windows tray app replaces it.
+var notifyBlockedPopup = func(title, text string) { log.Printf("%s: %s", title, text) }
+
 func (a *agent) updatePolicy() {
 	var p struct {
 		Block         map[string]string `json:"block"`
