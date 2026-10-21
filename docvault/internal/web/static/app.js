@@ -101,18 +101,19 @@ async function loadSide() {
   h += "<h4>반출</h4>";
   h += `<a href="#/exports" data-nav="exports">내 반출 신청</a>`;
   if (canApprove) h += `<a href="#/approvals" data-nav="approvals">반출 결재함 ${pending ? `<span class="badge">${pending}</span>` : ""}</a>`;
-  h += `<h4>도움</h4><a href="/download/setup">💻 PC 프로그램 설치</a>`;
   if (me.isAdmin) {
     h += "<h4>관리자</h4>";
     h += `<a href="#/admin/overview" data-nav="admin/overview">현황</a>`;
     h += `<a href="#/admin/users" data-nav="admin/users">사용자</a>`;
     h += `<a href="#/admin/groups" data-nav="admin/groups">그룹(팀)</a>`;
     h += `<a href="#/admin/shares" data-nav="admin/shares">드라이브·권한</a>`;
+    h += `<a href="#/admin/storage" data-nav="admin/storage">저장소 사용량</a>`;
     h += `<a href="#/admin/audit" data-nav="admin/audit">감사 로그</a>`;
     h += `<a href="#/admin/sessions" data-nav="admin/sessions">접속 PC·세션</a>`;
     h += `<a href="#/admin/backup" data-nav="admin/backup">백업·복구</a>`;
     h += `<a href="#/admin/settings" data-nav="admin/settings">설정</a>`;
   }
+  h += `<h4>도움</h4><a href="/download/setup">💻 PC 프로그램 설치</a>`;
   $("#side").innerHTML = h;
 }
 
@@ -139,7 +140,7 @@ function route() {
     exports: viewMyExports,
     pair: () => viewPair(rest[0]),
     approvals: viewApprovals,
-    admin: () => ({ overview: adminOverview, users: adminUsers, groups: adminGroups, shares: adminShares, audit: adminAudit, sessions: adminSessions, backup: adminBackup, settings: adminSettings }[rest[0]] || (() => {}))(),
+    admin: () => ({ overview: adminOverview, users: adminUsers, groups: adminGroups, shares: adminShares, storage: adminStorage, audit: adminAudit, sessions: adminSessions, backup: adminBackup, settings: adminSettings }[rest[0]] || (() => {}))(),
   };
   (views[page] ? guard(views[page]) : () => {})();
 }
@@ -590,6 +591,21 @@ const BLOCK_LABELS = {
   block_browser_upload: ["웹브라우저 업로드 차단", "크롬·엣지·웨일·파이어폭스가 문서함 파일을 읽지 못하게 합니다 (웹메일 첨부, 웹 업로드 차단). 문서함의 PDF를 브라우저로 여는 것도 막힙니다"],
 };
 
+async function adminStorage() {
+  const d = await api("GET", "/api/admin/storage");
+  const bar = (used, quota) => { const pct = quota > 0 ? Math.min(100, Math.round(used / quota * 100)) : 0; return quota > 0 ? `<div class="usage"><div style="width:${pct}%"></div></div> ${pct}%` : `<span class="muted">제한 없음</span>`; };
+  let h = `<h2>저장소 사용량</h2><p class="muted">드라이브(문서함)별 현재 문서와 휴지통 사용량입니다. 저장소 디스크(NAS) 남은 공간: <b>${d.storeFreeGB ? d.storeFreeGB.toFixed(0) + " GB" : "-"}</b></p>
+    <div class="tiles"><div class="tile"><div class="tile-v">${fmtSize(d.currentBytes)}</div><div class="tile-l">현재 문서 전체</div></div>
+      <div class="tile"><div class="tile-v">${fmtSize(d.trashBytes)}</div><div class="tile-l">휴지통 전체</div></div></div>
+    <table><thead><tr><th>문자</th><th>드라이브</th><th>종류</th><th class="num">파일 수</th><th class="num">사용량</th><th>용량 제한</th><th class="num">휴지통</th></tr></thead><tbody>
+    ${d.drives.map((x) => `<tr><td>${esc(x.letter ? x.letter + ":" : "-")}</td><td>${esc(x.name)}</td><td>${x.personal ? "개인문서함" : "팀"}</td>
+      <td class="num">${x.files.toLocaleString()}</td><td class="num">${fmtSize(x.bytes)}</td>
+      <td>${bar(x.bytes, x.quotaBytes)}</td><td class="num">${x.trashFiles ? x.trashFiles.toLocaleString() + "개 / " + fmtSize(x.trashBytes) : "-"}</td></tr>`).join("")}
+    </tbody></table>
+    <p class="muted" style="margin-top:10px">같은 파일은 한 번만 저장(중복 제거)되므로, 각 드라이브 합계보다 실제 NAS 사용량이 적을 수 있습니다.</p>`;
+  $("#main").innerHTML = h;
+}
+
 async function adminOverview() {
   const d = await api("GET", "/api/admin/overview");
   const st = d.stats;
@@ -635,52 +651,51 @@ async function adminOverview() {
 async function adminBackup() {
   const b = await api("GET", "/api/admin/backup");
   const fmtT = (t) => t && !t.startsWith("0001") ? fmtTime(Date.parse(t) / 1000) : "없음";
-  let h = `<h2>백업 · 복구 (재해 대비)</h2><p class="muted">서버·NAS가 모두 고장나거나 랜섬웨어에 감염돼도 복구할 수 있도록, USB/외장 디스크에 <b>수동으로</b> 백업합니다.</p>`;
-  if (!b.configured) {
-    h += `<div class="card" style="padding:18px;max-width:760px">
-      <p><b>백업 위치가 설정되어 있지 않습니다.</b></p>
-      <p class="muted">웹에서 [지금 백업] 버튼으로 백업하려면, 서버에 USB/외장 디스크를 꽂고 서버 폴더의 <b>docvault.json</b>에 백업 위치를 적은 뒤 서비스를 다시 시작하세요:</p>
-      <div class="codeblock">"backup_dir": "E:\\"</div>
-      <p class="muted">설정이 번거로우면, 서버에서 명령창으로 바로 백업해도 됩니다 (USB 드라이브 문자를 직접 지정):</p>
-      <div class="codeblock">docvault-server.exe backup E:\</div>
-      <p class="muted">백업은 <b>바뀐 파일만</b> 복사하므로 평소엔 금방 끝납니다. 백업이 끝나면 USB를 <b>뽑아서 따로 보관</b>하세요 (꽂혀 있지 않으면 랜섬웨어가 백업까지 암호화할 수 없습니다).</p>
-    </div>`;
-    $("#main").innerHTML = h;
-    return;
-  }
   const last = b.last;
-  h += `<div class="card" style="padding:18px;max-width:760px">
-    <table style="width:100%"><tbody>
-    <tr><td class="muted" style="width:160px">백업 위치</td><td><b>${esc(b.dir)}</b></td></tr>
-    <tr><td class="muted">마지막 백업</td><td>${last ? fmtT(last.finishedAt) : "<b>아직 없음</b>"}</td></tr>
-    ${last ? `<tr><td class="muted">백업된 파일</td><td>${last.blobsTotal.toLocaleString()}개 (${fmtSize(last.bytesTotal)})</td></tr>
-    <tr><td class="muted">마지막에 새로 복사</td><td>${last.blobsCopied.toLocaleString()}개 (${fmtSize(last.bytesCopied)}), ${last.durationSec}초</td></tr>
-    <tr><td class="muted">백업 디스크 남은 용량</td><td>${last.targetFreeGB ? last.targetFreeGB.toFixed(0) + " GB" : "-"}</td></tr>
-    <tr><td class="muted">DB 스냅샷</td><td>${esc(last.dbSnapshot || "-")}</td></tr>` : ""}
-    </tbody></table>
-    <div class="buttons" style="margin-top:14px"><button id="bkNow" class="primary">지금 백업</button></div>
-    <p id="bkMsg" class="muted" style="margin-top:8px"></p>
-  </div>
-  <div class="card" style="padding:18px;max-width:760px;margin-top:14px">
+  const kind = last ? (last.blobsCopied === last.blobsTotal ? "전체 백업(처음)" : "증분(바뀐 것만)") : "-";
+  let h = `<h2>백업 · 복구 (재해 대비)</h2>
+    <p class="muted">서버·NAS가 모두 고장나거나 랜섬웨어에 감염돼도 복구할 수 있도록, USB/외장 디스크에 <b>수동으로</b> 백업합니다. 백업이 끝나면 USB를 <b>뽑아서 따로 보관</b>하세요.</p>
+    <div class="card" style="padding:18px;max-width:780px">
+      <h3 style="margin-top:0">지금 백업</h3>
+      <p class="muted">서버에 USB/외장 디스크를 꽂은 뒤, 그 드라이브 문자를 적고 [백업 시작]을 누르세요. 처음은 전체 복사라 오래 걸리고, 이후에는 <b>바뀐 파일만</b> 복사해 금방 끝납니다.</p>
+      <div class="form"><label>백업 위치 (USB/외장 디스크)<input id="bkDir" placeholder="예: E:\\" value="${esc(b.dir || "")}"></label>
+      <div class="buttons"><button id="bkNow" class="primary">백업 시작</button></div>
+      <p id="bkMsg" class="muted"></p></div>
+    </div>`;
+  if (last) {
+    h += `<div class="card" style="padding:18px;max-width:780px;margin-top:14px">
+      <h3 style="margin-top:0">마지막 백업</h3>
+      <table style="width:100%"><tbody>
+      <tr><td class="muted" style="width:170px">시각</td><td>${fmtT(last.finishedAt)}</td></tr>
+      <tr><td class="muted">방식</td><td><b>${kind}</b></td></tr>
+      <tr><td class="muted">백업된 파일(전체)</td><td>${last.blobsTotal.toLocaleString()}개 · ${fmtSize(last.bytesTotal)}</td></tr>
+      <tr><td class="muted">이번에 새로 복사</td><td>${last.blobsCopied.toLocaleString()}개 · ${fmtSize(last.bytesCopied)} · ${last.durationSec}초</td></tr>
+      <tr><td class="muted">백업 디스크 남은 용량</td><td>${last.targetFreeGB ? last.targetFreeGB.toFixed(0) + " GB" : "-"}</td></tr>
+      <tr><td class="muted">DB 스냅샷</td><td>${esc(last.dbSnapshot || "-")}</td></tr>
+      </tbody></table></div>`;
+  }
+  h += `<div class="card" style="padding:18px;max-width:780px;margin-top:14px">
     <h3 style="margin-top:0">복구 방법 (서버·NAS를 모두 잃었을 때)</h3>
     <ol class="muted" style="line-height:1.9">
       <li>새(또는 복구된) 서버에 DocVault를 설치합니다.</li>
       <li>백업 USB/디스크를 서버에 꽂습니다.</li>
-      <li>서버 폴더에서 명령창을 열고 아래를 실행합니다:<br>
-        <code>docvault-server.exe restore E:\</code> &nbsp;(E: 는 백업 디스크)</li>
-      <li>YES 를 입력하면 파일과 계정·권한·버전이 모두 복구됩니다.</li>
+      <li>서버 폴더에서 명령창을 열고 실행: <code>docvault-server.exe restore E:\</code> (E: 는 백업 디스크)</li>
+      <li>YES 를 입력하면 파일·계정·권한·버전이 모두 복구됩니다.</li>
       <li>서비스를 시작하면 직원들이 그대로 사용합니다.</li>
     </ol>
-    <p class="muted">백업 디스크에는 날짜별 DB 스냅샷이 여러 개 있습니다. 특정 시점으로 되돌리려면 <code>restore E:\ docvault-20260101-020000.db</code> 처럼 스냅샷을 지정하세요.</p>
+    <p class="muted">특정 시점 복구: <code>restore E:\ docvault-20260101-020000.db</code> (백업 디스크에 최근 14개 스냅샷 보관)</p>
   </div>`;
   $("#main").innerHTML = h;
   $("#bkNow").onclick = guard(async () => {
+    const dir = $("#bkDir").value.trim();
+    if (!dir) { $("#bkMsg").textContent = "백업 위치를 입력하세요 (예: E:\\)"; return; }
     $("#bkNow").disabled = true;
-    $("#bkMsg").textContent = "백업 중입니다... (바뀐 파일만 복사하지만, 처음이거나 많이 바뀌었으면 오래 걸릴 수 있습니다)";
+    $("#bkMsg").textContent = "백업 중입니다... (처음이거나 많이 바뀌었으면 오래 걸릴 수 있습니다. 창을 닫지 마세요)";
     try {
-      const r = await api("POST", "/api/admin/backup");
-      $("#bkMsg").textContent = `완료: 새 파일 ${r.blobsCopied.toLocaleString()}개 (${fmtSize(r.bytesCopied)}), 전체 ${r.blobsTotal.toLocaleString()}개. ${r.durationSec}초 걸렸습니다.`;
-      setTimeout(() => route(), 1200);
+      const r = await api("POST", "/api/admin/backup", { dir });
+      const k = r.blobsCopied === r.blobsTotal ? "전체 백업" : "증분 백업";
+      $("#bkMsg").textContent = `완료(${k}): 새로 복사 ${r.blobsCopied.toLocaleString()}개 (${fmtSize(r.bytesCopied)}), 전체 ${r.blobsTotal.toLocaleString()}개. ${r.durationSec}초.`;
+      setTimeout(() => route(), 1500);
     } catch (e) {
       $("#bkMsg").textContent = "백업 실패: " + e.message;
       $("#bkNow").disabled = false;

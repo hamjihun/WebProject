@@ -26,10 +26,10 @@ type API struct {
 	V            *vault.Vault
 	TrustProxy   bool
 	SecureCookie bool
-	DownloadDir  string                         // holds docvault-setup.exe for employees to download
-	PublicURL    string                         // address PCs use to reach the server (default: from the request)
-	BackupDir    string                         // configured offline backup location (empty = off)
-	RunBackup    func() (*backup.Result, error) // run a backup now (set by the server)
+	DownloadDir  string                                   // holds docvault-setup.exe for employees to download
+	PublicURL    string                                   // address PCs use to reach the server (default: from the request)
+	BackupDir    string                                   // configured offline backup location (empty = off)
+	RunBackup    func(dir string) (*backup.Result, error) // run a backup now to dir (set by the server)
 }
 
 type ctx struct {
@@ -90,6 +90,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/maintain", s.admin(s.maintain))
 	mux.HandleFunc("GET /api/admin/store-check", s.admin(s.storeCheck))
 	mux.HandleFunc("GET /api/admin/overview", s.admin(s.overview))
+	mux.HandleFunc("GET /api/admin/storage", s.admin(s.storage))
 	mux.HandleFunc("GET /api/admin/backup", s.admin(s.backupStatus))
 	mux.HandleFunc("POST /api/admin/backup", s.admin(s.runBackup))
 }
@@ -835,6 +836,15 @@ func (s *API) overview(w http.ResponseWriter, r *http.Request, c *ctx) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *API) storage(w http.ResponseWriter, r *http.Request, c *ctx) {
+	drives, cur, trash := s.V.StorageByShare()
+	storeFreeGB := 0.0
+	if f, err := s.V.Blobs.FreeGB(); err == nil {
+		storeFreeGB = f
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"drives": drives, "currentBytes": cur, "trashBytes": trash, "storeFreeGB": storeFreeGB})
+}
+
 func (s *API) backupStatus(w http.ResponseWriter, r *http.Request, c *ctx) {
 	out := map[string]any{"configured": s.BackupDir != "", "dir": s.BackupDir}
 	if s.BackupDir != "" {
@@ -844,11 +854,17 @@ func (s *API) backupStatus(w http.ResponseWriter, r *http.Request, c *ctx) {
 }
 
 func (s *API) runBackup(w http.ResponseWriter, r *http.Request, c *ctx) {
-	if s.RunBackup == nil || s.BackupDir == "" {
-		fail(w, errors.New("백업 위치가 설정되어 있지 않습니다 (docvault.json의 backup_dir)"))
+	var in struct{ Dir string }
+	readJSON(r, &in)
+	dir := strings.TrimSpace(in.Dir)
+	if dir == "" {
+		dir = s.BackupDir
+	}
+	if s.RunBackup == nil || dir == "" {
+		fail(w, errors.New("백업 위치를 입력하세요 (예: E:\\)"))
 		return
 	}
-	res, err := s.RunBackup()
+	res, err := s.RunBackup(dir)
 	if err != nil {
 		fail(w, err)
 		return

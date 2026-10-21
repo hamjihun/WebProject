@@ -417,7 +417,7 @@ func (a *agent) start(d Drive) error {
 		"--vfs-cache-max-age", "1h",
 		"--vfs-cache-max-size", "20G",
 		"--cache-dir", cache,
-		"--dir-cache-time", "30s",
+		"--dir-cache-time", "8s", // new files (반출 폴더 등)·권한 변경이 8초 안에 반영되도록
 		"--poll-interval", "0",
 		// Give up quickly when the server does not answer: every program
 		// touching the drive (Explorer, i.e. also the taskbar) waits for it.

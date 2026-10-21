@@ -129,3 +129,12 @@ func (s *Store) Healthy() error {
 	}
 	return os.Remove(name)
 }
+
+// FreeGB is the free space on the store disk, in GiB.
+func (s *Store) FreeGB() (float64, error) {
+	_, free, err := s.DiskSpace()
+	if err != nil {
+		return 0, err
+	}
+	return float64(free) / (1 << 30), nil
+}

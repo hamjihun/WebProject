@@ -219,7 +219,7 @@ func newServer() (*server, error) {
 	(&api.API{V: v, TrustProxy: cfg.TrustProxy, SecureCookie: cfg.TLSCert != "",
 		DownloadDir: downloads, PublicURL: cfg.PublicURL,
 		BackupDir: cfg.BackupDir,
-		RunBackup: func() (*backup.Result, error) { return s.backupNow() },
+		RunBackup: s.backupTo,
 	}).Register(mux)
 	mux.Handle("/", web.Handler())
 	s.http = &http.Server{
@@ -234,15 +234,19 @@ func newServer() (*server, error) {
 // serve runs until ctx is cancelled.
 // backupNow runs one backup and logs the outcome. Safe to call concurrently
 // (guarded by backupMu).
-func (s *server) backupNow() (*backup.Result, error) {
+func (s *server) backupNow() (*backup.Result, error) { return s.backupTo(s.cfg.BackupDir) }
+
+func (s *server) backupTo(dir string) (*backup.Result, error) {
 	s.backupMu.Lock()
 	defer s.backupMu.Unlock()
-	if _, err := os.Stat(s.cfg.BackupDir); err != nil {
-		log.Printf("백업 건너뜀: 백업 위치에 접근할 수 없습니다 (%s). USB/디스크 연결을 확인하세요.", s.cfg.BackupDir)
-		return nil, fmt.Errorf("백업 위치에 접근할 수 없습니다: %s (USB/디스크 연결 확인)", s.cfg.BackupDir)
+	if dir == "" {
+		return nil, fmt.Errorf("백업 위치가 지정되지 않았습니다")
 	}
-	log.Printf("백업 시작 → %s", s.cfg.BackupDir)
-	r, err := backup.Run(s.vault.DB, s.cfg.StoreDir, s.cfg.BackupDir, func(line string) { log.Printf("백업: %s", line) })
+	if _, err := os.Stat(dir); err != nil {
+		return nil, fmt.Errorf("백업 위치에 접근할 수 없습니다: %s (USB/디스크 연결 확인)", dir)
+	}
+	log.Printf("백업 시작 → %s", dir)
+	r, err := backup.Run(s.vault.DB, s.cfg.StoreDir, dir, func(line string) { log.Printf("백업: %s", line) })
 	if err != nil {
 		log.Printf("백업 실패: %v", err)
 		return r, err

@@ -228,3 +228,32 @@ func (v *Vault) Overview() Overview {
 	v.DB.QueryRow(`SELECT COALESCE(SUM(size),0) FROM nodes WHERE is_dir=0 AND deleted_at IS NULL`).Scan(&o.StoreBytes)
 	return o
 }
+
+// DriveUsage is per-drive storage use for the admin storage page.
+type DriveUsage struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Letter     string `json:"letter"`
+	Personal   bool   `json:"personal"`
+	Files      int64  `json:"files"`
+	Bytes      int64  `json:"bytes"`
+	TrashFiles int64  `json:"trashFiles"`
+	TrashBytes int64  `json:"trashBytes"`
+	QuotaBytes int64  `json:"quotaBytes"`
+}
+
+// StorageByShare totals current and trashed file bytes per drive.
+func (v *Vault) StorageByShare() ([]DriveUsage, int64, int64) {
+	shares, _ := v.ListShares()
+	var totalCur, totalTrash int64
+	out := []DriveUsage{}
+	for _, s := range shares {
+		u := DriveUsage{ID: s.ID, Name: s.Name, Letter: s.DriveLetter, Personal: s.Personal, QuotaBytes: s.QuotaBytes}
+		v.DB.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size),0) FROM nodes WHERE share_id=? AND is_dir=0 AND deleted_at IS NULL`, s.ID).Scan(&u.Files, &u.Bytes)
+		v.DB.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size),0) FROM nodes WHERE share_id=? AND is_dir=0 AND deleted_at IS NOT NULL`, s.ID).Scan(&u.TrashFiles, &u.TrashBytes)
+		totalCur += u.Bytes
+		totalTrash += u.TrashBytes
+		out = append(out, u)
+	}
+	return out, totalCur, totalTrash
+}

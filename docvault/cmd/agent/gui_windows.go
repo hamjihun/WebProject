@@ -141,6 +141,7 @@ const (
 	cmdOpenPC          = 2001
 	cmdOpenWeb         = 2002
 	cmdReconnect       = 2003
+	cmdRefreshPolicy   = 2011
 	cmdAbout           = 2004
 	menuLogout         = 2005
 	cmdExit            = 2006
@@ -493,6 +494,7 @@ func (g *gui) showMenu() {
 		}
 		add(mfString, cmdOpenPC, "내 PC 열기")
 		add(mfString, cmdOpenWeb, "웹 문서함 열기 (버전·휴지통·반출)")
+		add(mfString, cmdRefreshPolicy, "권한·정책 업데이트")
 		add(mfString, cmdReconnect, "지금 다시 연결")
 		sep()
 		add(mfString, cmdCheckUpdate, "업데이트 확인")
@@ -525,6 +527,15 @@ func (g *gui) onCommand(cmd int) {
 		openBrowser(g.cfg.Server)
 	case cmdOpenLogs:
 		exec.Command("explorer.exe", filepath.Join(stateDir(), "logs")).Start()
+	case cmdRefreshPolicy:
+		go func() {
+			g.ag.updatePolicy()
+			select {
+			case g.refresh <- struct{}{}:
+			default:
+			}
+			g.queueBalloon("권한·정책을 업데이트했습니다", "바뀐 권한과 차단 설정이 적용되었습니다.")
+		}()
 	case cmdReconnect:
 		select {
 		case g.refresh <- struct{}{}:
