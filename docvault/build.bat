@@ -22,10 +22,18 @@ go build -trimpath -ldflags "-s -w" -o dist\server\docvault-server.exe .\cmd\ser
 go build -trimpath -ldflags "-s -w" -o dist\server\downloads\docvault-setup.exe .\cmd\setup || goto :err
 if not exist dist\agent mkdir dist\agent
 copy /y %P%\docvault-agent.exe dist\agent\ >nul
+rem 설치용 패키지: 번호 붙은 한글 폴더 + 설명서
+set PKG=dist\DocVault_설치파일
+if exist "%PKG%" rmdir /s /q "%PKG%"
+xcopy /e /i /q release "%PKG%" >nul
+mkdir "%PKG%\1_서버설치\downloads" "%PKG%\3_관리자참고" 2>nul
+copy /y dist\server\docvault-server.exe "%PKG%\1_서버설치\" >nul
+copy /y dist\server\downloads\docvault-setup.exe "%PKG%\1_서버설치\downloads\" >nul
+copy /y dist\server\downloads\docvault-setup.exe "%PKG%\2_직원PC설치\DocVault_PC설치.exe" >nul
+copy /y README.md "%PKG%\3_관리자참고\" >nul
 echo.
-echo 완료:
-echo   dist\server\docvault-server.exe
-echo   dist\server\downloads\docvault-setup.exe  (직원 PC 통합 설치 파일 - 서버 웹에서 내려받기 제공)
+echo 완료: %PKG%
+echo   (1_서버설치 폴더의 docvault.json 은 처음 실행할 때 자동으로 만들어집니다)
 pause
 exit /b 0
 :err

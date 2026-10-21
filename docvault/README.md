@@ -18,6 +18,33 @@
 
 ---
 
+
+## 0. 설치 파일은 어디에? (먼저 보세요)
+
+설치할 때는 소스 코드가 아니라 **`DocVault_설치파일`** 폴더(또는 zip)만 쓰면 됩니다.
+
+```
+DocVault_설치파일\
+ ├ 0_먼저읽어주세요.txt         ← 전체 순서
+ ├ 1_서버설치\                  ← 서버 PC에 한 번만 (C:\DocVault 로 복사)
+ │   ├ docvault-server.exe
+ │   ├ docvault.json             (파일 저장 위치 = NAS 주소)
+ │   ├ downloads\docvault-setup.exe  (직원이 웹에서 받아 가는 파일. 그대로 둘 것)
+ │   ├ 서버시작(테스트용).bat
+ │   ├ 윈도우서비스로설치(운영용).bat
+ │   ├ 서비스중지.bat / 서비스시작.bat / 윈도우서비스제거.bat
+ │   ├ 방화벽열기.bat
+ │   └ 서버설치방법.txt
+ ├ 2_직원PC설치\                ← 직원 PC마다
+ │   ├ DocVault_PC설치.exe
+ │   └ 직원PC설치방법.txt
+ └ 3_관리자참고\README.md       ← 이 문서
+```
+
+- 만드는 방법: `build.bat`(Windows) 또는 `scripts/build-release.sh` → `dist\DocVault_설치파일`
+- 이 저장소의 나머지 폴더(`cmd`, `internal`, `tools` …)는 **프로그램 소스 코드**입니다. 설치할 때는 필요 없습니다.
+- 설명서 원본은 `release/` 폴더에 있습니다.
+
 ## 1. 주요 기능
 
 | 기능 | 내용 |

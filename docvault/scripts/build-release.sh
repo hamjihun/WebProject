@@ -19,4 +19,30 @@ mkdir -p dist/server/downloads dist/agent
 go build $F -ldflags="-s -w" -o dist/server/docvault-server.exe ./cmd/server
 go build $F -ldflags="-s -w" -o dist/server/downloads/docvault-setup.exe ./cmd/setup
 cp $P/docvault-agent.exe dist/agent/
-echo "완료: dist/server (서버 + downloads/docvault-setup.exe)"
+
+# Package for people installing it: numbered Korean folders with guides.
+#   STORE_DIR=\\\\nas\\share ./scripts/build-release.sh  → docvault.json stores files on that NAS
+PKG=dist/DocVault_설치파일
+rm -rf "$PKG" dist/DocVault_설치파일.zip
+mkdir -p "$PKG/1_서버설치/downloads" "$PKG/2_직원PC설치" "$PKG/3_관리자참고"
+cp -r release/. "$PKG/"
+cp dist/server/docvault-server.exe "$PKG/1_서버설치/"
+cp dist/server/downloads/docvault-setup.exe "$PKG/1_서버설치/downloads/"
+cp dist/server/downloads/docvault-setup.exe "$PKG/2_직원PC설치/DocVault_PC설치.exe"
+cp README.md "$PKG/3_관리자참고/README.md"
+python3 - "$PKG/1_서버설치/docvault.json" "${STORE_DIR:-}" <<'PY'
+import json, sys
+cfg = {"listen": ":8080"}
+if sys.argv[2]:
+    cfg["store_dir"] = sys.argv[2]
+cfg.update({"tls_cert": "", "tls_key": "", "trust_proxy": False, "public_url": ""})
+open(sys.argv[1], "w", newline="").write(json.dumps(cfg, indent=2, ensure_ascii=False).replace("\n", "\r\n") + "\r\n")
+PY
+(cd dist && python3 -c "
+import os, zipfile
+z = zipfile.ZipFile('DocVault_설치파일.zip', 'w', zipfile.ZIP_DEFLATED)
+for r, d, fs in os.walk('DocVault_설치파일'):
+    for f in fs:
+        z.write(os.path.join(r, f))
+z.close()")
+echo "완료: dist/DocVault_설치파일 (dist/DocVault_설치파일.zip)"
