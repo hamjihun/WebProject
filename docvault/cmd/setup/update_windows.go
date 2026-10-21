@@ -22,6 +22,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"docvault/internal/buildinfo"
@@ -31,6 +33,11 @@ import (
 )
 
 const updateServiceName = "DocVaultUpdate"
+
+// updateNowControl is the service control code the agent sends for
+// [업데이트 확인] (codes 128-255 are user defined; by default Windows lets
+// signed-in users send them).
+const updateNowControl = svc.Cmd(128)
 
 // setupMarker is found in this file by the server (buildinfo.VersionIn).
 // A variable, so the text stays in the program as written.
@@ -93,8 +100,26 @@ func (updateService) Execute(args []string, req <-chan svc.ChangeRequest, status
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	next := time.NewTimer(20 * time.Second) // soon after Windows starts, before work begins
+	tick := time.NewTicker(10 * time.Minute)
+	defer tick.Stop()
 	failures := map[string]int{}
+	var mu sync.Mutex // one check at a time
+	updated := make(chan struct{}, 1)
+	check := func(manual bool) {
+		if !mu.TryLock() {
+			return
+		}
+		go func() {
+			defer mu.Unlock()
+			if manual {
+				clear(failures) // the user asked: try again even after failures
+			}
+			if checkForUpdate(ctx, failures) {
+				updated <- struct{}{}
+			}
+		}()
+	}
+	first := time.After(20 * time.Second) // soon after Windows starts, before work begins
 	for {
 		select {
 		case c := <-req:
@@ -104,36 +129,55 @@ func (updateService) Execute(args []string, req <-chan svc.ChangeRequest, status
 			case svc.Stop, svc.Shutdown:
 				status <- svc.Status{State: svc.StopPending}
 				return false, 0
+			case updateNowControl:
+				updateLog("사용자가 업데이트 확인을 요청했습니다")
+				check(true)
 			}
-		case <-next.C:
-			checkForUpdate(ctx, failures)
-			next.Reset(10 * time.Minute)
+		case <-updated:
+			// This running copy is the old program: start the service again
+			// (a few seconds after this copy has stopped) so the new one runs.
+			c := exec.Command("cmd")
+			c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true,
+				CmdLine: `cmd /c ping 127.0.0.1 -n 4 >nul & sc start ` + updateServiceName}
+			if c.Start() == nil {
+				updateLog("새 버전으로 업데이트 서비스를 다시 시작합니다")
+				status <- svc.Status{State: svc.StopPending}
+				return false, 0
+			}
+		case <-first:
+			check(false)
+		case <-tick.C:
+			check(false)
 		}
 	}
 }
 
-func checkForUpdate(ctx context.Context, failures map[string]int) {
+// checkForUpdate installs a newer version the server offers and reports
+// whether it did.
+func checkForUpdate(ctx context.Context, failures map[string]int) bool {
 	server := existingServer()
 	if server == "" {
-		return
+		return false
 	}
 	c := &http.Client{Timeout: 15 * time.Second}
 	resp, err := c.Get(server + "/api/setup-info")
 	if err != nil {
-		return
+		return false
 	}
 	var info struct{ Version string }
 	json.NewDecoder(resp.Body).Decode(&info)
 	resp.Body.Close()
 	have := installedVersion()
 	if info.Version == "" || !buildinfo.NewerThan(info.Version, have) || failures[info.Version] >= 3 {
-		return
+		return false
 	}
 	updateLog("새 버전 발견: %s (설치된 버전 %s)", info.Version, have)
 	if err := downloadAndRun(ctx, server, info.Version); err != nil {
 		failures[info.Version]++
 		updateLog("업데이트 실패 (%d/3): %v", failures[info.Version], err)
+		return false
 	}
+	return true
 }
 
 func downloadAndRun(ctx context.Context, server, want string) error {

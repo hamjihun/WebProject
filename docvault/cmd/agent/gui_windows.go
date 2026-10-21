@@ -9,6 +9,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -216,6 +217,7 @@ type gui struct {
 	tray                                   uintptr // hidden window that owns the notification icon
 	login                                  uintptr
 	idBox, pwBox, srvBox, loginBtn, msgLbl uintptr
+	saveBox                                uintptr // 아이디·비밀번호 저장
 	taskbarCreated                         uint32
 	trayAdded                              bool
 
@@ -336,9 +338,16 @@ func runApp(cfg *Config) error {
 	g.addTray()
 	cleanupOldCopies()
 	go g.watchUpdates()
-	if cfg.Server != "" && loadToken() != "" {
+	// Every start asks to sign in (with the saved ID and password filled in
+	// if the user chose to save them), except a restart into an update,
+	// which keeps the session so work is not interrupted.
+	if restarted && cfg.Server != "" && loadToken() != "" {
 		g.startSession()
 	} else {
+		if tok := loadToken(); tok != "" && cfg.Server != "" {
+			os.Remove(tokenPath())
+			go newClient(cfg, tok).call("POST", "/api/logout", map[string]string{}, nil)
+		}
 		g.showLogin("")
 	}
 
@@ -468,6 +477,7 @@ func (g *gui) showMenu() {
 		add(mfString, cmdOpenWeb, "웹 문서함 열기 (버전·휴지통·반출)")
 		add(mfString, cmdReconnect, "지금 다시 연결")
 		sep()
+		add(mfString, cmdCheckUpdate, "업데이트 확인")
 		add(mfString, cmdAbout, "버전 정보")
 		add(mfString, cmdOpenLogs, "로그 폴더 열기")
 		add(mfString, menuLogout, "로그아웃")
@@ -475,6 +485,7 @@ func (g *gui) showMenu() {
 		add(mfString|mfGrayed, 1, "DocVault – 로그인이 필요합니다")
 		sep()
 		add(mfString, cmdShowLogin, "로그인...")
+		add(mfString, cmdCheckUpdate, "업데이트 확인")
 		add(mfString, cmdAbout, "버전 정보")
 	}
 	add(mfString, cmdExit, "종료")
@@ -520,6 +531,8 @@ func (g *gui) onCommand(cmd int) {
 			version, g.cfg.Server, user, strings.Join(lines, "\n"), filepath.Join(stateDir(), "logs")), mbIconInformation)
 	case cmdShowLogin:
 		g.showLogin("")
+	case cmdCheckUpdate:
+		go g.checkUpdateNow()
 	case cmdApplyUpdate:
 		if msgBox(g.tray, "DocVault를 새 버전으로 다시 시작합니다.\n문서 드라이브가 몇 초 동안 끊기니, 열려 있는 문서는 먼저 저장하고 닫으세요.\n\n지금 적용할까요?", mbYesNo|mbIconQuestion) == idYes {
 			g.restart()
@@ -670,6 +683,30 @@ func (g *gui) loop(stop chan struct{}) {
 
 func lastUserPath() string { return filepath.Join(stateDir(), "last-user.txt") }
 
+// The ID and password saved with [아이디·비밀번호 저장], encrypted for this
+// Windows user (DPAPI), so only they can read them.
+func savedLoginPath() string { return filepath.Join(stateDir(), "saved-login.dat") }
+
+func saveLogin(id, pw string) {
+	b, _ := json.Marshal([2]string{id, pw})
+	if enc, err := protect(b); err == nil {
+		os.WriteFile(savedLoginPath(), enc, 0o600)
+	}
+}
+
+func loadSavedLogin() (id, pw string) {
+	enc, err := os.ReadFile(savedLoginPath())
+	if err != nil {
+		return "", ""
+	}
+	b, err := unprotect(enc)
+	var v [2]string
+	if err != nil || json.Unmarshal(b, &v) != nil {
+		return "", ""
+	}
+	return v[0], v[1]
+}
+
 func (g *gui) ctl(class, text string, style, exStyle uintptr, x, y, w, h, id int, font uintptr) uintptr {
 	c, t := wstr(class), wstr(text)
 	hwnd, _, _ := pCreateWindowExW.Call(exStyle, ptr(c), ptr(t), wsChild|wsVisible|style,
@@ -693,7 +730,7 @@ func (g *gui) showLogin(message string) {
 		return
 	}
 	askServer := g.cfg.Server == ""
-	width, height := 380, 340
+	width, height := 380, 372
 	if askServer {
 		height += 60
 	}
@@ -718,12 +755,21 @@ func (g *gui) showLogin(message string) {
 	}
 	g.ctl("STATIC", "아이디", 0, 0, 24, y, 320, 20, 0, g.font)
 	last, _ := os.ReadFile(lastUserPath())
+	savedID, savedPW := loadSavedLogin()
+	if savedID != "" {
+		last = []byte(savedID)
+	}
 	g.idBox = g.ctl("EDIT", strings.TrimSpace(string(last)), wsTabStop|esAutoHScroll, wsExClientEdge, 24, y+20, 316, 28, 0, g.font)
 	y += 58
 	g.ctl("STATIC", "비밀번호", 0, 0, 24, y, 320, 20, 0, g.font)
-	g.pwBox = g.ctl("EDIT", "", wsTabStop|esAutoHScroll|esPassword, wsExClientEdge, 24, y+20, 316, 28, 0, g.font)
-	y += 64
-	g.loginBtn = g.ctl("BUTTON", "로그인", wsTabStop|bsDefPushButton, 0, 24, y, 316, 34, idLogin, g.font)
+	g.pwBox = g.ctl("EDIT", savedPW, wsTabStop|esAutoHScroll|esPassword, wsExClientEdge, 24, y+20, 316, 28, 0, g.font)
+	y += 58
+	g.saveBox = g.ctl("BUTTON", "아이디·비밀번호 저장", wsTabStop|bsAutoCheckbox, 0, 24, y, 316, 24, 0, g.font)
+	if savedPW != "" {
+		pSendMessageW.Call(g.saveBox, bmSetCheck, 1, 0)
+	}
+	y += 34
+	g.loginBtn = g.ctl("BUTTON", "접속하기", wsTabStop|bsDefPushButton, 0, 24, y, 316, 34, idLogin, g.font)
 	y += 42
 	g.msgLbl = g.ctl("STATIC", message, 0, 0, 24, y, 316, 40, 0, g.font)
 
@@ -732,6 +778,8 @@ func (g *gui) showLogin(message string) {
 	switch {
 	case askServer:
 		pSetFocus.Call(g.srvBox)
+	case savedPW != "":
+		pSetFocus.Call(g.loginBtn)
 	case len(strings.TrimSpace(string(last))) > 0:
 		pSetFocus.Call(g.pwBox)
 	default:
@@ -757,7 +805,8 @@ func (g *gui) doLogin() {
 		setText(g.msgLbl, "아이디와 비밀번호를 입력하세요.")
 		return
 	}
-	setText(g.msgLbl, "로그인 중...")
+	setText(g.msgLbl, "접속 중...")
+	save, _, _ := pSendMessageW.Call(g.saveBox, bmGetCheck, 0, 0)
 	pEnableWindow.Call(g.loginBtn, 0)
 	go func() {
 		err := passwordLogin(g.cfg, id, pw)
@@ -770,6 +819,11 @@ func (g *gui) doLogin() {
 		} else {
 			g.loginMsg = ""
 			os.WriteFile(lastUserPath(), []byte(id), 0o600)
+			if save == 1 {
+				saveLogin(id, pw)
+			} else {
+				os.Remove(savedLoginPath())
+			}
 			if g.srvBox != 0 {
 				saveConfig(g.cfg)
 			}

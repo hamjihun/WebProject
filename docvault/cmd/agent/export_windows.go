@@ -17,6 +17,7 @@ const (
 	wsVScroll      = 0x00200000
 	bsAutoCheckbox = 0x0003
 	bmGetCheck     = 0x00F0
+	bmSetCheck     = 0x00F1
 )
 
 // exportDlg is the small "반출 신청" window opened from Explorer's menu.

@@ -9,11 +9,13 @@ package main
 // picks [업데이트 적용].
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -108,4 +110,88 @@ func cleanupOldCopies() {
 	for _, f := range old {
 		os.Remove(f) // may belong to the SYSTEM-owned install; failing is fine
 	}
+}
+
+const cmdCheckUpdate = 2010
+
+var checkingUpdate atomic.Bool
+
+// checkUpdateNow is [업데이트 확인]: asks the server for its version and, if
+// it is newer, has the update service install it now, then offers to apply.
+func (g *gui) checkUpdateNow() {
+	if !checkingUpdate.CompareAndSwap(false, true) {
+		return
+	}
+	defer checkingUpdate.Store(false)
+	if v := installedVersion(); buildinfo.NewerThan(v, version) {
+		g.offerRestart(v)
+		return
+	}
+	var info struct{ Version string }
+	resp, err := probeClient.Get(g.cfg.Server + "/api/setup-info")
+	if err == nil {
+		json.NewDecoder(resp.Body).Decode(&info)
+		resp.Body.Close()
+	}
+	switch {
+	case err != nil:
+		msgBox(0, "서버에 연결할 수 없어 업데이트를 확인하지 못했습니다.\n잠시 후 다시 시도하세요.", mbIconWarning)
+		return
+	case !buildinfo.NewerThan(info.Version, version):
+		msgBox(0, "최신 버전입니다. (v"+version+")", mbIconInformation)
+		return
+	}
+	logPath := filepath.Join(os.Getenv("ProgramData"), "DocVault", "update.log")
+	before := fileSize(logPath)
+	if err := triggerUpdateService(); err != nil {
+		log.Printf("업데이트 서비스 호출 실패: %v", err)
+		msgBox(0, "자동 업데이트 서비스에 연결할 수 없습니다.\n웹 문서함 → [PC 프로그램 설치]로 새 버전(v"+info.Version+")을 직접 설치하세요.", mbIconWarning)
+		return
+	}
+	g.queueBalloon("업데이트를 받는 중입니다 (v"+info.Version+")", "1분 정도 걸립니다. 다 되면 알려 드립니다.")
+	for i := 0; i < 150; i++ { // up to 5 minutes
+		time.Sleep(2 * time.Second)
+		if i == 7 && fileSize(logPath) == before {
+			// An update service from before 0.8.3 ignores the request.
+			msgBox(0, "지금 설치된 자동 업데이트 서비스가 이전 버전이라 바로 받지 못했습니다.\nPC를 다시 시작하면 1분 안에 자동으로 업데이트됩니다.", mbIconInformation)
+			return
+		}
+		if v := installedVersion(); buildinfo.NewerThan(v, version) {
+			g.offerRestart(v)
+			return
+		}
+	}
+	msgBox(0, "업데이트를 설치하지 못했습니다.\n관리자에게 C:\\ProgramData\\DocVault\\update.log 파일을 보내 주세요.", mbIconWarning)
+}
+
+func (g *gui) offerRestart(v string) {
+	g.mu.Lock()
+	g.updateTo = v
+	g.mu.Unlock()
+	if msgBox(0, "새 버전(v"+v+")이 설치되었습니다. 지금 적용할까요?\n\n문서 드라이브가 몇 초 동안 끊기니, 열려 있는 문서는 먼저 저장하세요.", mbYesNo|mbIconQuestion) == idYes {
+		g.post(wmRestart)
+	}
+}
+
+func triggerUpdateService() error {
+	m, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseServiceHandle(m)
+	s, err := windows.OpenService(m, wstr("DocVaultUpdate"), windows.SERVICE_USER_DEFINED_CONTROL)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseServiceHandle(s)
+	var st windows.SERVICE_STATUS
+	return windows.ControlService(s, 128, &st)
+}
+
+func fileSize(p string) int64 {
+	st, err := os.Stat(p)
+	if err != nil {
+		return -1
+	}
+	return st.Size()
 }
