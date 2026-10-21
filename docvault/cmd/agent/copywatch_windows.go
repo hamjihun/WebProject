@@ -78,6 +78,7 @@ func watchDir(a *agent, root string, done func()) {
 	}
 	defer windows.CloseHandle(h)
 	buf := make([]byte, 64*1024)
+	renamedFrom := "" // old name of the rename being reported
 	const filter = windows.FILE_NOTIFY_CHANGE_FILE_NAME | windows.FILE_NOTIFY_CHANGE_SIZE | windows.FILE_NOTIFY_CHANGE_LAST_WRITE
 	for {
 		var n uint32
@@ -91,9 +92,21 @@ func watchDir(a *agent, root string, done func()) {
 		for off := uint32(0); ; {
 			info := (*windows.FileNotifyInformation)(unsafe.Pointer(&buf[off]))
 			name := windows.UTF16ToString(unsafe.Slice(&info.FileName, info.FileNameLength/2))
+			path := filepath.Join(root, name)
 			switch info.Action {
-			case windows.FILE_ACTION_ADDED, windows.FILE_ACTION_MODIFIED, windows.FILE_ACTION_RENAMED_NEW_NAME:
-				a.noteLocalChange(filepath.Join(root, name))
+			case windows.FILE_ACTION_ADDED:
+				a.noteDownloadStarted(path)
+				a.noteLocalChange(path)
+			case windows.FILE_ACTION_MODIFIED:
+				a.noteLocalChange(path)
+			case windows.FILE_ACTION_RENAMED_OLD_NAME:
+				renamedFrom = path
+			case windows.FILE_ACTION_RENAMED_NEW_NAME:
+				if isPartialDownload(renamedFrom) {
+					a.noteDownloadFinished(path)
+				}
+				renamedFrom = ""
+				a.noteLocalChange(path)
 			}
 			if info.NextEntryOffset == 0 {
 				break

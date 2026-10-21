@@ -747,7 +747,8 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 
 // agentPolicy tells the PC agent which programs may not read drive files.
 func (s *API) agentPolicy(w http.ResponseWriter, r *http.Request, c *ctx) {
-	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User), "copyWatch": s.V.CopyWatch(c.a.User)})
+	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User), "copyWatch": s.V.CopyWatch(c.a.User),
+		"blockDownload": s.V.BlockDownload(c.a.User)})
 }
 
 // agentCopyCheck answers whether a new file on the PC is a copy of a drive
@@ -815,5 +816,5 @@ var actionLabels = map[string]string{
 	"admin_share_delete": "[관리] 드라이브 삭제", "admin_share_acl": "[관리] 권한 변경",
 	"admin_setting": "[관리] 설정 변경", "admin_session_revoke": "[관리] 접속 강제 종료",
 	"admin_audit_export": "[관리] 로그 내보내기", "agent_pair": "PC 연결",
-	"block_copy": "PC 복사 차단", "block_messenger": "메신저 첨부 차단", "block_upload": "웹 업로드 차단", "block_custom": "프로그램 차단",
+	"block_copy": "PC 복사 차단", "block_messenger": "메신저 첨부 차단", "block_upload": "웹 업로드 차단", "block_custom": "프로그램 차단", "block_download": "PC 저장 차단",
 }

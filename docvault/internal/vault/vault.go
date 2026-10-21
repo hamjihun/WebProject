@@ -112,6 +112,7 @@ var defaultSettings = map[string]int64{
 	"block_copy_out":       1,   // 탐색기·명령창·압축 프로그램으로 PC에 복사 차단
 	"block_messenger":      1,   // 카카오톡 등 메신저 첨부 차단
 	"block_browser_upload": 0,   // 웹브라우저 업로드(웹메일 첨부 등) 차단
+	"block_download_local": 1,   // 웹브라우저 다운로드를 PC(바탕화면 등)에 저장 차단
 }
 
 // String settings (stored in the same table).
@@ -142,7 +143,7 @@ func (v *Vault) SetStringSetting(a Actor, key, val string) error {
 func SettingKeys() []string {
 	return []string{"retention_days", "version_keep_days", "version_keep_count",
 		"export_valid_days", "export_max_downloads", "session_web_hours", "session_agent_days",
-		"guard_threshold", "guard_window_sec", "block_copy_out", "block_messenger", "block_browser_upload"}
+		"guard_threshold", "guard_window_sec", "block_copy_out", "block_messenger", "block_browser_upload", "block_download_local"}
 }
 
 func (v *Vault) Setting(key string) int64 {

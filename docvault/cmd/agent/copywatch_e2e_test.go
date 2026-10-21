@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"docvault/internal/api"
 	"docvault/internal/blob"
@@ -73,5 +74,32 @@ func TestCopyWatchRemovesDriveCopies(t *testing.T) {
 	entries, _, _ := v.QueryAudit(vault.AuditQuery{Action: "block_copy"})
 	if len(entries) != 1 {
 		t.Fatalf("audit entries: %d", len(entries))
+	}
+
+	// A browser download that finished on the desktop is deleted.
+	if !a.blockDownload.Load() {
+		t.Fatal("download block should be on for a regular user")
+	}
+	if !isPartialDownload(`C:\Users\kim\Desktop\Unconfirmed 1234.crdownload`) || isPartialDownload(`C:\a\b.xlsx`) {
+		t.Fatal("isPartialDownload")
+	}
+	dl := filepath.Join(desk, "견적서.pdf")
+	os.WriteFile(dl, []byte("pdf"), 0o644)
+	a.noteDownloadFinished(dl)
+	for i := 0; i < 50; i++ {
+		if entries, _, _ = v.QueryAudit(vault.AuditQuery{Action: "block_download"}); len(entries) == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(dl); !os.IsNotExist(err) || len(entries) != 1 {
+		t.Fatalf("download not removed/logged: %v %d", err, len(entries))
+	}
+	// Admins are not blocked.
+	kim.IsAdmin = true
+	v.UpdateUser(admin, kim.ID, vault.UserUpdate{IsAdmin: &kim.IsAdmin})
+	a.updatePolicy()
+	if a.blockDownload.Load() || a.copyWatch.Load() {
+		t.Fatal("admin should not be blocked")
 	}
 }

@@ -98,6 +98,24 @@ func (v *Vault) CopyCheck(u *User, sha string, size int64) (drive, p string, fou
 	return "", "", false
 }
 
+// BlockDownload reports whether the agent should refuse browser downloads
+// saved on the PC itself (they belong in the DocVault drives).
+func (v *Vault) BlockDownload(u *User) bool {
+	return !u.IsAdmin && !u.AllowCopy && v.Setting("block_download_local") != 0
+}
+
+// DownloadDrive is the drive letter browsers save downloads to: the
+// personal drive.
+func (v *Vault) DownloadDrive() string {
+	shares, _ := v.ListShares()
+	for _, s := range shares {
+		if s.Personal {
+			return s.DriveLetter
+		}
+	}
+	return ""
+}
+
 // CopySizeKnown is a cheap first test for CopyCheck: whether any drive file
 // has this size, so the agent need not hash every new file on the PC.
 func (v *Vault) CopySizeKnown(u *User, size int64) bool {
@@ -110,9 +128,13 @@ func (v *Vault) CopySizeKnown(u *User, size int64) bool {
 
 // RecordBlocked logs a refusal reported by the PC agent.
 func (v *Vault) RecordBlocked(a Actor, kind, proc, drive, p string) {
-	action := map[string]string{"copy": "block_copy", "messenger": "block_messenger", "upload": "block_upload"}[kind]
+	action := map[string]string{"copy": "block_copy", "messenger": "block_messenger", "upload": "block_upload", "download": "block_download"}[kind]
 	if action == "" {
 		action = "block_custom"
 	}
-	v.Audit(a, action, drive, p, proc+" 의 파일 읽기 차단")
+	detail := proc + " 의 파일 읽기 차단"
+	if kind == "download" {
+		detail = "웹브라우저 다운로드를 PC에 저장 → 삭제"
+	}
+	v.Audit(a, action, drive, p, detail)
 }

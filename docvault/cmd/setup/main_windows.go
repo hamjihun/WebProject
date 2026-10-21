@@ -202,6 +202,7 @@ func doInstall() error {
 	makeShortcut(startMenuLink(), agent, "")
 	os.Remove(logoutLink()) // replaced by the menu of the notification-area icon
 	registerUninstall(dir, installedByUs)
+	setBrowserPolicies(server)
 
 	step(5, "DocVault 시작")
 	// Started through Explorer so it runs as the signed-in user (not as
@@ -393,6 +394,7 @@ func doUninstall() error {
 		os.Remove(filepath.Join(dir, f))
 	}
 	removeUserData()
+	removeBrowserPolicies()
 
 	fmt.Println("[3/4] 가상 드라이브 구성요소(WinFsp) 제거")
 	restart := false

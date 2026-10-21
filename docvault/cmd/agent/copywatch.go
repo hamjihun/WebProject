@@ -157,3 +157,5 @@ func removeCopy(path string) error {
 	os.Chmod(path, 0o600) // clear read-only
 	return os.Remove(path)
 }
+
+func isNotExist(err error) bool { return os.IsNotExist(err) }

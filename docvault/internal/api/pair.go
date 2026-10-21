@@ -73,6 +73,7 @@ func (s *API) registerPairing(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/pair/{code}/approve", s.auth(s.pairApprove))
 	mux.HandleFunc("GET /download/setup", s.downloadSetup)
 	mux.HandleFunc("GET /api/setup-available", s.setupAvailable)
+	mux.HandleFunc("GET /api/setup-info", s.setupInfo)
 }
 
 func (s *API) pairStart(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +165,11 @@ func (s *API) setupPath() string { return filepath.Join(s.DownloadDir, "docvault
 func (s *API) setupAvailable(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Stat(s.setupPath())
 	writeJSON(w, http.StatusOK, map[string]bool{"available": err == nil})
+}
+
+// setupInfo tells the PC installer where browsers should save downloads.
+func (s *API) setupInfo(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"downloadDrive": s.V.DownloadDrive()})
 }
 
 // SetupTrailerMagic marks the server settings appended to docvault-setup.exe

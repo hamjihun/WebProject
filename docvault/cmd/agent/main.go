@@ -34,7 +34,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.4.0"
+const version = "0.5.0"
 
 type Config struct {
 	Server   string `json:"server"`    // e.g. http://docvault.ilsan.local:8080
@@ -328,7 +328,8 @@ type agent struct {
 	mu     sync.Mutex
 	mounts map[string]*mount // by drive letter
 
-	copyWatch atomic.Bool // remove copies of drive files made on this PC
+	copyWatch     atomic.Bool // remove copies of drive files made on this PC
+	blockDownload atomic.Bool // refuse browser downloads saved on this PC
 }
 
 func (a *agent) start(d Drive) error {
