@@ -30,8 +30,7 @@ DocVault_설치파일\
  │   ├ docvault-server.exe
  │   ├ docvault.json             (파일 저장 위치 = NAS 주소)
  │   ├ downloads\docvault-setup.exe  (직원이 웹에서 받아 가는 파일. 그대로 둘 것)
- │   ├ 서버시작(테스트용).bat
- │   ├ 윈도우서비스로설치(운영용).bat
+ │   ├ 윈도우서비스로설치.bat
  │   ├ 서비스중지.bat / 서비스시작.bat / 윈도우서비스제거.bat
  │   ├ 방화벽열기.bat
  │   └ 서버설치방법.txt
