@@ -5,7 +5,7 @@ package main
 // Self-restart after an automatic update. The update service replaces the
 // program files while this copy keeps running; this copy notices the new
 // version.txt and restarts into the new program when nobody is working
-// (no input for 20 minutes and no document program open), when the user
+// (no input for 2 minutes and no document program open), when the user
 // picks [업데이트 적용], or at the next Windows logon anyway.
 
 import (
@@ -32,7 +32,7 @@ var (
 const (
 	wmRestart      = wmApp + 6
 	cmdApplyUpdate = 2009
-	updateIdle     = 20 * time.Minute
+	updateIdle     = 2 * time.Minute
 )
 
 // documentPrograms with files possibly open on the drives: never restart
