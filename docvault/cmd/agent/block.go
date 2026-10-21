@@ -27,15 +27,20 @@ var notifyBlocked = func(title, text string) { log.Printf("%s: %s", title, text)
 
 func (a *agent) updatePolicy() {
 	var p struct {
-		Block map[string]string `json:"block"`
+		Block     map[string]string `json:"block"`
+		CopyWatch bool              `json:"copyWatch"`
 	}
 	if err := a.client.call("GET", "/api/agent/policy", nil, &p); err != nil {
+		if err == errUnauthorized {
+			a.copyWatch.Store(false)
+		}
 		return
 	}
+	a.copyWatch.Store(p.CopyWatch)
 	if p.Block == nil {
 		p.Block = map[string]string{}
 	}
-	b, _ := json.Marshal(p)
+	b, _ := json.Marshal(map[string]any{"block": p.Block}) // the drive program only needs the block list
 	if old, err := os.ReadFile(policyPath()); err == nil && bytes.Equal(old, b) {
 		return
 	}

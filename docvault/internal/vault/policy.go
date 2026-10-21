@@ -3,9 +3,14 @@ package vault
 import "strings"
 
 // Programs whose reads of DocVault drive files the PC agent refuses.
+//
+// Explorer is deliberately not here: it is also the desktop and taskbar, and
+// refusing its reads (thumbnails, right-click menus, properties) hangs it.
+// Explorer copies are caught after the fact instead: the agent watches the
+// PC's folders and USB drives and asks CopyCheck about each new file.
 var (
-	// Copying out to the PC: Explorer copy/drag, command-line copy, archivers.
-	copyOutProcesses = []string{"explorer.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "robocopy.exe", "xcopy.exe",
+	// Copying out to the PC: command-line copy, archivers.
+	copyOutProcesses = []string{"cmd.exe", "powershell.exe", "pwsh.exe", "robocopy.exe", "xcopy.exe",
 		"bandizip.exe", "bz.exe", "alzip.exe", "7zfm.exe", "7zg.exe", "7z.exe", "winrar.exe", "rar.exe",
 		"winzip32.exe", "winzip64.exe"}
 	messengerProcesses = []string{"kakaotalk.exe", "telegram.exe", "line.exe", "whatsapp.exe", "discord.exe"}
@@ -43,6 +48,64 @@ func (v *Vault) Policy(u *User) map[string]string {
 		}
 	}
 	return block
+}
+
+// CopyWatch reports whether the agent should remove copies of drive files
+// that appear on u's PC (Explorer copy/drag to the desktop, USB, ...).
+func (v *Vault) CopyWatch(u *User) bool {
+	return !u.IsAdmin && !u.AllowCopy && v.Setting("block_copy_out") != 0
+}
+
+// CopyCheck tells whether a file with this content (SHA-256 and size) that
+// appeared on the user's PC is a copy of a drive file the user can see, and
+// so must be removed. Files the user had approved for export are allowed.
+// It returns the drive name and path of the matching file.
+func (v *Vault) CopyCheck(u *User, sha string, size int64) (drive, p string, found bool) {
+	if !v.CopyWatch(u) || size <= 0 || len(sha) != 64 {
+		return "", "", false
+	}
+	var exported int
+	v.DB.QueryRow(`SELECT COUNT(*) FROM exports e JOIN versions ver ON ver.id=e.version_id
+		WHERE e.requester_id=? AND e.status IN ('approved','expired') AND ver.blob_sha=?`, u.ID, sha).Scan(&exported)
+	if exported > 0 {
+		return "", "", false
+	}
+	rows, err := v.DB.Query(`SELECT n.id, n.share_id, n.owner_id FROM nodes n
+		WHERE n.blob_sha=? AND n.size=? AND n.is_dir=0 AND n.deleted_at IS NULL LIMIT 50`, strings.ToLower(sha), size)
+	if err != nil {
+		return "", "", false
+	}
+	type hit struct{ id, share, owner int64 }
+	var hits []hit
+	for rows.Next() {
+		var h hit
+		if rows.Scan(&h.id, &h.share, &h.owner) == nil {
+			hits = append(hits, h)
+		}
+	}
+	rows.Close()
+	for _, h := range hits {
+		s, err := v.ShareByID(h.share)
+		if err != nil || v.Level(u, s) == LevelNone || (s.Personal && h.owner != u.ID) {
+			continue
+		}
+		n, err := nodeByID(v.DB, h.id)
+		if err != nil {
+			continue
+		}
+		return s.Name, pathOf(v.DB, n), true
+	}
+	return "", "", false
+}
+
+// CopySizeKnown is a cheap first test for CopyCheck: whether any drive file
+// has this size, so the agent need not hash every new file on the PC.
+func (v *Vault) CopySizeKnown(u *User, size int64) bool {
+	if !v.CopyWatch(u) || size <= 0 {
+		return false
+	}
+	var one int
+	return v.DB.QueryRow(`SELECT 1 FROM nodes WHERE size=? AND is_dir=0 AND deleted_at IS NULL LIMIT 1`, size).Scan(&one) == nil
 }
 
 // RecordBlocked logs a refusal reported by the PC agent.

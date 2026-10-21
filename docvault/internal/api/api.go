@@ -62,6 +62,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/heartbeat", s.auth(s.heartbeat))
 	mux.HandleFunc("GET /api/agent/policy", s.auth(s.agentPolicy))
 	mux.HandleFunc("POST /api/agent/event", s.auth(s.agentEvent))
+	mux.HandleFunc("POST /api/agent/copy-check", s.auth(s.agentCopyCheck))
 	s.registerPairing(mux)
 
 	mux.HandleFunc("GET /api/admin/users", s.admin(s.listUsers))
@@ -746,7 +747,31 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 
 // agentPolicy tells the PC agent which programs may not read drive files.
 func (s *API) agentPolicy(w http.ResponseWriter, r *http.Request, c *ctx) {
-	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User)})
+	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User), "copyWatch": s.V.CopyWatch(c.a.User)})
+}
+
+// agentCopyCheck answers whether a new file on the PC is a copy of a drive
+// file (see Vault.CopyCheck); when it is, the agent deletes it and the
+// attempt is logged here.
+func (s *API) agentCopyCheck(w http.ResponseWriter, r *http.Request, c *ctx) {
+	var in struct {
+		SHA256 string `json:"sha256"`
+		Size   int64  `json:"size"`
+		Local  string `json:"local"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if in.SHA256 == "" { // size-only pre-check
+		writeJSON(w, http.StatusOK, map[string]any{"maybe": s.V.CopySizeKnown(c.a.User, in.Size)})
+		return
+	}
+	drive, p, found := s.V.CopyCheck(c.a.User, in.SHA256, in.Size)
+	if found {
+		s.V.Audit(c.a, "block_copy", drive, p, "PC로 복사된 파일 삭제: "+in.Local)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"block": found, "drive": drive, "path": p})
 }
 
 // agentEvent records a refusal the PC agent applied.

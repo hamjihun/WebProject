@@ -374,7 +374,7 @@ async function adminUsers() {
       <label class="row"><input type="checkbox" name="isAdmin" ${u.isAdmin ? "checked" : ""}> 관리자</label>
       <label class="row"><input type="checkbox" name="disabled" ${u.disabled ? "checked" : ""}> 사용 중지 (퇴사 등 – 즉시 모든 접속 차단)</label>
       <label class="row"><input type="checkbox" name="writeBlocked" ${u.writeBlocked ? "checked" : ""}> 쓰기 차단 (랜섬웨어 의심 시 자동 설정됨)</label>
-      <label class="row"><input type="checkbox" name="allowCopy" ${u.allowCopy ? "checked" : ""}> PC로 복사 허용 (탐색기 복사 차단 예외)</label>
+      <label class="row"><input type="checkbox" name="allowCopy" ${u.allowCopy ? "checked" : ""}> PC로 복사 허용 (PC 복사 차단 예외)</label>
       <div class="buttons"><button type="button" data-close>취소</button><button class="primary">저장</button></div></form>`, (box) => {
       box.querySelector("form").onsubmit = guard(async (e) => {
         e.preventDefault(); const f = e.target;
@@ -541,7 +541,7 @@ const SETTING_LABELS = {
 };
 
 const BLOCK_LABELS = {
-  block_copy_out: ["PC로 복사 차단", "탐색기 복사·붙여넣기·드래그, 명령창 복사, 압축 프로그램(반디집·알집·7-Zip·WinRAR)이 문서함 파일을 읽지 못하게 합니다. 사용자별 예외는 [사용자 → 수정 → PC로 복사 허용]"],
+  block_copy_out: ["PC로 복사 차단", "탐색기로 PC(바탕화면·USB 등)에 복사된 문서함 파일을 바로 삭제하고, 명령창·압축 프로그램(반디집·알집·7-Zip·WinRAR)은 문서함 파일을 읽지 못하게 합니다. 사용자별 예외는 [사용자 → 수정 → PC로 복사 허용]"],
   block_messenger: ["메신저 첨부 차단", "카카오톡, 텔레그램, 라인, 왓츠앱, 디스코드에 문서함 파일을 첨부하지 못하게 합니다"],
   block_browser_upload: ["웹브라우저 업로드 차단", "크롬·엣지·웨일·파이어폭스가 문서함 파일을 읽지 못하게 합니다 (웹메일 첨부, 웹 업로드 차단). 문서함의 PDF를 브라우저로 여는 것도 막힙니다"],
 };

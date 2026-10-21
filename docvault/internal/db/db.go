@@ -83,6 +83,8 @@ CREATE INDEX IF NOT EXISTS nodes_root ON nodes(share_id, owner_id) WHERE parent_
 CREATE INDEX IF NOT EXISTS nodes_deleted ON nodes(deleted_at) WHERE deleted_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS nodes_usage ON nodes(share_id, owner_id, size) WHERE deleted_at IS NULL AND is_dir=0;
 CREATE INDEX IF NOT EXISTS nodes_batch ON nodes(delete_batch) WHERE delete_batch IS NOT NULL;
+CREATE INDEX IF NOT EXISTS nodes_blob ON nodes(blob_sha) WHERE deleted_at IS NULL AND is_dir=0;
+CREATE INDEX IF NOT EXISTS nodes_size ON nodes(size) WHERE deleted_at IS NULL AND is_dir=0;
 
 CREATE TABLE IF NOT EXISTS versions (
 	id         INTEGER PRIMARY KEY,

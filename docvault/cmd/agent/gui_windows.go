@@ -546,6 +546,7 @@ func (g *gui) startSession() {
 
 // endSession disconnects every drive and stops syncing.
 func (g *gui) endSession() {
+	g.ag.copyWatch.Store(false)
 	g.mu.Lock()
 	stop := g.stop
 	g.stop, g.loggedIn, g.drives = nil, false, nil

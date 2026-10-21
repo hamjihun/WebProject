@@ -1,6 +1,8 @@
 package vault
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"path/filepath"
 	"strings"
@@ -384,12 +386,48 @@ func TestPolicyBlocksUsersButNotAdmins(t *testing.T) {
 		t.Fatalf("admin should have no blocks: %v", p)
 	}
 	p := e.v.Policy(e.kim.User)
-	if p["kakaotalk.exe"] != "messenger" || p["explorer.exe"] != "copy" {
+	if p["kakaotalk.exe"] != "messenger" || p["cmd.exe"] != "copy" || p["explorer.exe"] != "" {
 		t.Fatalf("user policy %v", p)
 	}
+	if !e.v.CopyWatch(e.kim.User) || e.v.CopyWatch(e.admin.User) {
+		t.Fatal("copy watch")
+	}
 	e.kim.User.AllowCopy = true
-	if p := e.v.Policy(e.kim.User); p["explorer.exe"] != "" || p["kakaotalk.exe"] != "messenger" {
+	if p := e.v.Policy(e.kim.User); p["cmd.exe"] != "" || p["kakaotalk.exe"] != "messenger" || e.v.CopyWatch(e.kim.User) {
 		t.Fatalf("copy exemption %v", p)
+	}
+}
+
+func TestCopyCheck(t *testing.T) {
+	e := newEnv(t)
+	e.put(t, e.kim, "영업", "/견적.xlsx", "quote")
+	e.put(t, e.lee, "개인문서함", "/메모.txt", "memo")
+	sum := func(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
+
+	if d, p, ok := e.v.CopyCheck(e.kim.User, sum("quote"), 5); !ok || d != "영업" || p != "/견적.xlsx" {
+		t.Fatalf("copy of a drive file: %v %q %q", ok, d, p)
+	}
+	if _, _, ok := e.v.CopyCheck(e.kim.User, sum("other"), 5); ok {
+		t.Fatal("unrelated file matched")
+	}
+	if _, _, ok := e.v.CopyCheck(e.kim.User, sum("memo"), 4); ok {
+		t.Fatal("someone else's personal file matched")
+	}
+	if _, _, ok := e.v.CopyCheck(e.lee.User, sum("memo"), 4); !ok {
+		t.Fatal("own personal file not matched")
+	}
+	if _, _, ok := e.v.CopyCheck(e.admin.User, sum("quote"), 5); ok {
+		t.Fatal("admin is never blocked")
+	}
+	ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.v.DecideExport(e.boss, ex.ID, true, "승인"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := e.v.CopyCheck(e.kim.User, sum("quote"), 5); ok {
+		t.Fatal("approved export should be allowed")
 	}
 }
 
