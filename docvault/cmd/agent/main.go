@@ -351,9 +351,14 @@ func (a *agent) start(d Drive) error {
 	os.MkdirAll(logDir, 0o700)
 	args := []string{"mount", remote + ":", target,
 		"--volname", d.Name,
-		"--vfs-cache-mode", "writes", // needed so Office can save; files are uploaded right after
+		// full: what is read is kept in the local cache too, so programs that
+		// jump around a file or read it several times (Explorer menus, icons
+		// and signature checks of .exe, antivirus, archivers) don't download it
+		// again for every read. Writes are uploaded 2 s after closing.
+		"--vfs-cache-mode", "full",
 		"--vfs-write-back", "2s",
 		"--vfs-cache-max-age", "1h",
+		"--vfs-cache-max-size", "20G",
 		"--cache-dir", cache,
 		"--dir-cache-time", "30s",
 		"--poll-interval", "0",
