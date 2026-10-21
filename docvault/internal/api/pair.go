@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"docvault/internal/buildinfo"
 	"docvault/internal/netutil"
 	"docvault/internal/vault"
 )
@@ -168,8 +169,37 @@ func (s *API) setupAvailable(w http.ResponseWriter, r *http.Request) {
 }
 
 // setupInfo tells the PC installer where browsers should save downloads.
+// It also gives the version of the PC program the server offers, which the
+// PCs' update service installs when it is newer than their own.
 func (s *API) setupInfo(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"downloadDrive": s.V.DownloadDrive()})
+	writeJSON(w, http.StatusOK, map[string]string{"downloadDrive": s.V.DownloadDrive(), "version": s.setupVersion()})
+}
+
+var setupVer struct {
+	sync.Mutex
+	mod     time.Time
+	size    int64
+	version string
+}
+
+// setupVersion reads the version marker inside downloads\docvault-setup.exe
+// (re-read only when the file changes).
+func (s *API) setupVersion() string {
+	st, err := os.Stat(s.setupPath())
+	if err != nil {
+		return ""
+	}
+	setupVer.Lock()
+	defer setupVer.Unlock()
+	if st.ModTime().Equal(setupVer.mod) && st.Size() == setupVer.size {
+		return setupVer.version
+	}
+	b, err := os.ReadFile(s.setupPath())
+	if err != nil {
+		return ""
+	}
+	setupVer.mod, setupVer.size, setupVer.version = st.ModTime(), st.Size(), buildinfo.VersionIn(b)
+	return setupVer.version
 }
 
 // SetupTrailerMagic marks the server settings appended to docvault-setup.exe

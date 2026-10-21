@@ -514,10 +514,12 @@ async function adminAudit() {
 
 async function adminSessions() {
   const list = await api("GET", "/api/admin/sessions");
+  const latest = (await api("GET", "/api/setup-info").catch(() => ({}))).version || "";
+  const older = (v) => { const a = v.split(".").map(Number), b = latest.split(".").map(Number); for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0); return false; };
   const now = Date.now() / 1000;
-  let h = `<h2>접속 PC·세션</h2><p class="muted">PC 에이전트는 1분마다 상태를 보고합니다. 5분 넘게 보고가 없으면 꺼졌거나 연결이 끊긴 PC입니다.</p>
+  let h = `<h2>접속 PC·세션</h2><p class="muted">PC 에이전트는 1분마다 상태를 보고합니다. 5분 넘게 보고가 없으면 꺼졌거나 연결이 끊긴 PC입니다.${latest ? ` 서버의 PC 프로그램: <b>v${esc(latest)}</b> — 0.7.0 이상인 PC는 자동으로 업데이트됩니다 (PC를 쓰지 않을 때 적용).` : ""}</p>
     <table><thead><tr><th>사용자</th><th>종류</th><th>PC / 브라우저</th><th>IP</th><th>연결된 드라이브</th><th>마지막 접속</th><th></th></tr></thead><tbody>
-    ${list.map((s) => `<tr><td>${esc(s.user)}</td><td>${s.kind === "agent" ? "PC 에이전트" : "웹"}</td><td>${esc(s.device)}${s.agentVer ? ` <span class="muted">v${esc(s.agentVer)}</span>` : ""}</td>
+    ${list.map((s) => `<tr><td>${esc(s.user)}</td><td>${s.kind === "agent" ? "PC 에이전트" : "웹"}</td><td>${esc(s.device)}${s.agentVer ? ` <span class="muted">v${esc(s.agentVer)}</span>${latest && older(s.agentVer) ? ` <span class="st pending">업데이트 대기</span>` : ""}` : ""}</td>
       <td>${esc(s.ip)}</td><td>${esc(s.mounted)}</td>
       <td>${fmtTime(s.lastSeen)} ${s.kind === "agent" && now - s.lastSeen > 300 ? `<span class="st rejected">응답 없음</span>` : ""}</td>
       <td class="actions"><button class="small danger" data-rv="${s.id}">강제 종료</button></td></tr>`).join("")}</tbody></table>`;

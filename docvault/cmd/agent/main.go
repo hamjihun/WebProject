@@ -13,6 +13,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"docvault/internal/buildinfo"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +35,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.6.0"
+const version = buildinfo.Version
 
 // exportFolder is the folder of the personal drive that holds approved
 // exports (vault.ExportFolder).

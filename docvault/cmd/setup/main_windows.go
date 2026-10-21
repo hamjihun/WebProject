@@ -7,6 +7,8 @@
 //
 //	docvault-setup.exe              install or update
 //	docvault-setup.exe /uninstall   remove
+//	docvault-setup.exe /update      quiet update (run by the update service)
+//	docvault-setup.exe /service     the update service (DocVaultUpdate)
 package main
 
 import (
@@ -22,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -60,7 +63,22 @@ func startMenuLink() string {
 }
 
 func main() {
-	uninstall := len(os.Args) > 1 && strings.Contains(strings.ToLower(os.Args[1]), "uninstall")
+	arg := ""
+	if len(os.Args) > 1 {
+		arg = strings.ToLower(os.Args[1])
+	}
+	switch arg {
+	case "/service":
+		runUpdateService()
+		return
+	case "/update":
+		if err := doUpdate(); err != nil {
+			updateLog("업데이트 실패: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+	uninstall := strings.Contains(arg, "uninstall")
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		if err := relaunchElevated(); err != nil {
 			fmt.Println("관리자 권한이 필요합니다:", err)
@@ -165,6 +183,28 @@ func doInstall() error {
 	step(1, "실행 중인 DocVault 종료")
 	stopRunning()
 
+	if err := installFiles(server); err != nil {
+		return err
+	}
+
+	step(5, "DocVault 시작")
+	// Started through Explorer so it runs as the signed-in user (not as
+	// administrator); drives mounted by an elevated process are invisible.
+	exec.Command("explorer.exe", filepath.Join(installDir(), "docvault-agent.exe")).Start()
+
+	fmt.Println()
+	fmt.Println("✅ 설치가 끝났습니다.")
+	fmt.Println("   잠시 후 DocVault 로그인 창이 뜨면 아이디와 비밀번호를 입력하세요.")
+	fmt.Println("   그다음부터는 Windows를 켤 때마다 드라이브가 자동으로 연결됩니다.")
+	fmt.Println("   작업 표시줄 오른쪽 아래 DocVault 아이콘에서 상태 확인, 로그아웃을 할 수 있습니다.")
+	time.Sleep(8 * time.Second)
+	return nil
+}
+
+// installFiles does steps 2-4 of an install; an update does only these,
+// while the program keeps running (files in use are renamed out of the way
+// and the agent restarts itself into the new version).
+func installFiles(server string) error {
 	step(2, "가상 드라이브 구성요소(WinFsp) 확인")
 	installedByUs := previouslyInstalledWinFsp()
 	if winfspInstalled() {
@@ -180,6 +220,7 @@ func doInstall() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	cleanupOld(dir)
 	if err := copyPayload("payload/docvault-agent.exe", filepath.Join(dir, "docvault-agent.exe")); err != nil {
 		return err
 	}
@@ -204,18 +245,12 @@ func doInstall() error {
 	registerUninstall(dir, installedByUs)
 	setBrowserPolicies(server)
 	addExportMenu(agent)
-
-	step(5, "DocVault 시작")
-	// Started through Explorer so it runs as the signed-in user (not as
-	// administrator); drives mounted by an elevated process are invisible.
-	exec.Command("explorer.exe", agent).Start()
-
-	fmt.Println()
-	fmt.Println("✅ 설치가 끝났습니다.")
-	fmt.Println("   잠시 후 DocVault 로그인 창이 뜨면 아이디와 비밀번호를 입력하세요.")
-	fmt.Println("   그다음부터는 Windows를 켤 때마다 드라이브가 자동으로 연결됩니다.")
-	fmt.Println("   작업 표시줄 오른쪽 아래 DocVault 아이콘에서 상태 확인, 로그아웃을 할 수 있습니다.")
-	time.Sleep(8 * time.Second)
+	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte(setupVersion()), 0o644); err != nil {
+		return err
+	}
+	if err := installUpdateService(filepath.Join(dir, "docvault-setup.exe")); err != nil {
+		fmt.Println("      자동 업데이트 서비스 등록 실패:", err)
+	}
 	return nil
 }
 
@@ -289,8 +324,24 @@ func writeFile(dst string, r io.Reader) error {
 		return err
 	}
 	f.Close()
-	os.Remove(dst)
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		// In use (the running agent, drive program or update service):
+		// a running program can still be renamed; the old copy is removed
+		// on the next update.
+		if err := os.Rename(dst, dst+".old-"+strconv.FormatInt(time.Now().UnixNano(), 36)); err != nil {
+			os.Remove(tmp)
+			return err
+		}
+	}
 	return os.Rename(tmp, dst)
+}
+
+// cleanupOld removes program copies left by earlier updates.
+func cleanupOld(dir string) {
+	old, _ := filepath.Glob(filepath.Join(dir, "*.old-*"))
+	for _, f := range old {
+		os.Remove(f) // fails while still running; fine
+	}
 }
 
 func copyFile(src, dst string) error {
@@ -380,6 +431,7 @@ func doUninstall() error {
 	dir := installDir()
 	removeWinFsp := previouslyInstalledWinFsp()
 
+	removeUpdateService()
 	fmt.Println("[1/4] 드라이브 연결 해제, 로그아웃")
 	// Sign this PC out on the server (best effort) before the program goes away.
 	logout := exec.Command(filepath.Join(dir, "docvault-agent.exe"), "logout")
@@ -391,7 +443,7 @@ func doUninstall() error {
 	os.Remove(startupLink())
 	os.Remove(startMenuLink())
 	os.Remove(logoutLink())
-	for _, f := range []string{"docvault-agent.exe", "rclone.exe", "agent.json"} {
+	for _, f := range []string{"docvault-agent.exe", "rclone.exe", "agent.json", "version.txt"} {
 		os.Remove(filepath.Join(dir, f))
 	}
 	removeUserData()

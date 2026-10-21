@@ -227,6 +227,7 @@ type gui struct {
 	balloon   [2]string
 	warn      bool
 	loggedIn  bool
+	updateTo  string // newer version installed, waiting for a restart
 	stop      chan struct{}
 	refresh   chan struct{}
 }
@@ -263,8 +264,20 @@ func runApp(cfg *Config) error {
 	defer openLog()()
 
 	mutexName := wstr(singleInstanceName)
-	if _, err := windows.CreateMutex(nil, false, mutexName); errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-		msgBox(0, "DocVault가 이미 실행 중입니다.\n작업 표시줄 오른쪽 아래의 DocVault 아이콘을 확인하세요.", mbIconInformation)
+	restarted := len(os.Args) > 2 && os.Args[2] == "--restarted"
+	for i := 0; ; i++ {
+		h, err := windows.CreateMutex(nil, false, mutexName)
+		if !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+			break
+		}
+		windows.CloseHandle(h)
+		if restarted && i < 60 { // the old copy is still shutting down
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if !restarted {
+			msgBox(0, "DocVault가 이미 실행 중입니다.\n작업 표시줄 오른쪽 아래의 DocVault 아이콘을 확인하세요.", mbIconInformation)
+		}
 		return nil
 	}
 	if _, err := os.Stat(cfg.Rclone); err != nil {
@@ -322,6 +335,8 @@ func runApp(cfg *Config) error {
 	os.RemoveAll(cfg.CacheDir)
 	log.Printf("DocVault 에이전트 %s 시작 (서버 %s)", version, cfg.Server)
 	g.addTray()
+	cleanupOldCopies()
+	go g.watchUpdates()
 	if cfg.Server != "" && loadToken() != "" {
 		g.startSession()
 	} else {
@@ -444,6 +459,12 @@ func (g *gui) showMenu() {
 			add(mfString|mfGrayed, 100+i, fmt.Sprintf("%s:  %s   (%s)", d.DriveLetter, d.Name, levelName(d.Level)))
 		}
 		sep()
+		g.mu.Lock()
+		updateTo := g.updateTo
+		g.mu.Unlock()
+		if updateTo != "" {
+			add(mfString, cmdApplyUpdate, "⬆ 업데이트 적용 (v"+updateTo+")")
+		}
 		add(mfString, cmdOpenPC, "내 PC 열기")
 		add(mfString, cmdOpenWeb, "웹 문서함 열기 (버전·휴지통·반출)")
 		add(mfString, cmdReconnect, "지금 다시 연결")
@@ -500,6 +521,10 @@ func (g *gui) onCommand(cmd int) {
 			version, g.cfg.Server, user, strings.Join(lines, "\n"), filepath.Join(stateDir(), "logs")), mbIconInformation)
 	case cmdShowLogin:
 		g.showLogin("")
+	case cmdApplyUpdate:
+		if msgBox(g.tray, "DocVault를 새 버전으로 다시 시작합니다.\n문서 드라이브가 몇 초 동안 끊기니, 열려 있는 문서는 먼저 저장하고 닫으세요.\n\n지금 적용할까요?", mbYesNo|mbIconQuestion) == idYes {
+			g.restart()
+		}
 	case menuLogout:
 		if msgBox(g.tray, "로그아웃하면 이 PC의 문서 드라이브 연결이 해제됩니다.\n열려 있는 문서는 먼저 저장하고 닫으세요.\n\n로그아웃할까요?", mbYesNo|mbIconQuestion) != idYes {
 			return
@@ -783,6 +808,9 @@ func trayProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		b, warn := g.balloon, g.warn
 		g.mu.Unlock()
 		g.showBalloon(b[0], b[1], warn)
+		return 0
+	case wmRestart:
+		g.restart()
 		return 0
 	case wmEndSession:
 		if wparam != 0 { // Windows is signing out or shutting down
