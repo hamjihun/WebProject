@@ -356,7 +356,14 @@ type agent struct {
 	copyWatch     atomic.Bool // remove copies of drive files made on this PC
 	blockDownload atomic.Bool // refuse browser downloads saved on this PC
 	user          string      // signed-in account, keys the drive caches (under mu)
+	personalDrive string      // name of the personal drive (개인문서함), under mu
 	offline       atomic.Bool // server down: drives stay disconnected (see health)
+}
+
+func (a *agent) personalDriveName() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.personalDrive
 }
 
 // setUser records the signed-in account (see cacheDir).
@@ -486,6 +493,9 @@ func (a *agent) sync(drives []Drive) {
 	for _, d := range drives {
 		if l := strings.ToUpper(d.DriveLetter); l != "" {
 			want[l] = d
+		}
+		if d.Personal {
+			a.personalDrive = d.Name
 		}
 	}
 	for l, m := range a.mounts {

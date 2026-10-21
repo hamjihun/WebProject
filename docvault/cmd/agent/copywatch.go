@@ -126,7 +126,7 @@ func (a *agent) copyWatchLoop() {
 		}
 		copyQueue.Unlock()
 		for _, p := range ready {
-			retry := a.copyWatch.Load() && a.checkLocal(p)
+			retry := a.copyWatch.Load() && a.handleLocal(p)
 			copyQueue.Lock()
 			if e := copyQueue.m[p]; e != nil {
 				if retry && e.tries < copyMaxTries {
@@ -139,6 +139,16 @@ func (a *agent) copyWatchLoop() {
 			copyQueue.Unlock()
 		}
 	}
+}
+
+// handleLocal decides what to do with a new/changed file on the PC: a
+// document saved while a confidential file is open goes to 개인문서함; a copy
+// of a drive file's content is removed.
+func (a *agent) handleLocal(path string) (retry bool) {
+	if a.docActive() && isDocumentFile(path) {
+		return a.redirectSave(path)
+	}
+	return a.checkLocal(path)
 }
 
 // checkLocal checks one file and removes it when it is a copy of a drive

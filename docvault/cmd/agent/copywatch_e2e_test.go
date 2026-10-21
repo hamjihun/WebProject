@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"docvault/internal/api"
 	"docvault/internal/blob"
+	"docvault/internal/dav"
 	"docvault/internal/db"
 	"docvault/internal/vault"
 )
@@ -167,5 +169,69 @@ func TestLoginBlockedOffNetwork(t *testing.T) {
 	}
 	if err := passwordLogin(cfg, "kim", "password123"); err != errServerUnreachable {
 		t.Fatalf("expected off-network error, got %v", err)
+	}
+}
+
+// A document saved on the PC while a confidential file is open is moved into
+// 개인문서함 (not lost) and the local copy is removed.
+func TestSaveAsRedirect(t *testing.T) {
+	dir := t.TempDir()
+	d, _ := db.Open(filepath.Join(dir, "t.db"))
+	defer d.Close()
+	bs, _ := blob.New(filepath.Join(dir, "store"))
+	v := vault.New(d, bs)
+	admin := vault.Actor{Client: "test"}
+	kim, _ := v.CreateUser(admin, "kim", "kim", "password123", false)
+	v.CreateShare(admin, "개인문서함", "F", true, 0)
+	tok, _, _ := v.Login("kim", "password123", "agent", "pc", "127.0.0.1")
+	mux := http.NewServeMux()
+	(&api.API{V: v}).Register(mux)
+	mux.Handle("/dav/", &dav.Handler{V: v, Prefix: "/dav"})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	a := &agent{cfg: &Config{Server: srv.URL}, mounts: map[string]*mount{}, personalDrive: "개인문서함"}
+	a.client = newClient(a.cfg, tok)
+
+	desk := filepath.Join(dir, "Desktop")
+	os.MkdirAll(desk, 0o755)
+	f := filepath.Join(desk, "보고서.xlsx")
+	os.WriteFile(f, []byte("brand new content from Save As"), 0o644)
+
+	// No document open: a save is left alone by the redirect path.
+	if a.docActive() {
+		t.Fatal("no doc open yet")
+	}
+	// Document program opens a confidential file:
+	a.noteDocOpen(42)
+	if !a.docActive() {
+		t.Fatal("doc should be active")
+	}
+	if a.handleLocal(f) {
+		t.Fatal("unexpected retry")
+	}
+	if _, err := os.Stat(f); !os.IsNotExist(err) {
+		t.Fatal("local file should be moved away")
+	}
+	// It must now be in 개인문서함\PC에서_옮김
+	nodes, err := v.List(vault.Actor{User: kim, Client: "test"}, "개인문서함", "/"+redirectFolder)
+	if err != nil || len(nodes) != 1 || nodes[0].Name != "보고서.xlsx" {
+		t.Fatalf("redirected file: %v %+v", err, nodes)
+	}
+	_, rf, _ := v.Open(vault.Actor{User: kim, Client: "test"}, "개인문서함", "/"+redirectFolder+"/보고서.xlsx")
+	b, _ := io.ReadAll(rf)
+	rf.Close()
+	if string(b) != "brand new content from Save As" {
+		t.Fatalf("content %q", b)
+	}
+	// Second save of the same name goes to "보고서 (2).xlsx"
+	os.WriteFile(f, []byte("second"), 0o644)
+	a.handleLocal(f)
+	nodes, _ = v.List(vault.Actor{User: kim, Client: "test"}, "개인문서함", "/"+redirectFolder)
+	if len(nodes) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(nodes))
+	}
+	a.noteDocClose(42)
+	if a.docActive() {
+		t.Fatal("doc should be inactive after close")
 	}
 }

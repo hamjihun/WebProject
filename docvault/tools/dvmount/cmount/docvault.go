@@ -39,6 +39,8 @@ var dv = struct {
 	eventsPath string
 	block      map[string]string // lower-case exe name -> kind
 	watch      map[string]bool   // lower-case exe name: report its reads of the allow folder
+	docWatch   map[string]bool   // lower-case exe name: document programs (report open/close)
+	docHandles map[uint64]bool   // handles a document program holds open
 	policyMod  time.Time
 	checked    time.Time
 	procs      map[int]dvProc
@@ -50,6 +52,8 @@ var dv = struct {
 	eventsPath: os.Getenv("DOCVAULT_EVENTS"),
 	block:      map[string]string{},
 	watch:      map[string]bool{},
+	docWatch:   map[string]bool{},
+	docHandles: map[uint64]bool{},
 	procs:      map[int]dvProc{},
 	marked:     map[uint64]string{},
 	reported:   map[uint64]bool{},
@@ -71,8 +75,9 @@ func reloadPolicy() {
 		return
 	}
 	var p struct {
-		Block map[string]string `json:"block"`
-		Watch []string          `json:"watch"`
+		Block    map[string]string `json:"block"`
+		Watch    []string          `json:"watch"`
+		DocWatch []string          `json:"docWatch"`
 	}
 	if json.Unmarshal(b, &p) != nil {
 		return
@@ -85,7 +90,11 @@ func reloadPolicy() {
 	for _, k := range p.Watch {
 		watch[strings.ToLower(k)] = true
 	}
-	dv.block, dv.watch, dv.policyMod = block, watch, st.ModTime()
+	docWatch := map[string]bool{}
+	for _, k := range p.DocWatch {
+		docWatch[strings.ToLower(k)] = true
+	}
+	dv.block, dv.watch, dv.docWatch, dv.policyMod = block, watch, docWatch, st.ModTime()
 }
 
 // procName returns the lower-case executable name of a process, cached for
@@ -133,10 +142,17 @@ func dvOnOpen(path string, fi *fuse.FileInfo_t, size int64) {
 	dv.mu.Lock()
 	defer dv.mu.Unlock()
 	reloadPolicy()
-	if len(dv.block) == 0 && len(dv.watch) == 0 {
+	if len(dv.block) == 0 && len(dv.watch) == 0 && len(dv.docWatch) == 0 {
 		return
 	}
 	name := procName(pid)
+	if dv.docWatch[name] && !dvInAllow(path) {
+		// A document program (Excel, Word, ...) opened a confidential file.
+		// While it holds the file open, the agent moves any document saved to
+		// the PC into the vault (catches [다른 이름으로 저장] to the desktop).
+		dv.docHandles[fi.Fh] = true
+		dvDocEvent("doc-open", fi.Fh)
+	}
 	if dvInAllow(path) {
 		// A copy-capable program read a file in the 반출 folder: report it so
 		// the agent lets a matching copy on the PC stay (only that file may
@@ -191,9 +207,31 @@ func dvCheckRead(path string, fh uint64) int {
 
 func dvOnRelease(fh uint64) {
 	dv.mu.Lock()
+	wasDoc := dv.docHandles[fh]
+	delete(dv.docHandles, fh)
 	delete(dv.marked, fh)
 	delete(dv.reported, fh)
 	dv.mu.Unlock()
+	if wasDoc {
+		dvDocEvent("doc-close", fh)
+	}
+}
+
+// dvDocEvent reports that a document program opened or closed a confidential
+// file, so the agent knows whether a PC document save should be redirected.
+func dvDocEvent(kind string, fh uint64) {
+	if dv.eventsPath == "" {
+		return
+	}
+	line, _ := json.Marshal(map[string]any{"time": time.Now().Unix(), "kind": kind, "fh": fh})
+	dvEventMu.Lock()
+	defer dvEventMu.Unlock()
+	f, err := os.OpenFile(dv.eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	f.Write(append(line, '\n'))
+	f.Close()
 }
 
 var dvEventMu sync.Mutex

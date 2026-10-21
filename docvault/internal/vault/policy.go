@@ -50,6 +50,18 @@ func (v *Vault) Policy(u *User) map[string]string {
 	return block
 }
 
+// DocPrograms are the document editors whose "save to PC" (e.g. Excel
+// [다른 이름으로 저장] to the desktop) is redirected into 개인문서함 while
+// they have a confidential file open.
+func (v *Vault) DocPrograms(u *User) []string {
+	if !v.CopyWatch(u) {
+		return nil
+	}
+	return []string{"excel.exe", "winword.exe", "powerpnt.exe", "msaccess.exe", "visio.exe",
+		"hwp.exe", "hcell.exe", "hshow.exe", "hword.exe", "hwpx.exe",
+		"acrobat.exe", "acrord32.exe", "wordpad.exe", "notepad.exe"}
+}
+
 // CopyWatchProcs are the programs whose reads of the 반출 folder the drive
 // program reports (so a copy out of that folder is recognised): Explorer and
 // the command-line/archiver copy tools.

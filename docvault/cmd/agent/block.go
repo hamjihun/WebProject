@@ -34,6 +34,7 @@ func (a *agent) updatePolicy() {
 	var p struct {
 		Block         map[string]string `json:"block"`
 		Watch         []string          `json:"watch"`
+		DocWatch      []string          `json:"docWatch"`
 		CopyWatch     bool              `json:"copyWatch"`
 		BlockDownload bool              `json:"blockDownload"`
 	}
@@ -49,7 +50,7 @@ func (a *agent) updatePolicy() {
 	if p.Block == nil {
 		p.Block = map[string]string{}
 	}
-	b, _ := json.Marshal(map[string]any{"block": p.Block, "watch": p.Watch}) // block list + 반출-folder read watch
+	b, _ := json.Marshal(map[string]any{"block": p.Block, "watch": p.Watch, "docWatch": p.DocWatch})
 	if old, err := os.ReadFile(policyPath()); err == nil && bytes.Equal(old, b) {
 		return
 	}
@@ -66,6 +67,7 @@ type blockEvent struct {
 	Kind string `json:"kind"`
 	Path string `json:"path"`
 	Size int64  `json:"size"`
+	FH   uint64 `json:"fh"`
 }
 
 // watchEvents follows the refusal logs of all drives.
@@ -102,9 +104,14 @@ func (a *agent) watchEvents() {
 			for sc.Scan() {
 				var ev blockEvent
 				if json.Unmarshal(sc.Bytes(), &ev) == nil {
-					if ev.Kind == "export-read" {
+					switch ev.Kind {
+					case "export-read":
 						a.noteExportRead(ev.Size)
-					} else {
+					case "doc-open":
+						a.noteDocOpen(ev.FH)
+					case "doc-close":
+						a.noteDocClose(ev.FH)
+					default:
 						a.reportBlocked(letter, ev)
 					}
 				}
