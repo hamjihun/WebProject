@@ -24,14 +24,18 @@ const redirectFolder = "PC에서_옮김"
 
 const docHandleTTL = 12 * time.Hour // recover if a close event is ever missed
 
+const docWindow = 3 * time.Minute // quick open/close still counts briefly
+
 var docSession = struct {
 	sync.Mutex
-	open map[uint64]time.Time
+	open     map[uint64]time.Time
+	lastOpen time.Time
 }{open: map[uint64]time.Time{}}
 
 func (a *agent) noteDocOpen(fh uint64) {
 	docSession.Lock()
 	docSession.open[fh] = time.Now()
+	docSession.lastOpen = time.Now()
 	docSession.Unlock()
 }
 
@@ -51,9 +55,11 @@ func (a *agent) docActive() bool {
 			delete(docSession.open, fh)
 			continue
 		}
-		return true
+		return true // a document program holds a confidential file/lock open
 	}
-	return false
+	// Backup: a document program opened a confidential file very recently
+	// (some apps read then close the handle before the user saves).
+	return time.Since(docSession.lastOpen) < docWindow
 }
 
 // documentExts are the file types treated as "documents" for the redirect.

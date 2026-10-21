@@ -230,8 +230,12 @@ func TestSaveAsRedirect(t *testing.T) {
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 files, got %d", len(nodes))
 	}
+	// After close and once the short backup window has lapsed, it is inactive.
 	a.noteDocClose(42)
+	docSession.Lock()
+	docSession.lastOpen = time.Now().Add(-docWindow - time.Second)
+	docSession.Unlock()
 	if a.docActive() {
-		t.Fatal("doc should be inactive after close")
+		t.Fatal("doc should be inactive after close and window")
 	}
 }

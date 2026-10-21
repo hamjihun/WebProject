@@ -358,6 +358,7 @@ func (fsys *FS) CreateEx(filePath string, mode uint32, fi *fuse.FileInfo_t) (err
 		return translateError(err)
 	}
 	fi.Fh = fsys.openHandle(handle)
+	dvOnOpen(filePath, fi, 0) // DocVault: track document-program handles (e.g. the ~$ lock file held open while a doc is open)
 	return 0
 }
 
