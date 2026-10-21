@@ -20,6 +20,13 @@ go build $F -ldflags="-s -w" -o dist/server/docvault-server.exe ./cmd/server
 go build $F -ldflags="-s -w" -o dist/server/downloads/docvault-setup.exe ./cmd/setup
 cp $P/docvault-agent.exe dist/agent/
 
+# One-click server updater: embeds the new server + PC installer and, on the
+# server, stops the service, replaces both files and starts it again.
+cp dist/server/docvault-server.exe cmd/serverupdate/payload/docvault-server.exe
+cp dist/server/downloads/docvault-setup.exe cmd/serverupdate/payload/docvault-setup.exe
+go build $F -ldflags="-s -w" -o dist/server/DocVault_서버업데이트.exe ./cmd/serverupdate
+rm -f cmd/serverupdate/payload/docvault-server.exe cmd/serverupdate/payload/docvault-setup.exe
+
 # Package for people installing it: numbered Korean folders with guides.
 #   STORE_DIR=\\\\nas\\share ./scripts/build-release.sh  → docvault.json stores files on that NAS
 PKG=dist/DocVault_설치파일
@@ -29,6 +36,7 @@ cp -r release/. "$PKG/"
 cp dist/server/docvault-server.exe "$PKG/1_서버설치/"
 cp dist/server/downloads/docvault-setup.exe "$PKG/1_서버설치/downloads/"
 cp dist/server/downloads/docvault-setup.exe "$PKG/2_직원PC설치/DocVault_PC설치.exe"
+cp dist/server/DocVault_서버업데이트.exe "$PKG/1_서버설치/DocVault_서버업데이트.exe"
 cp README.md "$PKG/3_관리자참고/README.md"
 python3 - "$PKG/1_서버설치/docvault.json" "${STORE_DIR:-}" <<'PY'
 import sys
