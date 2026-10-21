@@ -33,7 +33,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 type Config struct {
 	Server   string `json:"server"`    // e.g. http://docvault.ilsan.local:8080
