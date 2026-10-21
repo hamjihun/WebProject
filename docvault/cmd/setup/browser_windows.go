@@ -12,8 +12,11 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// Browser policies: downloads go to the personal DocVault drive and the
-// browser does not ask where to save. Applies to every user of the PC.
+// Browser policies: downloads go to the personal DocVault drive by default.
+// Set as recommended (not mandatory) policies, so a user may still pick
+// another folder in the browser's settings (administrators may want the
+// desktop); for regular users a download finished on the PC itself is
+// deleted by the agent anyway.
 var browserPolicyKeys = []string{
 	`SOFTWARE\Policies\Google\Chrome`,
 	`SOFTWARE\Policies\Microsoft\Edge`,
@@ -45,23 +48,30 @@ func setBrowserPolicies(server string) {
 		fmt.Println("      서버에서 개인문서함 드라이브를 찾지 못해 건너뜁니다.")
 		return
 	}
+	removeBrowserPolicies() // also the mandatory ones of versions before 0.8.2
 	for _, key := range browserPolicyKeys {
-		k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.WOW64_64KEY)
+		k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, key+`\Recommended`, registry.SET_VALUE|registry.WOW64_64KEY)
 		if err != nil {
 			continue
 		}
 		k.SetStringValue("DownloadDirectory", l+`:\`)
-		k.SetDWordValue("PromptForDownloadLocation", 0)
 		k.Close()
 	}
-	fmt.Printf("      크롬·엣지·웨일 다운로드 위치: %s:\\ (개인문서함)\n", l)
+	fmt.Printf("      크롬·엣지·웨일 기본 다운로드 위치: %s:\\ (개인문서함, 브라우저 설정에서 바꿀 수 있음)\n", l)
 }
 
 func removeBrowserPolicies() {
 	for _, key := range browserPolicyKeys {
+		removePolicyValues(key + `\Recommended`)
+		removePolicyValues(key)
+	}
+}
+
+func removePolicyValues(key string) {
+	{
 		k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
 		if err != nil {
-			continue
+			return
 		}
 		k.DeleteValue("DownloadDirectory")
 		k.DeleteValue("PromptForDownloadLocation")
