@@ -131,14 +131,15 @@ DocVault 드라이브 프로그램은 **파일을 읽으려는 프로그램이 �
 ```json
 {
   "listen": ":8080",
-  "data_dir": "C:\\DocVault\\data",
-  "store_dir": "C:\\DocVault\\store",
+  "data_dir": "C:\DocVault\data",
+  "store_dir": "\\192.168.50.201\DocVaultStore",
   "tls_cert": "",
   "tls_key": "",
   "trust_proxy": false,
   "public_url": ""
 }
 ```
+- 경로는 **탐색기 주소창에 쓰는 것과 똑같이** 적습니다 (역슬래시를 두 번씩 쓸 필요 없음. 예전 방식으로 두 번씩 써도 동작합니다).
 - `store_dir`: 파일 내용이 저장되는 곳입니다. 운영 서버에서는 **NAS iSCSI로 연결한 디스크**(예: `E:\DocVaultStore`)로 지정합니다.
 - `public_url`: 직원 PC가 서버에 접속하는 주소입니다 (예: `http://192.168.50.10:8080`). 비워 두면 직원이 웹에 접속한 주소를 그대로 씁니다. 설치 파일에 들어가는 서버 주소가 이것입니다.
 - 설정을 바꾼 뒤에는 서버를 다시 시작합니다.

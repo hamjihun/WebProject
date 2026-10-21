@@ -10,6 +10,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -65,8 +66,7 @@ func loadConfig() (*Config, string, error) {
 	}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		out, _ := json.MarshalIndent(cfg, "", "  ")
-		if err := os.WriteFile(path, out, 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(defaultConfigText(cfg)), 0o600); err != nil {
 			return nil, path, err
 		}
 		return cfg, path, nil
@@ -74,10 +74,63 @@ func loadConfig() (*Config, string, error) {
 	if err != nil {
 		return nil, path, err
 	}
-	if err := json.Unmarshal(b, cfg); err != nil {
+	if err := parseConfig(b, cfg); err != nil {
 		return nil, path, fmt.Errorf("%s: %w", path, err)
 	}
 	return cfg, path, nil
+}
+
+// parseConfig reads docvault.json. Paths may be written the way Windows shows
+// them (\\192.168.50.201\DocVaultStore, C:\DocVault\data); the JSON style
+// with doubled backslashes keeps working too.
+func parseConfig(b []byte, cfg *Config) error {
+	b = bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")) // Notepad's UTF-8 BOM
+	raw := bytes.ReplaceAll(b, []byte(`\`), []byte(`\\`))
+	if err := json.Unmarshal(raw, cfg); err != nil {
+		return err
+	}
+	for _, p := range []*string{&cfg.DataDir, &cfg.StoreDir, &cfg.TLSCert, &cfg.TLSKey} {
+		*p = cleanWinPath(*p)
+	}
+	return nil
+}
+
+// cleanWinPath collapses repeated backslashes, keeping the two that start a
+// network path (\\server\share).
+func cleanWinPath(p string) string {
+	unc := strings.HasPrefix(p, `\\`)
+	var b strings.Builder
+	prev := false
+	for _, r := range strings.TrimLeft(p, `\`) {
+		if r == '\\' {
+			if prev {
+				continue
+			}
+			prev = true
+		} else {
+			prev = false
+		}
+		b.WriteRune(r)
+	}
+	switch {
+	case unc:
+		return `\\` + b.String()
+	case strings.HasPrefix(p, `\`):
+		return `\` + b.String()
+	}
+	return b.String()
+}
+
+func defaultConfigText(cfg *Config) string {
+	return "{\r\n" +
+		"  \"listen\": \"" + cfg.Listen + "\",\r\n" +
+		"  \"data_dir\": \"" + cfg.DataDir + "\",\r\n" +
+		"  \"store_dir\": \"" + cfg.StoreDir + "\",\r\n" +
+		"  \"tls_cert\": \"\",\r\n" +
+		"  \"tls_key\": \"\",\r\n" +
+		"  \"trust_proxy\": false,\r\n" +
+		"  \"public_url\": \"\"\r\n" +
+		"}\r\n"
 }
 
 type server struct {
@@ -279,12 +332,12 @@ func reportStartupError(err error) {
 			" 1. 탐색기 주소창에 docvault.json의 store_dir 경로(예: \\\\192.168.50.201\\DocVaultStore)를 입력해 열리는지\n" +
 			" 2. 열릴 때 NAS 계정으로 로그인하고 '자격 증명 기억'을 체크했는지\n" +
 			" 3. 그 계정에 이 폴더 쓰기 권한이 있는지 (새 파일을 만들어 보기)\n" +
-			" 4. docvault.json에서 역슬래시를 두 번씩 썼는지: \"\\\\\\\\192.168.50.201\\\\DocVaultStore\""
+			" 4. docvault.json의 store_dir가 탐색기 주소와 같은지: \"\\\\192.168.50.201\\DocVaultStore\""
 	} else if strings.Contains(low, "only one usage of each socket") || strings.Contains(low, "address already in use") {
 		msg += "\n\n[확인할 것] 서버가 이미 실행 중이거나 다른 프로그램이 같은 포트(listen)를 쓰고 있습니다.\n" +
 			" 작업 관리자에서 docvault-server.exe가 이미 떠 있는지 확인하세요."
 	} else if strings.Contains(err.Error(), "docvault.json") {
-		msg += "\n\n[확인할 것] docvault.json 형식 오류입니다. 쉼표(,)와 따옴표(\"), 역슬래시(\\\\) 개수를 확인하세요."
+		msg += "\n\n[확인할 것] docvault.json 형식 오류입니다. 각 줄 끝의 쉼표(,)와 따옴표(\")를 확인하세요."
 	}
 	fmt.Fprintln(os.Stderr, msg)
 	os.WriteFile(filepath.Join(exeDir(), "시작오류.txt"), []byte(time.Now().Format("2006-01-02 15:04:05")+"\r\n"+strings.ReplaceAll(msg, "\n", "\r\n")+"\r\n"), 0o644)

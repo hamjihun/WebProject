@@ -31,12 +31,13 @@ cp dist/server/downloads/docvault-setup.exe "$PKG/1_서버설치/downloads/"
 cp dist/server/downloads/docvault-setup.exe "$PKG/2_직원PC설치/DocVault_PC설치.exe"
 cp README.md "$PKG/3_관리자참고/README.md"
 python3 - "$PKG/1_서버설치/docvault.json" "${STORE_DIR:-}" <<'PY'
-import json, sys
-cfg = {"listen": ":8080"}
+import sys
+# Paths are written as Windows shows them; the server reads them as such.
+lines = ['  "listen": ":8080"']
 if sys.argv[2]:
-    cfg["store_dir"] = sys.argv[2]
-cfg.update({"tls_cert": "", "tls_key": "", "trust_proxy": False, "public_url": ""})
-open(sys.argv[1], "w", newline="").write(json.dumps(cfg, indent=2, ensure_ascii=False).replace("\n", "\r\n") + "\r\n")
+    lines.append('  "store_dir": "%s"' % sys.argv[2])
+lines += ['  "tls_cert": ""', '  "tls_key": ""', '  "trust_proxy": false', '  "public_url": ""']
+open(sys.argv[1], "w", newline="").write("{\r\n" + ",\r\n".join(lines) + "\r\n}\r\n")
 PY
 (cd dist && python3 -c "
 import os, zipfile

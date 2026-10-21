@@ -20,8 +20,8 @@
      → C:\DocVault\docvault-server.exe 가 되도록
 
   2. 파일 저장 위치 확인 (docvault.json 을 메모장으로 열기)
-       "store_dir": "\\\\192.168.50.201\\DocVaultStore"
-     - NAS에 저장하려면 NAS 공유폴더 주소를 적습니다. (역슬래시는 두 번씩)
+       "store_dir": "\\192.168.50.201\DocVaultStore",
+     - NAS에 저장하려면 NAS 공유폴더 주소를 탐색기 주소창에 쓰는 것과 똑같이 적습니다.
      - 이 줄을 지우면 C:\DocVault\store 에 저장됩니다.
      - NAS를 쓰는 경우, 서버 PC 탐색기에서 \\192.168.50.201\DocVaultStore 를 한 번 열고
        NAS 계정으로 로그인하면서 "자격 증명 기억"을 체크해 두세요.
