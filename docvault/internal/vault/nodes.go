@@ -149,6 +149,13 @@ func (l *loc) path() string { return joinPath(l.parts) }
 // is in it has been approved.
 const ExportFolder = "반출"
 
+// exportRoot reports whether the loc is the export folder itself (not a file
+// inside it): that folder may not be deleted or renamed by a user, so it is
+// always there to receive approved exports.
+func exportRoot(a Actor, l *loc) bool {
+	return l.share.Personal && len(l.parts) == 1 && strings.EqualFold(l.parts[0], ExportFolder) && a.Client != "export"
+}
+
 // exportLocked reports a write into the export folder by a user. Office lock
 // and temporary files are let through so opening a file there works.
 func exportLocked(a Actor, l *loc) bool {
@@ -564,7 +571,7 @@ func (v *Vault) Delete(a Actor, shareName, p string) error {
 	if err != nil {
 		return err
 	}
-	if len(l.parts) == 0 {
+	if len(l.parts) == 0 || exportRoot(a, l) {
 		return ErrForbidden
 	}
 	now := v.Now()
@@ -624,7 +631,7 @@ func (v *Vault) Move(a Actor, srcShare, srcPath, dstShare, dstPath string, overw
 	if err != nil {
 		return false, err
 	}
-	if len(sl.parts) == 0 || exportLocked(a, dl) || (exportLocked(a, sl) && len(sl.parts) == 1) {
+	if len(sl.parts) == 0 || exportLocked(a, dl) || exportRoot(a, sl) {
 		return false, ErrForbidden
 	}
 	now := v.Now()

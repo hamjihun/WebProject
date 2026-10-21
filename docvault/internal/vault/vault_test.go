@@ -342,6 +342,13 @@ func TestApprovedExportGoesToExportFolder(t *testing.T) {
 	if _, _, err := e.v.Put(e.kim, "개인문서함", "/반출/~$견적.xlsx", strings.NewReader("lock")); err != nil {
 		t.Fatalf("office lock file: %v", err)
 	}
+	// the export folder itself cannot be deleted or renamed
+	if err := e.v.Delete(e.kim, "개인문서함", "/반출"); err != ErrForbidden {
+		t.Fatalf("delete export folder: %v", err)
+	}
+	if _, err := e.v.Move(e.kim, "개인문서함", "/반출", "개인문서함", "/옛반출", false); err != ErrForbidden {
+		t.Fatalf("rename export folder: %v", err)
+	}
 	if err := e.v.Delete(e.kim, "개인문서함", "/반출/견적 (2).xlsx"); err != nil {
 		t.Fatalf("delete from export folder: %v", err)
 	}
