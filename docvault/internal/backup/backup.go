@@ -9,6 +9,7 @@
 package backup
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -71,9 +72,15 @@ func Run(db *sql.DB, storeDir, dest string, log Progress) (*Result, error) {
 	r.DBSnapshot = name
 	pruneOldSnapshots(dbDst, log)
 
-	// 2) Blobs (incremental: copy only what the target is missing).
-	log("파일 백업 중... (새로 생긴 파일만 복사)")
+	// 2) Blobs (incremental). Blobs are content-addressed and never change,
+	// so a file already in the index is skipped without touching the backup
+	// disk — the per-file check that would otherwise be slow over USB when
+	// there are millions of files. Only new blobs are stat-ed and copied.
+	log("파일 목록 확인 중...")
+	indexPath := filepath.Join(root, "blobs.index")
+	done := loadIndex(indexPath)
 	srcBlobs := filepath.Join(storeDir, "blobs")
+	var added []string
 	err := filepath.Walk(srcBlobs, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return err
@@ -81,23 +88,31 @@ func Run(db *sql.DB, storeDir, dest string, log Progress) (*Result, error) {
 		r.BlobsTotal++
 		r.BytesTotal += info.Size()
 		rel, _ := filepath.Rel(srcBlobs, path)
+		rel = filepath.ToSlash(rel)
+		if done[rel] {
+			return nil // already backed up
+		}
 		out := filepath.Join(blobDst, rel)
 		if st, err := os.Stat(out); err == nil && st.Size() == info.Size() {
-			return nil // already backed up (content-addressed: never changes)
+			added = append(added, rel) // present but not yet in the index
+			return nil
 		}
 		if err := copyFile(path, out); err != nil {
 			return fmt.Errorf("파일 복사 실패 (%s): %w", rel, err)
 		}
+		added = append(added, rel)
 		r.BlobsCopied++
 		r.BytesCopied += info.Size()
-		if r.BlobsCopied%500 == 0 {
+		if r.BlobsCopied%200 == 0 {
 			log(fmt.Sprintf("  ... %d개 복사 (%s)", r.BlobsCopied, humanBytes(r.BytesCopied)))
 		}
 		return nil
 	})
 	if err != nil {
+		appendIndex(indexPath, added) // keep what we did copy
 		return r, err
 	}
+	appendIndex(indexPath, added)
 
 	r.FinishedAt = time.Now()
 	r.DurationSec = int64(r.FinishedAt.Sub(r.StartedAt).Seconds())
@@ -183,4 +198,40 @@ func humanBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f%cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// loadIndex reads the set of blob paths already on the backup disk.
+func loadIndex(path string) map[string]bool {
+	m := map[string]bool{}
+	f, err := os.Open(path)
+	if err != nil {
+		return m
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	for sc.Scan() {
+		if line := strings.TrimSpace(sc.Text()); line != "" {
+			m[line] = true
+		}
+	}
+	return m
+}
+
+// appendIndex adds newly backed-up blob paths to the index file.
+func appendIndex(path string, added []string) {
+	if len(added) == 0 {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	for _, rel := range added {
+		w.WriteString(rel)
+		w.WriteByte('\n')
+	}
+	w.Flush()
 }
