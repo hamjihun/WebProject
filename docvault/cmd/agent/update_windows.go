@@ -4,9 +4,9 @@ package main
 
 // Self-restart after an automatic update. The update service replaces the
 // program files while this copy keeps running; this copy notices the new
-// version.txt and restarts into the new program when nobody is working
-// (no input for 2 minutes and no document program open), when the user
-// picks [업데이트 적용], or at the next Windows logon anyway.
+// version.txt and restarts into the new program right away unless a
+// document program is open (then as soon as it is closed), or when the user
+// picks [업데이트 적용].
 
 import (
 	"log"
@@ -25,14 +25,11 @@ import (
 var (
 	startExe, _ = os.Executable() // path at start: still the program's path after an update renames this copy
 
-	pGetLastInputInfo = user32.NewProc("GetLastInputInfo")
-	pGetTickCount     = kernel32.NewProc("GetTickCount")
 )
 
 const (
 	wmRestart      = wmApp + 6
 	cmdApplyUpdate = 2009
-	updateIdle     = 2 * time.Minute
 )
 
 // documentPrograms with files possibly open on the drives: never restart
@@ -51,7 +48,7 @@ func installedVersion() string {
 // watchUpdates runs in the background for the life of the program.
 func (g *gui) watchUpdates() {
 	announced := ""
-	for range time.Tick(time.Minute) {
+	for range time.Tick(15 * time.Second) {
 		v := installedVersion()
 		if !buildinfo.NewerThan(v, version) {
 			continue
@@ -63,10 +60,10 @@ func (g *gui) watchUpdates() {
 			announced = v
 			log.Printf("새 버전 %s 설치됨 (실행 중 %s)", v, version)
 			g.queueBalloon("DocVault 업데이트 준비됨 (v"+v+")",
-				"PC를 쓰지 않을 때 자동으로 적용됩니다.\n지금 적용하려면 DocVault 아이콘 → [업데이트 적용]")
+				"Excel·Word·한글 등을 닫으면 바로 적용됩니다.\n지금 적용하려면 DocVault 아이콘 → [업데이트 적용]")
 		}
-		if idleFor() >= updateIdle && !documentProgramOpen() {
-			log.Printf("사용하지 않는 동안 업데이트 적용")
+		if !documentProgramOpen() {
+			log.Printf("열린 문서 프로그램이 없어 업데이트 적용")
 			g.post(wmRestart)
 			return
 		}
@@ -89,15 +86,6 @@ func (g *gui) restart() {
 	pPostQuitMessage.Call(0)
 }
 
-func idleFor() time.Duration {
-	var li struct{ Size, Time uint32 }
-	li.Size = uint32(unsafe.Sizeof(li))
-	if r, _, _ := pGetLastInputInfo.Call(uintptr(unsafe.Pointer(&li))); r == 0 {
-		return 0
-	}
-	now, _, _ := pGetTickCount.Call()
-	return time.Duration(uint32(now)-li.Time) * time.Millisecond
-}
 
 func documentProgramOpen() bool {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)

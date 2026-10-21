@@ -4,11 +4,12 @@ package main
 
 // Automatic updates. The installer registers the DocVaultUpdate service
 // (this program with /service, running as SYSTEM so employees need no
-// administrator rights). Every 10 minutes it asks the server which version
+// administrator rights). 20 seconds after Windows starts and then every
+// 10 minutes it asks the server which version
 // of the PC program it offers; when that is newer than the installed one it
 // downloads the installer and runs it with /update. The running agent sees
-// the new version.txt and restarts itself into the new version when the PC
-// is not in use (or when the user picks [업데이트 적용]).
+// the new version.txt and restarts itself into the new version unless a
+// document program is open (or when the user picks [업데이트 적용]).
 
 import (
 	"context"
@@ -92,7 +93,7 @@ func (updateService) Execute(args []string, req <-chan svc.ChangeRequest, status
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	next := time.NewTimer(2 * time.Minute) // let the PC finish starting up
+	next := time.NewTimer(20 * time.Second) // soon after Windows starts, before work begins
 	failures := map[string]int{}
 	for {
 		select {
