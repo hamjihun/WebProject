@@ -10,7 +10,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -152,8 +155,9 @@ func (g *gui) checkUpdateNow() {
 	for i := 0; i < 150; i++ { // up to 5 minutes
 		time.Sleep(2 * time.Second)
 		if i == 7 && fileSize(logPath) == before {
-			// An update service from before 0.8.3 ignores the request.
-			msgBox(0, "지금 설치된 자동 업데이트 서비스가 이전 버전이라 바로 받지 못했습니다.\nPC를 다시 시작하면 1분 안에 자동으로 업데이트됩니다.", mbIconInformation)
+			// The installed update service is old (before [업데이트 확인]) and
+			// ignores the request: install directly instead (needs admin).
+			g.updateElevatedFallback(info.Version)
 			return
 		}
 		if v := installedVersion(); buildinfo.NewerThan(v, version) {
@@ -161,7 +165,60 @@ func (g *gui) checkUpdateNow() {
 			return
 		}
 	}
-	msgBox(0, "업데이트를 설치하지 못했습니다.\n관리자에게 C:\\ProgramData\\DocVault\\update.log 파일을 보내 주세요.", mbIconWarning)
+	g.updateElevatedFallback(info.Version)
+}
+
+// updateElevatedFallback downloads the new PC installer and runs it with
+// administrator rights (a UAC prompt), so the update applies now even when
+// the background service is an old version. Employees without admin rights
+// get the automatic update on reboot instead.
+func (g *gui) updateElevatedFallback(want string) {
+	if msgBox(0, "새 버전(v"+want+")을 지금 설치할까요?\n\n[예]를 누르면 관리자 승인 창이 한 번 뜹니다. (관리자 권한이 없으면 PC를 다시 켤 때 자동으로 업데이트됩니다.)", mbYesNo|mbIconQuestion) != idYes {
+		return
+	}
+	tmp := filepath.Join(os.TempDir(), "docvault-setup-update.exe")
+	if err := downloadFile(g.cfg.Server+"/download/setup", tmp); err != nil {
+		msgBox(0, "설치 파일을 받지 못했습니다: "+err.Error(), mbIconWarning)
+		return
+	}
+	if err := runElevated(tmp, "/update"); err != nil {
+		msgBox(0, "설치를 시작하지 못했습니다.\n웹 문서함 → [PC 프로그램 설치]로 직접 설치하세요.", mbIconWarning)
+		return
+	}
+	g.queueBalloon("업데이트를 설치하는 중입니다 (v"+want+")", "1분 정도 걸립니다. 다 되면 적용할지 여쭤봅니다.")
+	for i := 0; i < 150; i++ {
+		time.Sleep(2 * time.Second)
+		if v := installedVersion(); buildinfo.NewerThan(v, version) {
+			g.offerRestart(v)
+			return
+		}
+	}
+}
+
+func downloadFile(url, dst string) error {
+	c := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := c.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s", resp.Status)
+	}
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, resp.Body)
+	return err
+}
+
+func runElevated(exe, args string) error {
+	verb, _ := windows.UTF16PtrFromString("runas")
+	file, _ := windows.UTF16PtrFromString(exe)
+	a, _ := windows.UTF16PtrFromString(args)
+	return windows.ShellExecute(0, verb, file, a, nil, windows.SW_SHOWNORMAL)
 }
 
 func (g *gui) offerRestart(v string) {
