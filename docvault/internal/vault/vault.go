@@ -29,6 +29,9 @@ var (
 	ErrUnauthorized = errors.New("unauthorized")
 	ErrLocked       = errors.New("account locked")
 	ErrBadRequest   = errors.New("bad request")
+	// ErrNoContent: the file is listed but its content is missing from the
+	// store (e.g. the store folder was changed). Not worth retrying.
+	ErrNoContent = errors.New("file content missing from store")
 )
 
 type Vault struct {

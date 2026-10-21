@@ -119,3 +119,71 @@ func (v *Vault) RunMaintenance(ctx context.Context) {
 		t.Reset(6 * time.Hour)
 	}
 }
+
+// MissingFile is a file whose current content is not in the store.
+type MissingFile struct {
+	Share string `json:"share"`
+	Owner string `json:"owner"` // personal drive: whose space
+	Path  string `json:"path"`
+	Size  int64  `json:"size"`
+	// RestorableVersion is the newest older version whose content is still
+	// there (0 if none): restoring it brings the file back to that state.
+	RestorableVersion int64 `json:"restorableVersion"`
+}
+
+// CheckStore looks for files (not in the trash) whose content is missing
+// from the store, e.g. because the store folder (store_dir) was changed
+// after they were saved.
+func (v *Vault) CheckStore() (missing []MissingFile, checked int, err error) {
+	rows, err := v.DB.Query(`SELECT n.id, n.share_id, n.owner_id, n.size, n.blob_sha FROM nodes n
+		WHERE n.is_dir=0 AND n.deleted_at IS NULL`)
+	if err != nil {
+		return nil, 0, err
+	}
+	type cand struct {
+		id, share, owner, size int64
+		sha                    string
+	}
+	var bad []cand
+	for rows.Next() {
+		var c cand
+		if rows.Scan(&c.id, &c.share, &c.owner, &c.size, &c.sha) != nil {
+			continue
+		}
+		checked++
+		if !v.Blobs.Exists(c.sha) {
+			bad = append(bad, c)
+		}
+	}
+	rows.Close()
+	missing = []MissingFile{}
+	for _, c := range bad {
+		m := MissingFile{Size: c.size}
+		if s, err := v.ShareByID(c.share); err == nil {
+			m.Share = s.Name
+		}
+		if c.owner != 0 {
+			if u, err := v.UserByID(c.owner); err == nil {
+				m.Owner = u.DisplayName + " (" + u.Username + ")"
+			}
+		}
+		if n, err := nodeByID(v.DB, c.id); err == nil {
+			m.Path = pathOf(v.DB, n)
+		}
+		vr, _ := v.DB.Query(`SELECT id, blob_sha FROM versions WHERE node_id=? ORDER BY id DESC`, c.id)
+		for vr != nil && vr.Next() {
+			var id int64
+			var sha string
+			vr.Scan(&id, &sha)
+			if sha != c.sha && v.Blobs.Exists(sha) {
+				m.RestorableVersion = id
+				break
+			}
+		}
+		if vr != nil {
+			vr.Close()
+		}
+		missing = append(missing, m)
+	}
+	return missing, checked, nil
+}

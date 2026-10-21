@@ -84,6 +84,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/settings", s.admin(s.getSettings))
 	mux.HandleFunc("POST /api/admin/settings", s.admin(s.setSettings))
 	mux.HandleFunc("POST /api/admin/maintain", s.admin(s.maintain))
+	mux.HandleFunc("GET /api/admin/store-check", s.admin(s.storeCheck))
 }
 
 // ---- plumbing ----
@@ -112,6 +113,8 @@ func fail(w http.ResponseWriter, err error) {
 		status, msg = http.StatusConflict, "상위 폴더가 없거나 이동할 수 없는 위치입니다"
 	case errors.Is(err, vault.ErrQuota):
 		status, msg = http.StatusInsufficientStorage, "드라이브 용량이 부족합니다"
+	case errors.Is(err, vault.ErrNoContent):
+		status, msg = http.StatusGone, "저장소(NAS)에 이 파일의 내용이 없습니다. 관리자에게 문의하세요 (관리자 → 설정 → 저장소 점검)"
 	case errors.Is(err, vault.ErrInvalidName):
 		status, msg = http.StatusBadRequest, `이름에 사용할 수 없는 문자가 있습니다 (\ / : * ? " < > |)`
 	case errors.Is(err, vault.ErrIsDir), errors.Is(err, vault.ErrNotDir), errors.Is(err, vault.ErrBadRequest):
@@ -784,6 +787,16 @@ func (s *API) agentEvent(w http.ResponseWriter, r *http.Request, c *ctx) {
 	}
 	s.V.RecordBlocked(c.a, in.Kind, in.Proc, in.Drive, in.Path)
 	ok(w)
+}
+
+// storeCheck lists files whose content is missing from the store.
+func (s *API) storeCheck(w http.ResponseWriter, r *http.Request, c *ctx) {
+	missing, checked, err := s.V.CheckStore()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"checked": checked, "missing": missing})
 }
 
 func (s *API) maintain(w http.ResponseWriter, r *http.Request, c *ctx) {

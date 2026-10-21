@@ -561,7 +561,7 @@ async function adminSettings() {
   for (const [k, [label, help]] of Object.entries(SETTING_LABELS)) {
     h += `<label>${esc(label)}<input type="number" min="0" name="${k}" value="${s[k]}">${help ? `<span class="muted">${esc(help)}</span>` : ""}</label>`;
   }
-  h += `<div class="buttons"><button type="button" id="mtBtn">지금 정리 실행</button><button class="primary">저장</button></div></form>`;
+  h += `<div class="buttons"><button type="button" id="ckBtn">저장소 점검</button><button type="button" id="mtBtn">지금 정리 실행</button><button class="primary">저장</button></div></form><div id="ckOut" style="max-width:820px"></div>`;
   $("#main").innerHTML = h;
   $("#sForm").onsubmit = guard(async (e) => {
     e.preventDefault();
@@ -569,6 +569,16 @@ async function adminSettings() {
     for (const k of Object.keys(BLOCK_LABELS)) body[k] = e.target[k].checked ? 1 : 0;
     body.block_extra_processes = e.target.block_extra_processes.value;
     await api("POST", "/api/admin/settings", body); toast("저장했습니다");
+  });
+  $("#ckBtn").onclick = guard(async () => {
+    $("#ckOut").innerHTML = `<p class="muted">점검 중...</p>`;
+    const r = await api("GET", "/api/admin/store-check");
+    if (!r.missing.length) { $("#ckOut").innerHTML = `<div class="card" style="padding:14px">✅ 파일 ${r.checked}개 모두 저장소(NAS)에 내용이 있습니다.</div>`; return; }
+    $("#ckOut").innerHTML = `<h3>저장소에 내용이 없는 파일 ${r.missing.length}개 (전체 ${r.checked}개 중)</h3>
+      <p class="muted">이 파일들은 목록에는 보이지만 열 수 없고, 탐색기에서 오른쪽 클릭·미리보기 때 느려질 수 있습니다. 보통 저장소 폴더(store_dir)를 바꾸기 전에 저장한 파일입니다.
+      예전 저장소 폴더가 남아 있으면 그 안의 <b>blobs</b> 폴더 내용을 지금 저장소의 blobs 폴더에 복사(덮어쓰지 않기)하면 되살아납니다. 아니면 이전 버전으로 복원하거나 삭제하세요.</p>
+      <table><thead><tr><th>드라이브</th><th>사용자(개인문서함)</th><th>경로</th><th>크기</th><th>이전 버전</th></tr></thead><tbody>
+      ${r.missing.map((m) => `<tr><td>${esc(m.share)}</td><td>${esc(m.owner || "")}</td><td>${esc(m.path)}</td><td>${fmtSize(m.size)}</td><td>${m.restorableVersion ? "복원 가능" : "없음"}</td></tr>`).join("")}</tbody></table>`;
   });
   $("#mtBtn").onclick = guard(async () => {
     const r = await api("POST", "/api/admin/maintain");

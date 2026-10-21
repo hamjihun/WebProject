@@ -3,6 +3,7 @@ package vault
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"io"
 	"os"
 	"path"
@@ -329,6 +330,10 @@ func (v *Vault) Open(a Actor, shareName, p string) (*Node, *os.File, error) {
 		return nil, nil, ErrIsDir
 	}
 	f, err := v.Blobs.Open(n.BlobSHA)
+	if errors.Is(err, os.ErrNotExist) {
+		log.Printf("저장소에 파일 내용이 없습니다: %s:%s (%s) — 관리자 → 설정 → [저장소 점검]", shareName, p, n.BlobSHA)
+		return nil, nil, ErrNoContent
+	}
 	if err != nil {
 		return nil, nil, err
 	}

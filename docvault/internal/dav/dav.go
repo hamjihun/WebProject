@@ -132,6 +132,10 @@ func writeErr(w http.ResponseWriter, err error, existsStatus int) {
 		http.Error(w, "conflict", http.StatusConflict)
 	case errors.Is(err, vault.ErrIsDir):
 		http.Error(w, "is a collection", http.StatusMethodNotAllowed)
+	case errors.Is(err, vault.ErrNoContent):
+		// 410, not 5xx: the drive program must not keep retrying (each read
+		// would hang the program asking, e.g. Explorer, for many seconds).
+		http.Error(w, "file content missing from store", http.StatusGone)
 	case errors.Is(err, vault.ErrQuota):
 		http.Error(w, "insufficient storage", http.StatusInsufficientStorage)
 	case errors.Is(err, vault.ErrInvalidName), errors.Is(err, vault.ErrBadRequest):

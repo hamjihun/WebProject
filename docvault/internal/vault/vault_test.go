@@ -523,3 +523,18 @@ func (e *env) list(t *testing.T, a Actor, share, p string) []string {
 	sort.Strings(names)
 	return names
 }
+
+func TestMissingContent(t *testing.T) {
+	e := newEnv(t)
+	e.put(t, e.kim, "영업", "/a.xlsx", "v1")
+	e.put(t, e.kim, "영업", "/a.xlsx", "v2")
+	n, _ := e.v.Stat(e.kim, "영업", "/a.xlsx")
+	e.v.Blobs.Delete(n.BlobSHA)
+	if _, _, err := e.v.Open(e.kim, "영업", "/a.xlsx"); err != ErrNoContent {
+		t.Fatalf("open: %v", err)
+	}
+	missing, checked, err := e.v.CheckStore()
+	if err != nil || checked != 1 || len(missing) != 1 || missing[0].Path != "/a.xlsx" || missing[0].Share != "영업" || missing[0].RestorableVersion == 0 {
+		t.Fatalf("check: %v %d %+v", err, checked, missing)
+	}
+}
