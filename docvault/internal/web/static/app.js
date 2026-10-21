@@ -351,7 +351,7 @@ async function adminUsers() {
   let h = `<h2>사용자</h2><div class="toolbar"><button id="newUser" class="primary">+ 사용자 추가</button></div>
     <table><thead><tr><th>아이디</th><th>이름</th><th>그룹</th><th>상태</th><th></th></tr></thead><tbody>`;
   for (const u of users) {
-    const st = [u.isAdmin ? "관리자" : "", u.disabled ? "사용중지" : "", u.writeBlocked ? "⚠쓰기차단" : "", u.allowCopy ? "PC복사허용" : ""].filter(Boolean).join(", ");
+    const st = [u.isAdmin ? "관리자" : "", u.dlpFree ? "free권한" : "", u.disabled ? "사용중지" : "", u.writeBlocked ? "⚠쓰기차단" : "", u.allowCopy ? "PC복사허용" : ""].filter(Boolean).join(", ");
     h += `<tr><td>${esc(u.username)}</td><td>${esc(u.displayName)}</td><td>${esc((u.groups || []).join(", "))}</td><td>${esc(st)}</td>
       <td class="actions"><button class="small" data-edit="${u.id}">수정</button></td></tr>`;
   }
@@ -380,11 +380,12 @@ async function adminUsers() {
       <label class="row"><input type="checkbox" name="isAdmin" ${u.isAdmin ? "checked" : ""}> 관리자</label>
       <label class="row"><input type="checkbox" name="disabled" ${u.disabled ? "checked" : ""}> 사용 중지 (퇴사 등 – 즉시 모든 접속 차단)</label>
       <label class="row"><input type="checkbox" name="writeBlocked" ${u.writeBlocked ? "checked" : ""}> 쓰기 차단 (랜섬웨어 의심 시 자동 설정됨)</label>
-      <label class="row"><input type="checkbox" name="allowCopy" ${u.allowCopy ? "checked" : ""}> PC로 복사 허용 (PC 복사 차단 예외)</label>
+      <label class="row"><input type="checkbox" name="allowCopy" ${u.allowCopy ? "checked" : ""}> PC로 복사 허용 (PC 복사·저장 차단 예외)</label>
+      <label class="row"><input type="checkbox" name="dlpFree" ${u.dlpFree ? "checked" : ""}> <b>모든 차단 면제 (free권한)</b> — 복사·저장·카톡·압축 등 모든 유출 차단에서 제외(관리자와 동일)</label>
       <div class="buttons"><button type="button" data-close>취소</button><button class="primary">저장</button></div></form>`, (box) => {
       box.querySelector("form").onsubmit = guard(async (e) => {
         e.preventDefault(); const f = e.target;
-        const body = { displayName: f.displayName.value, isAdmin: f.isAdmin.checked, disabled: f.disabled.checked, writeBlocked: f.writeBlocked.checked, allowCopy: f.allowCopy.checked, groupIds: checked(f) };
+        const body = { displayName: f.displayName.value, isAdmin: f.isAdmin.checked, disabled: f.disabled.checked, writeBlocked: f.writeBlocked.checked, allowCopy: f.allowCopy.checked, dlpFree: f.dlpFree.checked, groupIds: checked(f) };
         if (f.password.value) body.password = f.password.value;
         await api("POST", `/api/admin/users/${u.id}`, body);
         closeModal(); toast("저장했습니다"); route();

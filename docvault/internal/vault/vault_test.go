@@ -632,3 +632,19 @@ func TestAuditRetention(t *testing.T) {
 		t.Fatalf("old rows not pruned: %d", n)
 	}
 }
+
+func TestDLPFreeExemption(t *testing.T) {
+	e := newEnv(t)
+	u := e.kim.User
+	if len(e.v.Policy(u)) == 0 || !e.v.CopyWatch(u) || !e.v.BlockDownload(u) {
+		t.Fatal("regular user should be blocked")
+	}
+	f := true
+	if err := e.v.UpdateUser(e.admin, u.ID, UserUpdate{DLPFree: &f}); err != nil {
+		t.Fatal(err)
+	}
+	u2, _ := e.v.UserByID(u.ID)
+	if len(e.v.Policy(u2)) != 0 || e.v.CopyWatch(u2) || e.v.BlockDownload(u2) {
+		t.Fatalf("free권한 user should be fully exempt: policy=%v copy=%v dl=%v", e.v.Policy(u2), e.v.CopyWatch(u2), e.v.BlockDownload(u2))
+	}
+}

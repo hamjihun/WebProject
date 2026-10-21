@@ -19,6 +19,7 @@ type User struct {
 	Disabled     bool     `json:"disabled"`
 	WriteBlocked bool     `json:"writeBlocked"`
 	AllowCopy    bool     `json:"allowCopy"` // exempt from the PC copy-out block
+	DLPFree      bool     `json:"dlpFree"`   // free권한: exempt from ALL leak blocking
 	Groups       []string `json:"groups,omitempty"`
 	GroupIDs     []int64  `json:"groupIds,omitempty"`
 }
@@ -34,13 +35,13 @@ func (u *User) Label() string {
 	return u.Username
 }
 
-const userCols = `id, username, display_name, is_admin, disabled, write_blocked, allow_copy`
+const userCols = `id, username, display_name, is_admin, disabled, write_blocked, allow_copy, dlp_free`
 
 type rowScanner interface{ Scan(...any) error }
 
 func scanUser(r rowScanner) (*User, error) {
 	u := &User{}
-	err := r.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy)
+	err := r.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &u.DLPFree)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -105,6 +106,7 @@ type UserUpdate struct {
 	Disabled     *bool   `json:"disabled"`
 	WriteBlocked *bool   `json:"writeBlocked"`
 	AllowCopy    *bool   `json:"allowCopy"`
+	DLPFree      *bool   `json:"dlpFree"`
 	GroupIDs     []int64 `json:"groupIds"`
 }
 
@@ -149,6 +151,9 @@ func (v *Vault) UpdateUser(a Actor, id int64, up UserUpdate) error {
 		}
 		if up.AllowCopy != nil {
 			tx.Exec(`UPDATE users SET allow_copy=? WHERE id=?`, *up.AllowCopy, id)
+		}
+		if up.DLPFree != nil {
+			tx.Exec(`UPDATE users SET dlp_free=? WHERE id=?`, *up.DLPFree, id)
 			changes = append(changes, "PC복사허용")
 		}
 		if up.GroupIDs != nil {

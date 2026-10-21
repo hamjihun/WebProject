@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
 	disabled      INTEGER NOT NULL DEFAULT 0,
 	write_blocked INTEGER NOT NULL DEFAULT 0,
 	allow_copy    INTEGER NOT NULL DEFAULT 0,
+	dlp_free      INTEGER NOT NULL DEFAULT 0,
 	failed_logins INTEGER NOT NULL DEFAULT 0,
 	locked_until  INTEGER NOT NULL DEFAULT 0,
 	created_at    INTEGER NOT NULL
@@ -171,6 +172,7 @@ func Open(path string) (*sql.DB, error) {
 	// Columns added after the first release: add them to existing databases.
 	for _, c := range []struct{ table, column, def string }{
 		{"users", "allow_copy", "INTEGER NOT NULL DEFAULT 0"},
+		{"users", "dlp_free", "INTEGER NOT NULL DEFAULT 0"}, // free권한: 모든 유출 차단 면제
 		{"exports", "delivered_path", "TEXT NOT NULL DEFAULT ''"}, // file placed in 개인문서함\반출
 	} {
 		if err := ensureColumn(d, c.table, c.column, c.def); err != nil {

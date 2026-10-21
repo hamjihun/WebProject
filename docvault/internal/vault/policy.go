@@ -29,7 +29,7 @@ var (
 // Administrators are never blocked.
 func (v *Vault) Policy(u *User) map[string]string {
 	block := map[string]string{}
-	if u.IsAdmin {
+	if u.IsAdmin || u.DLPFree {
 		return block
 	}
 	add := func(list []string, kind string) {
@@ -91,7 +91,7 @@ func (v *Vault) CopyWatchProcs(u *User) []string {
 // CopyWatch reports whether the agent should remove copies of drive files
 // that appear on u's PC (Explorer copy/drag to the desktop, USB, ...).
 func (v *Vault) CopyWatch(u *User) bool {
-	return !u.IsAdmin && !u.AllowCopy && v.Setting("block_copy_out") != 0
+	return !u.IsAdmin && !u.DLPFree && !u.AllowCopy && v.Setting("block_copy_out") != 0
 }
 
 // CopyCheck tells whether a file with this content (SHA-256 and size) that
@@ -139,7 +139,7 @@ func (v *Vault) CopyCheck(u *User, sha string, size int64) (drive, p string, fou
 // BlockDownload reports whether the agent should refuse browser downloads
 // saved on the PC itself (they belong in the DocVault drives).
 func (v *Vault) BlockDownload(u *User) bool {
-	return !u.IsAdmin && !u.AllowCopy && v.Setting("block_download_local") != 0
+	return !u.IsAdmin && !u.DLPFree && !u.AllowCopy && v.Setting("block_download_local") != 0
 }
 
 // DownloadDrive is the drive letter browsers save downloads to: the
