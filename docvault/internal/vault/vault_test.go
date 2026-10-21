@@ -246,7 +246,7 @@ func TestTrashRestoreAndRetention(t *testing.T) {
 func TestExportApproval(t *testing.T) {
 	e := newEnv(t)
 	e.put(t, e.kim, "영업", "/견적.xlsx", "v1")
-	ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출")
+	ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출", false)
 	if err != nil || ex.Status != "pending" {
 		t.Fatalf("request %+v %v", ex, err)
 	}
@@ -289,7 +289,7 @@ func TestApprovedExportGoesToExportFolder(t *testing.T) {
 	e.put(t, e.kim, "영업", "/견적.xlsx", "v1")
 	approve := func() {
 		t.Helper()
-		ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출")
+		ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -313,7 +313,7 @@ func TestApprovedExportGoesToExportFolder(t *testing.T) {
 		}
 	}
 	// a rejected request delivers nothing
-	ex, _ := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "x")
+	ex, _ := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "x", false)
 	e.v.DecideExport(e.boss, ex.ID, false, "")
 	if n := len(e.list(t, e.kim, "개인문서함", "/반출")); n != 2 {
 		t.Fatalf("after reject: %d files", n)
@@ -488,7 +488,7 @@ func TestCopyCheck(t *testing.T) {
 	if _, _, ok := e.v.CopyCheck(e.admin.User, sum("quote"), 5); ok {
 		t.Fatal("admin is never blocked")
 	}
-	ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출")
+	ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "고객사 제출", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,5 +536,48 @@ func TestMissingContent(t *testing.T) {
 	missing, checked, err := e.v.CheckStore()
 	if err != nil || checked != 1 || len(missing) != 1 || missing[0].Path != "/a.xlsx" || missing[0].Share != "영업" || missing[0].RestorableVersion == 0 {
 		t.Fatalf("check: %v %d %+v", err, checked, missing)
+	}
+}
+
+func TestPostApprovalExport(t *testing.T) {
+	e := newEnv(t)
+	e.put(t, e.kim, "영업", "/견적.xlsx", "v1")
+	ex, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "급함", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ex.Status != "post" || !ex.CanDownload {
+		t.Fatalf("post export %+v", ex)
+	}
+	if got := e.list(t, e.kim, "개인문서함", "/반출"); len(got) != 1 || got[0] != "견적.xlsx" {
+		t.Fatalf("delivered at once: %v", got)
+	}
+	h := sha256.Sum256([]byte("v1"))
+	if _, _, found := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), 2); found {
+		t.Fatal("post export content should be allowed out")
+	}
+	inbox, _ := e.v.ListExports(e.boss.User, "inbox")
+	if len(inbox) != 1 || !inbox[0].CanApprove {
+		t.Fatalf("approver should see it: %+v", inbox)
+	}
+	// rejected afterwards: taken back out of the export folder
+	if err := e.v.DecideExport(e.boss, ex.ID, false, "불필요"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.list(t, e.kim, "개인문서함", "/반출"); len(got) != 0 {
+		t.Fatalf("after reject: %v", got)
+	}
+	// approved afterwards: stays
+	ex2, _ := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "급함", true)
+	if err := e.v.DecideExport(e.boss, ex2.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.list(t, e.kim, "개인문서함", "/반출"); len(got) != 1 {
+		t.Fatalf("after approve: %v", got)
+	}
+	// setting off
+	e.v.SetSetting(e.admin, "allow_post_export", 0)
+	if _, err := e.v.RequestExport(e.kim, "영업", "/견적.xlsx", "급함", true); err == nil {
+		t.Fatal("post export should be refused when disabled")
 	}
 }

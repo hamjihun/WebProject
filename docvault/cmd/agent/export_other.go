@@ -23,7 +23,8 @@ func cmdExport(cfg *Config, local string) error {
 	if reason == "" {
 		return errors.New("반출 사유를 입력하세요")
 	}
-	if err := requestExport(c, d, p, reason); err != nil {
+	post := prompt(bufio.NewReader(os.Stdin), "후결재로 바로 반출할까요? (y/N): ") == "y"
+	if err := requestExport(c, d, p, reason, post); err != nil {
 		return err
 	}
 	fmt.Println(exportDoneText)

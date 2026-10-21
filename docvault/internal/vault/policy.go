@@ -66,7 +66,7 @@ func (v *Vault) CopyCheck(u *User, sha string, size int64) (drive, p string, fou
 	}
 	var exported int
 	v.DB.QueryRow(`SELECT COUNT(*) FROM exports e JOIN versions ver ON ver.id=e.version_id
-		WHERE e.requester_id=? AND e.status IN ('approved','expired') AND ver.blob_sha=?`, u.ID, sha).Scan(&exported)
+		WHERE e.requester_id=? AND e.status IN ('approved','expired','post') AND ver.blob_sha=?`, u.ID, sha).Scan(&exported)
 	if exported > 0 {
 		return "", "", false
 	}

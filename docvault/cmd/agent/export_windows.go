@@ -11,19 +11,21 @@ import (
 )
 
 const (
-	esMultiline   = 0x0004
-	esWantReturn  = 0x1000
-	esAutoVScroll = 0x0040
-	wsVScroll     = 0x00200000
+	esMultiline    = 0x0004
+	esWantReturn   = 0x1000
+	esAutoVScroll  = 0x0040
+	wsVScroll      = 0x00200000
+	bsAutoCheckbox = 0x0003
+	bmGetCheck     = 0x00F0
 )
 
 // exportDlg is the small "반출 신청" window opened from Explorer's menu.
 var exportDlg struct {
-	hwnd, reason, msg, ok uintptr
-	client                *client
-	drive                 Drive
-	path                  string
-	done                  bool
+	hwnd, reason, msg, ok, post uintptr
+	client                      *client
+	drive                       Drive
+	path                        string
+	done, posted                bool
 }
 
 func cmdExport(cfg *Config, local string) error {
@@ -45,7 +47,11 @@ func cmdExport(cfg *Config, local string) error {
 	exportDlg.client, exportDlg.drive, exportDlg.path = c, d, p
 	showExportDialog(filepath.Base(local), d.DriveLetter+": "+d.Name+"  "+strings.ReplaceAll(p, "/", `\`))
 	if exportDlg.done {
-		msgBox(0, exportDoneText, mbIconInformation)
+		text := exportDoneText
+		if exportDlg.posted {
+			text = exportPostDoneText
+		}
+		msgBox(0, text, mbIconInformation)
 	}
 	return nil
 }
@@ -73,7 +79,7 @@ func showExportDialog(name, where string) {
 
 	sw, _, _ := pGetSystemMetrics.Call(smCxScreen)
 	sh, _, _ := pGetSystemMetrics.Call(smCyScreen)
-	w, h := s(440), s(330)
+	w, h := s(440), s(362)
 	title := wstr("DocVault 반출 신청")
 	hwnd, _, _ := pCreateWindowExW.Call(wsExControlParent, ptr(cls), ptr(title), wsCaption|wsSysMenu,
 		(sw-w)/2, (sh-h)/2, w, h, 0, 0, inst, 0)
@@ -94,9 +100,10 @@ func showExportDialog(name, where string) {
 	ctl("STATIC", where, 0, 0, 20, 42, 390, 20, 0, font)
 	ctl("STATIC", "반출 사유 (결재자가 봅니다)", 0, 0, 20, 74, 390, 20, 0, font)
 	exportDlg.reason = ctl("EDIT", "", wsTabStop|esMultiline|esWantReturn|esAutoVScroll|wsVScroll, wsExClientEdge, 20, 96, 384, 90, 0, font)
-	exportDlg.msg = ctl("STATIC", "", 0, 0, 20, 192, 390, 20, 0, font)
-	exportDlg.ok = ctl("BUTTON", "반출 신청", wsTabStop|bsDefPushButton, 0, 196, 222, 100, 34, idLogin, font)
-	ctl("BUTTON", "취소", wsTabStop, 0, 304, 222, 100, 34, idCancel, font)
+	exportDlg.post = ctl("BUTTON", "후결재 (지금 바로 반출 폴더에 넣고, 결재는 나중에)", wsTabStop|bsAutoCheckbox, 0, 20, 192, 390, 24, 0, font)
+	exportDlg.msg = ctl("STATIC", "", 0, 0, 20, 222, 390, 20, 0, font)
+	exportDlg.ok = ctl("BUTTON", "반출 신청", wsTabStop|bsDefPushButton, 0, 196, 254, 100, 34, idLogin, font)
+	ctl("BUTTON", "취소", wsTabStop, 0, 304, 254, 100, 34, idCancel, font)
 
 	pShowWindow.Call(hwnd, swShow)
 	pSetForegroundWindow.Call(hwnd)
@@ -129,12 +136,13 @@ func exportProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			}
 			pEnableWindow.Call(exportDlg.ok, 0)
 			setText(exportDlg.msg, "신청하는 중...")
-			if err := requestExport(exportDlg.client, exportDlg.drive, exportDlg.path, reason); err != nil {
+			post, _, _ := pSendMessageW.Call(exportDlg.post, bmGetCheck, 0, 0)
+			if err := requestExport(exportDlg.client, exportDlg.drive, exportDlg.path, reason, post == 1); err != nil {
 				setText(exportDlg.msg, "신청하지 못했습니다: "+err.Error())
 				pEnableWindow.Call(exportDlg.ok, 1)
 				return 0
 			}
-			exportDlg.done = true
+			exportDlg.done, exportDlg.posted = true, post == 1
 			pDestroyWindow.Call(hwnd)
 			return 0
 		case idCancel:

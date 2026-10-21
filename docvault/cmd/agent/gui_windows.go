@@ -332,7 +332,6 @@ func runApp(cfg *Config) error {
 	runtime.KeepAlive(tc)
 	g.taskbarCreated = uint32(r)
 
-	os.RemoveAll(cfg.CacheDir)
 	log.Printf("DocVault 에이전트 %s 시작 (서버 %s)", version, cfg.Server)
 	g.addTray()
 	cleanupOldCopies()
@@ -567,6 +566,29 @@ func (g *gui) startSession() {
 	g.mu.Unlock()
 	g.updateTray()
 	go g.loop(stop)
+	go g.ag.health(stop, func() {
+		log.Printf("서버 응답 없음 → 드라이브 연결 해제")
+		g.mu.Lock()
+		g.serverErr, g.drives = true, nil
+		g.mu.Unlock()
+		g.post(wmState)
+		g.queueWarning("서버에 연결할 수 없습니다",
+			"문서 드라이브 연결을 잠시 해제했습니다. 서버가 복구되면 자동으로 다시 연결됩니다.\n열려 있는 문서는 닫지 말고, 다시 연결된 뒤 저장하세요.")
+	}, func() {
+		log.Printf("서버 복구 → 드라이브 다시 연결")
+		select {
+		case g.refresh <- struct{}{}:
+		default:
+		}
+		g.queueBalloon("서버에 다시 연결되었습니다", "문서 드라이브를 다시 연결합니다.")
+	}, func(letter string) {
+		log.Printf("%s: 응답 없음 → 다시 연결", letter)
+		select {
+		case g.refresh <- struct{}{}:
+		default:
+		}
+		g.queueWarning("드라이브 응답이 없어 다시 연결했습니다", letter+": 드라이브가 응답하지 않아 다시 연결했습니다.\n계속 반복되면 관리자에게 알려 주세요.")
+	})
 }
 
 // endSession disconnects every drive and stops syncing.
@@ -580,8 +602,7 @@ func (g *gui) endSession() {
 	if stop != nil {
 		close(stop)
 	}
-	g.ag.stopAll()
-	os.RemoveAll(g.cfg.CacheDir)
+	g.ag.stopAll() // the caches stay: unsent changes are uploaded on the next connect
 }
 
 func (g *gui) loop(stop chan struct{}) {
@@ -594,6 +615,7 @@ func (g *gui) loop(stop chan struct{}) {
 		g.mu.Lock()
 		g.user = name
 		g.mu.Unlock()
+		g.ag.setUser(me.Username)
 	}
 	announced := false
 	for {

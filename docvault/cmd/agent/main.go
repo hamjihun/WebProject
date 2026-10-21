@@ -335,6 +335,37 @@ type agent struct {
 
 	copyWatch     atomic.Bool // remove copies of drive files made on this PC
 	blockDownload atomic.Bool // refuse browser downloads saved on this PC
+	user          string      // signed-in account, keys the drive caches (under mu)
+	offline       atomic.Bool // server down: drives stay disconnected (see health)
+}
+
+// setUser records the signed-in account (see cacheDir).
+func (a *agent) setUser(name string) {
+	a.mu.Lock()
+	a.user = name
+	a.mu.Unlock()
+}
+
+// cacheDir is where a drive keeps what it read and what it has still to
+// upload. It is kept when the drive is disconnected (server down, restart,
+// update, Windows shutdown): the drive program uploads leftover changes when
+// it connects again. Keyed by account and drive so changes always go back
+// where they came from. Called with a.mu held.
+func (a *agent) cacheDir(d Drive) string {
+	user := a.user
+	if user == "" {
+		user = "_"
+	}
+	return filepath.Join(a.cfg.CacheDir, safeName(user), fmt.Sprintf("s%d", d.ID))
+}
+
+func safeName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`\/:*?"<>|`, r) || r < 32 {
+			return '_'
+		}
+		return r
+	}, s)
 }
 
 func (a *agent) start(d Drive) error {
@@ -344,8 +375,7 @@ func (a *agent) start(d Drive) error {
 	if err := prepareTarget(target); err != nil {
 		return err
 	}
-	cache := filepath.Join(a.cfg.CacheDir, letter)
-	os.RemoveAll(cache) // never leave old document copies behind
+	cache := a.cacheDir(d)
 	os.Remove(eventsPath(letter))
 	logDir := filepath.Join(stateDir(), "logs")
 	os.MkdirAll(logDir, 0o700)
@@ -362,6 +392,13 @@ func (a *agent) start(d Drive) error {
 		"--cache-dir", cache,
 		"--dir-cache-time", "30s",
 		"--poll-interval", "0",
+		// Give up quickly when the server does not answer: every program
+		// touching the drive (Explorer, i.e. also the taskbar) waits for it.
+		// The agent disconnects the drives when the server is down.
+		"--contimeout", "5s",
+		"--timeout", "20s",
+		"--low-level-retries", "2",
+		"--retries", "1",
 		"--log-file", filepath.Join(logDir, "drive-"+letter+".log"),
 		"--log-level", "NOTICE",
 	}
@@ -409,7 +446,6 @@ func (a *agent) stop(letter string) {
 	}
 	cleanupTarget(mountTarget(letter))
 	setDriveIcon(letter, false)
-	os.RemoveAll(filepath.Join(a.cfg.CacheDir, letter))
 	delete(a.mounts, letter)
 	log.Printf("해제: %s: %s", letter, m.drive.Name)
 }
@@ -494,6 +530,19 @@ func (a *agent) heartbeat() ([]Drive, error) {
 		return nil, err
 	}
 	a.updatePolicy()
+	a.mu.Lock()
+	known := a.user != ""
+	a.mu.Unlock()
+	if !known { // the caches are kept per account
+		var me struct{ Username string }
+		if err := a.client.call("GET", "/api/me", nil, &me); err != nil {
+			return drives, nil
+		}
+		a.setUser(me.Username)
+	}
+	if a.offline.Load() {
+		return drives, nil
+	}
 	a.sync(drives)
 	a.sync(drives) // sync stops crashed mounts; start them again right away
 	return drives, nil
@@ -514,11 +563,20 @@ func cmdRun(cfg *Config) error {
 	}
 	defer openLog()()
 	a := newAgent(cfg)
-	os.RemoveAll(cfg.CacheDir)
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	defer a.stopAll()
 	log.Printf("DocVault 에이전트 %s 시작 (서버 %s)", version, cfg.Server)
+	refresh := make(chan struct{}, 1)
+	kick := func() {
+		select {
+		case refresh <- struct{}{}:
+		default:
+		}
+	}
+	go a.health(make(chan struct{}), func() { log.Printf("서버 응답 없음 → 드라이브 연결 해제") },
+		func() { log.Printf("서버 복구 → 드라이브 다시 연결"); kick() },
+		func(l string) { log.Printf("%s: 응답 없음 → 다시 연결", l); kick() })
 	for {
 		_, err := a.heartbeat()
 		switch {
@@ -534,13 +592,13 @@ func cmdRun(cfg *Config) error {
 			a.client = newClient(cfg, loadToken())
 			continue
 		case err != nil:
-			// Server unreachable: keep current drives; rclone retries on its own.
 			log.Printf("서버 연결 실패: %v", err)
 		}
 		select {
 		case <-sig:
 			log.Printf("종료합니다")
 			return nil
+		case <-refresh:
 		case <-time.After(time.Minute):
 		}
 	}

@@ -40,8 +40,10 @@ var (
 	errAlreadyExported = errors.New("반출 폴더의 파일은 이미 반출 승인된 파일입니다.\n바탕화면 등 PC로 바로 복사할 수 있습니다.")
 )
 
-func requestExport(c *client, d Drive, p, reason string) error {
-	return c.call("POST", "/api/exports", map[string]string{"share": d.Name, "path": p, "reason": reason}, nil)
+func requestExport(c *client, d Drive, p, reason string, post bool) error {
+	return c.call("POST", "/api/exports", map[string]any{"share": d.Name, "path": p, "reason": reason, "post": post}, nil)
 }
+
+const exportPostDoneText = "후결재로 반출했습니다.\n\n개인문서함의 [" + exportFolder + "] 폴더에 파일을 넣었습니다. 바로 바탕화면 등 PC로 복사할 수 있습니다.\n결재자가 나중에 반려하면 반출 폴더에서 회수됩니다."
 
 const exportDoneText = "반출 신청했습니다.\n\n결재자가 승인하면 개인문서함의 [" + exportFolder + "] 폴더에 파일이 들어갑니다.\n그 폴더의 파일은 바탕화면 등 PC로 복사할 수 있습니다.\n\n진행 상황은 웹 문서함 → 반출에서 볼 수 있습니다."

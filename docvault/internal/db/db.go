@@ -171,6 +171,7 @@ func Open(path string) (*sql.DB, error) {
 	// Columns added after the first release: add them to existing databases.
 	for _, c := range []struct{ table, column, def string }{
 		{"users", "allow_copy", "INTEGER NOT NULL DEFAULT 0"},
+		{"exports", "delivered_path", "TEXT NOT NULL DEFAULT ''"}, // file placed in 개인문서함\반출
 	} {
 		if err := ensureColumn(d, c.table, c.column, c.def); err != nil {
 			d.Close()

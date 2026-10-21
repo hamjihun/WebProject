@@ -18,7 +18,7 @@ type Export struct {
 	RequesterID   int64  `json:"-"`
 	Requester     string `json:"requester"`
 	Reason        string `json:"reason"`
-	Status        string `json:"status"` // pending approved rejected cancelled expired
+	Status        string `json:"status"` // pending post(후결재: 반출됨, 결재 대기) approved rejected cancelled expired
 	Approver      string `json:"approver"`
 	DecisionNote  string `json:"decisionNote"`
 	CreatedAt     int64  `json:"createdAt"`
@@ -66,13 +66,18 @@ func (v *Vault) canApprove(u *User, e *Export) bool {
 
 func (v *Vault) decorate(u *User, e *Export) *Export {
 	now := v.Now()
-	e.CanApprove = e.Status == "pending" && v.canApprove(u, e)
-	e.CanDownload = e.Status == "approved" && u.ID == e.RequesterID && now < e.ExpiresAt && e.DownloadCount < e.MaxDownloads
+	e.CanApprove = (e.Status == "pending" || e.Status == "post") && v.canApprove(u, e)
+	e.CanDownload = (e.Status == "approved" || e.Status == "post") && u.ID == e.RequesterID && now < e.ExpiresAt && e.DownloadCount < e.MaxDownloads
 	return e
 }
 
-// RequestExport files a 반출 신청 for the file's current version.
-func (v *Vault) RequestExport(a Actor, shareName, p, reason string) (*Export, error) {
+// RequestExport files a 반출 신청 for the file's current version. With post
+// (후결재) the file goes to the requester's export folder at once and the
+// approver decides afterwards; a rejection removes it from there again.
+func (v *Vault) RequestExport(a Actor, shareName, p, reason string, post bool) (*Export, error) {
+	if post && v.Setting("allow_post_export") == 0 {
+		return nil, errors.New("후결재 반출이 허용되지 않습니다. 결재 후 반출을 신청하세요")
+	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return nil, errors.New("반출 사유를 입력하세요")
@@ -90,13 +95,24 @@ func (v *Vault) RequestExport(a Actor, shareName, p, reason string) (*Export, er
 		return nil, ErrNotFound
 	}
 	fp := joinPathStr(p)
-	res, err := v.DB.Exec(`INSERT INTO exports(node_id, version_id, share_id, file_name, file_path, requester_id, reason, created_at, max_downloads)
-		VALUES(?,?,?,?,?,?,?,?,?)`, n.ID, vid, s.ID, n.Name, fp, a.User.ID, reason, v.Now(), v.Setting("export_max_downloads"))
+	status, expires, action := "pending", any(nil), "export_request"
+	if post {
+		status, expires, action = "post", v.Now()+v.Setting("export_valid_days")*86400, "export_post"
+	}
+	res, err := v.DB.Exec(`INSERT INTO exports(node_id, version_id, share_id, file_name, file_path, requester_id, reason, status, created_at, expires_at, max_downloads)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)`, n.ID, vid, s.ID, n.Name, fp, a.User.ID, reason, status, v.Now(), expires, v.Setting("export_max_downloads"))
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	v.Audit(a, "export_request", s.Name, fp, reason)
+	v.Audit(a, action, s.Name, fp, reason)
+	if post {
+		e, err := scanExport(v.DB.QueryRow(exportSelect+`WHERE e.id=?`, id))
+		if err != nil {
+			return nil, err
+		}
+		v.deliverExport(e)
+	}
 	return v.ExportByID(a.User, id)
 }
 
@@ -163,9 +179,10 @@ func (v *Vault) DecideExport(a Actor, id int64, approve bool, note string) error
 	if err != nil {
 		return err
 	}
-	if e.Status != "pending" {
+	if e.Status != "pending" && e.Status != "post" {
 		return errors.New("이미 처리된 신청입니다")
 	}
+	wasPost := e.Status == "post"
 	if !v.canApprove(a.User, e) {
 		return ErrForbidden
 	}
@@ -176,8 +193,14 @@ func (v *Vault) DecideExport(a Actor, id int64, approve bool, note string) error
 		status, action = "approved", "export_approve"
 		expires = now + v.Setting("export_valid_days")*86400
 	}
-	res, err := v.DB.Exec(`UPDATE exports SET status=?, approver_id=?, decision_note=?, decided_at=?, expires_at=? WHERE id=? AND status='pending'`,
-		status, a.User.ID, strings.TrimSpace(note), now, expires, id)
+	if wasPost {
+		action += "_post"
+		if approve {
+			expires = e.ExpiresAt
+		}
+	}
+	res, err := v.DB.Exec(`UPDATE exports SET status=?, approver_id=?, decision_note=?, decided_at=?, expires_at=? WHERE id=? AND status=?`,
+		status, a.User.ID, strings.TrimSpace(note), now, expires, id, e.Status)
 	if err != nil {
 		return err
 	}
@@ -185,10 +208,29 @@ func (v *Vault) DecideExport(a Actor, id int64, approve bool, note string) error
 		return errors.New("이미 처리된 신청입니다")
 	}
 	v.Audit(a, action, e.ShareName, e.FilePath, "신청자: "+e.Requester+" / "+note)
-	if approve {
+	switch {
+	case approve && !wasPost:
 		v.deliverExport(e)
+	case !approve && wasPost:
+		v.withdrawExport(e)
 	}
 	return nil
+}
+
+// withdrawExport removes a rejected 후결재 file from the export folder (if it
+// is still there unchanged; copies already taken out are in the audit log).
+func (v *Vault) withdrawExport(e *Export) {
+	var p string
+	v.DB.QueryRow(`SELECT delivered_path FROM exports WHERE id=?`, e.ID).Scan(&p)
+	u, err := v.UserByID(e.RequesterID)
+	s := v.personalShare()
+	if p == "" || err != nil || s == nil {
+		return
+	}
+	a := Actor{User: u, Client: "export"}
+	if n, err := v.Stat(a, s.Name, p); err == nil && n.BlobSHA == e.blobSHA {
+		v.Delete(a, s.Name, p)
+	}
 }
 
 // deliverExport puts the approved file version in the requester's export
@@ -226,7 +268,9 @@ func (v *Vault) deliverExport(e *Export) {
 	defer f.Close()
 	if _, _, err := v.Put(a, s.Name, "/"+ExportFolder+"/"+name, f); err != nil {
 		v.Audit(a, "export_deliver_fail", s.Name, "/"+ExportFolder+"/"+name, err.Error())
+		return
 	}
+	v.DB.Exec(`UPDATE exports SET delivered_path=? WHERE id=?`, "/"+ExportFolder+"/"+name, e.ID)
 }
 
 func (v *Vault) personalShare() *Share {

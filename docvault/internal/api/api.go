@@ -254,6 +254,7 @@ type fileReq struct {
 	NewName string `json:"newName"`
 	ID      int64  `json:"id"`
 	Reason  string `json:"reason"`
+	Post    bool   `json:"post"` // 후결재
 }
 
 func (s *API) listFiles(w http.ResponseWriter, r *http.Request, c *ctx) {
@@ -413,7 +414,7 @@ func (s *API) requestExport(w http.ResponseWriter, r *http.Request, c *ctx) {
 		fail(w, err)
 		return
 	}
-	e, err := s.V.RequestExport(c.a, in.Share, in.Path, in.Reason)
+	e, err := s.V.RequestExport(c.a, in.Share, in.Path, in.Reason, in.Post)
 	if err != nil {
 		fail(w, err)
 		return
@@ -821,7 +822,7 @@ var actionLabels = map[string]string{
 	"read": "열람", "create": "새 파일", "update": "수정 저장", "mkdir": "폴더 생성", "delete": "삭제(휴지통)",
 	"move": "이동/이름변경", "copy": "복사", "restore_trash": "휴지통 복원", "purge": "영구 삭제",
 	"restore_version": "이전 버전 복원", "export_request": "반출 신청", "export_approve": "반출 승인",
-	"export_reject": "반출 반려", "export_cancel": "반출 신청 취소", "export_download": "반출 다운로드",
+	"export_reject": "반출 반려", "export_post": "후결재 반출", "export_approve_post": "후결재 승인", "export_reject_post": "후결재 반려(반출 폴더에서 회수)", "export_cancel": "반출 신청 취소", "export_download": "반출 다운로드",
 	"guard_block": "랜섬웨어 의심 차단", "maintenance": "자동 정리",
 	"admin_user_create": "[관리] 사용자 생성", "admin_user_update": "[관리] 사용자 변경",
 	"admin_group_create": "[관리] 그룹 생성", "admin_group_delete": "[관리] 그룹 삭제",

@@ -16,7 +16,7 @@ const fmtTime = (t) => {
 };
 const fmtDate = (t) => fmtTime(t).slice(0, 10);
 const LEVELS = { 1: "읽기", 2: "읽기/쓰기", 3: "관리(팀장·결재)" };
-const STATUS = { pending: "결재 대기", approved: "승인", rejected: "반려", cancelled: "취소", expired: "만료" };
+const STATUS = { pending: "결재 대기", post: "후결재 대기 (반출됨)", approved: "승인", rejected: "반려", cancelled: "취소", expired: "만료" };
 const ACTIONS = {
   login: "로그인", login_fail: "로그인 실패", logout: "로그아웃", read: "열람", create: "새 파일", update: "수정 저장",
   mkdir: "폴더 생성", delete: "삭제(휴지통)", move: "이동/이름변경", copy: "복사", restore_trash: "휴지통 복원",
@@ -261,11 +261,13 @@ async function fileAction(act, share, p, name) {
     openModal(`<h3>반출 신청</h3><p><b>${esc(name)}</b><br><span class="muted">${esc(share)}:${esc(p)}</span></p>
       <p class="muted">팀장(드라이브 관리자) 승인 후 정해진 기간 동안 다운로드할 수 있습니다. 신청 시점의 파일 버전이 반출됩니다.</p>
       <form class="form"><label>반출 사유<textarea name="reason" rows="3" required placeholder="예: A사 견적 제출용"></textarea></label>
+      <label class="row"><input type="checkbox" name="post"> <span><b>후결재</b> — 지금 바로 개인문서함\\반출 폴더에 넣고, 결재는 나중에 받습니다 (반려되면 반출 폴더에서 회수)</span></label>
       <div class="buttons"><button type="button" data-close>취소</button><button class="primary">신청</button></div></form>`, (box) => {
       box.querySelector("form").onsubmit = guard(async (e) => {
         e.preventDefault();
-        await api("POST", "/api/exports", { share, path: p, reason: e.target.reason.value });
-        closeModal(); toast("반출 신청했습니다. 승인되면 개인문서함의 [반출] 폴더에 들어갑니다");
+        const post = e.target.post.checked;
+        await api("POST", "/api/exports", { share, path: p, reason: e.target.reason.value, post });
+        closeModal(); toast(post ? "개인문서함의 [반출] 폴더에 넣었습니다 (후결재)" : "반출 신청했습니다. 승인되면 개인문서함의 [반출] 폴더에 들어갑니다");
       });
     });
   }
@@ -311,7 +313,7 @@ function exportRow(e, mode) {
     <td><b>${esc(e.fileName)}</b><br><span class="muted">${esc(e.shareName)}:${esc(e.filePath)} · ${fmtSize(e.size)}</span></td>
     <td>${esc(e.reason)}</td>
     <td><span class="st ${e.status}">${STATUS[e.status] || e.status}</span>${e.approver ? `<br><span class="muted">${esc(e.approver)}</span>` : ""}${e.decisionNote ? `<br><span class="muted">${esc(e.decisionNote)}</span>` : ""}
-    ${e.status === "approved" ? `<br><span class="muted">~${fmtDate(e.expiresAt)}</span>` : ""}</td>
+    ${e.status === "approved" || e.status === "post" ? `<br><span class="muted">~${fmtDate(e.expiresAt)}</span>` : ""}</td>
     <td class="actions">${act}</td></tr>`;
 }
 
@@ -546,6 +548,7 @@ const BLOCK_LABELS = {
   block_copy_out: ["PC로 복사 차단", "탐색기로 PC(바탕화면·USB 등)에 복사된 문서함 파일을 바로 삭제하고, 명령창·압축 프로그램(반디집·알집·7-Zip·WinRAR)은 문서함 파일을 읽지 못하게 합니다. 사용자별 예외는 [사용자 → 수정 → PC로 복사 허용]"],
   block_messenger: ["메신저 첨부 차단", "카카오톡, 텔레그램, 라인, 왓츠앱, 디스코드에 문서함 파일을 첨부하지 못하게 합니다"],
   block_download_local: ["웹 다운로드 PC 저장 차단", "크롬·엣지·웨일에서 받은 파일은 개인문서함에 저장됩니다. [다른 이름으로 저장]으로 바탕화면 등 PC를 고르면 \"PC에 저장할 수 없습니다\" 알림과 함께 삭제됩니다. 받은 파일을 바로 여는 것은 됩니다"],
+  allow_post_export: ["후결재 반출 허용", "반출 신청 때 [후결재]를 고르면 바로 개인문서함\\반출 폴더에 넣고 결재는 나중에 받습니다. 결재자가 반려하면 반출 폴더에서 회수됩니다 (이미 밖으로 복사한 것은 감사 로그로 확인)"],
   block_browser_upload: ["웹브라우저 업로드 차단", "크롬·엣지·웨일·파이어폭스가 문서함 파일을 읽지 못하게 합니다 (웹메일 첨부, 웹 업로드 차단). 문서함의 PDF를 브라우저로 여는 것도 막힙니다"],
 };
 
