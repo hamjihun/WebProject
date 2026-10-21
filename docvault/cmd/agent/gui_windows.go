@@ -747,11 +747,7 @@ func (g *gui) showLogin(message string) {
 		pSetForegroundWindow.Call(g.login)
 		return
 	}
-	askServer := g.cfg.Server == ""
-	width, height := 380, 372
-	if askServer {
-		height += 60
-	}
+	width, height := 380, 432 // always includes the server-address field
 	sw, _, _ := pGetSystemMetrics.Call(smCxScreen)
 	sh, _, _ := pGetSystemMetrics.Call(smCyScreen)
 	w, h := g.s(width), g.s(height)
@@ -766,11 +762,9 @@ func (g *gui) showLogin(message string) {
 	y += 34
 	g.ctl("STATIC", "문서 드라이브를 사용하려면 회사 계정으로 로그인하세요.", 0, 0, 24, y, 330, 20, 0, g.font)
 	y += 34
-	if askServer {
-		g.ctl("STATIC", "서버 주소 (예: 192.168.50.10:8080)", 0, 0, 24, y, 320, 20, 0, g.font)
-		g.srvBox = g.ctl("EDIT", "", wsTabStop|esAutoHScroll, wsExClientEdge, 24, y+20, 316, 28, 0, g.font)
-		y += 60
-	}
+	g.ctl("STATIC", "서버 주소 (예: 192.168.50.10:8080)", 0, 0, 24, y, 320, 20, 0, g.font)
+	g.srvBox = g.ctl("EDIT", g.cfg.Server, wsTabStop|esAutoHScroll, wsExClientEdge, 24, y+20, 316, 28, 0, g.font)
+	y += 60
 	g.ctl("STATIC", "아이디", 0, 0, 24, y, 320, 20, 0, g.font)
 	last, _ := os.ReadFile(lastUserPath())
 	savedID, savedPW := loadSavedLogin()
@@ -794,7 +788,7 @@ func (g *gui) showLogin(message string) {
 	pShowWindow.Call(g.login, swShow)
 	pSetForegroundWindow.Call(g.login)
 	switch {
-	case askServer:
+	case g.cfg.Server == "":
 		pSetFocus.Call(g.srvBox)
 	case savedPW != "":
 		pSetFocus.Call(g.loginBtn)

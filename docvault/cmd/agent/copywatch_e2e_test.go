@@ -158,3 +158,14 @@ func TestExportTokenKeepsCopy(t *testing.T) {
 		t.Fatal("token should be consumed; second copy removed")
 	}
 }
+
+func TestLoginBlockedOffNetwork(t *testing.T) {
+	// No server listening here: login must fail with the off-network error.
+	cfg := &Config{Server: "http://127.0.0.1:1"} // nothing listens
+	if reachable(cfg.Server) {
+		t.Fatal("should be unreachable")
+	}
+	if err := passwordLogin(cfg, "kim", "password123"); err != errServerUnreachable {
+		t.Fatalf("expected off-network error, got %v", err)
+	}
+}

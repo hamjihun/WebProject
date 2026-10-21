@@ -237,7 +237,27 @@ func cmdLogin(cfg *Config) error {
 }
 
 // passwordLogin signs this PC in with an ID and password and saves the session.
+// reachable reports whether the DocVault server answers (so login is only
+// possible on the company network).
+func reachable(server string) bool {
+	if server == "" {
+		return false
+	}
+	c := &http.Client{Timeout: 5 * time.Second}
+	resp, err := c.Get(server + "/api/setup-available")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode < 500
+}
+
+var errServerUnreachable = errors.New("사내 망(DocVault 서버)에 연결되어 있지 않습니다.\n회사 네트워크(사내망/VPN)에 연결한 뒤 다시 시도하세요.")
+
 func passwordLogin(cfg *Config, user, pw string) error {
+	if !reachable(cfg.Server) {
+		return errServerUnreachable
+	}
 	host, _ := os.Hostname()
 	var out struct{ Token string }
 	err := newClient(cfg, "").call("POST", "/api/login",
