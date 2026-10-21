@@ -421,7 +421,11 @@ async function adminShares() {
   h += `</tbody></table>`;
   $("#main").innerHTML = h;
   const usedLetters = new Set(shares.map((x) => (x.driveLetter || "").toUpperCase()).filter(Boolean));
-  const nextLetter = [..."OPQRSTUVWXYZGHIJKLMN"].find((l) => !usedLetters.has(l)) || "";
+  // Assign from the end of the alphabet first — Z, Y, X … — since low letters
+  // (C~F) are usually taken by the system disk, USB and optical drives on
+  // employees' PCs. The chosen letter is stored on the server, so every PC
+  // mounts the same drive at the same letter.
+  const nextLetter = [..."ZYXWVUTSRQPONMLKJIH"].find((l) => !usedLetters.has(l)) || "";
   $("#newDept").onclick = () => openModal(`<h3>부서 문서함 추가</h3>
     <p class="muted">부서(팀)와 그 부서의 공유 드라이브를 한 번에 만들고, 그 팀에 읽기·쓰기 권한을 줍니다.</p>
     <form class="form">
@@ -451,7 +455,7 @@ async function adminShares() {
   });
   $("#newShare").onclick = () => openModal(`<h3>드라이브 추가</h3><form class="form">
     <label>이름 (PC에 표시되는 이름)<input name="name" required placeholder="예: 일산영업"></label>
-    <label>드라이브 문자<input name="letter" maxlength="1" placeholder="예: O" style="width:80px"></label>
+    <label>드라이브 문자<input name="letter" maxlength="1" value="${nextLetter}" style="width:80px"></label>
     <label>용량 제한 (GB, 0=제한 없음)<input name="quota" type="number" min="0" value="0"></label>
     <label class="row"><input type="checkbox" name="personal"> 개인문서함 (사용자마다 자기 공간만 보임)</label>
     <div class="buttons"><button type="button" data-close>취소</button><button class="primary">추가</button></div></form>`, (box) => {

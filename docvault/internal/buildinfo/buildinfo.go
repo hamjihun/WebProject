@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const Version = "0.9.9"
+const Version = "0.9.10"
 
 // SetupMarkerPrefix starts the "DVSETUPVER:<version>;" text embedded in
 // docvault-setup.exe, from which the server reads the version it offers.
