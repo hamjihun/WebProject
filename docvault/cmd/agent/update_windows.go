@@ -86,7 +86,6 @@ func (g *gui) restart() {
 	pPostQuitMessage.Call(0)
 }
 
-
 func documentProgramOpen() bool {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
