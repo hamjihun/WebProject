@@ -410,7 +410,8 @@ async function adminGroups() {
 async function adminShares() {
   const [shares, users, groups] = await Promise.all([api("GET", "/api/admin/shares"), api("GET", "/api/admin/users"), api("GET", "/api/admin/groups")]);
   let h = `<h2>드라이브·권한</h2><p class="muted">드라이브 하나가 PC의 드라이브 문자 하나(예: O:)로 연결됩니다. 권한이 있는 사람의 PC에만 나타납니다.</p>
-    <div class="toolbar"><button id="newShare" class="primary">+ 드라이브 추가</button></div>
+    <div class="toolbar"><button id="newDept" class="primary">+ 부서 문서함 추가</button><button id="newShare">드라이브만 추가</button></div>
+    <p class="muted" style="margin-top:-6px">[부서 문서함 추가]는 팀·드라이브·권한을 한 번에 만듭니다. 그다음 <a href="#/admin/users" data-nav="admin/users">사용자</a>에서 직원을 그 팀에 넣으면 끝입니다.</p>
     <table><thead><tr><th>문자</th><th>이름</th><th>종류</th><th>용량</th><th></th></tr></thead><tbody>`;
   for (const s of shares) {
     h += `<tr><td>${esc(s.driveLetter ? s.driveLetter + ":" : "-")}</td><td>${esc(s.name)}</td><td>${s.personal ? "개인문서함 (사용자별 개인 공간)" : "팀 드라이브"}</td>
@@ -419,6 +420,35 @@ async function adminShares() {
   }
   h += `</tbody></table>`;
   $("#main").innerHTML = h;
+  const usedLetters = new Set(shares.map((x) => (x.driveLetter || "").toUpperCase()).filter(Boolean));
+  const nextLetter = [..."OPQRSTUVWXYZGHIJKLMN"].find((l) => !usedLetters.has(l)) || "";
+  $("#newDept").onclick = () => openModal(`<h3>부서 문서함 추가</h3>
+    <p class="muted">부서(팀)와 그 부서의 공유 드라이브를 한 번에 만들고, 그 팀에 읽기·쓰기 권한을 줍니다.</p>
+    <form class="form">
+    <label>부서 이름<input name="dept" required placeholder="예: 영업팀"></label>
+    <label>드라이브 표시 이름 <span class="muted">(비우면 부서 이름 사용)</span><input name="name" placeholder="예: 영업"></label>
+    <div class="row"><label style="flex:1">드라이브 문자<input name="letter" maxlength="1" value="${nextLetter}" style="width:80px"></label>
+    <label style="flex:1">용량 제한 (GB, 0=무제한)<input name="quota" type="number" min="0" value="0"></label></div>
+    <p id="deptMsg" class="muted"></p>
+    <div class="buttons"><button type="button" data-close>취소</button><button class="primary">만들기</button></div></form>`, (box) => {
+    box.querySelector("form").onsubmit = guard(async (e) => {
+      e.preventDefault(); const f = e.target;
+      const dept = f.dept.value.trim();
+      const name = (f.name.value.trim() || dept);
+      f.querySelector("button.primary").disabled = true;
+      $("#deptMsg").textContent = "만드는 중...";
+      try {
+        const g = await api("POST", "/api/admin/groups", { name: dept });
+        const sh = await api("POST", "/api/admin/shares", { name, driveLetter: f.letter.value, quotaGB: Number(f.quota.value), personal: false });
+        await api("POST", `/api/admin/shares/${sh.id}/acl`, [{ principalType: "group", principalId: g.id, level: 2 }]);
+        closeModal(); await loadSide(); toast(`'${dept}' 부서 문서함을 만들었습니다. 이제 사용자를 이 팀에 넣으세요`);
+        location.hash = "#/admin/users";
+      } catch (err) {
+        $("#deptMsg").textContent = "실패: " + err.message + " (이미 같은 이름/문자가 있을 수 있습니다)";
+        f.querySelector("button.primary").disabled = false;
+      }
+    });
+  });
   $("#newShare").onclick = () => openModal(`<h3>드라이브 추가</h3><form class="form">
     <label>이름 (PC에 표시되는 이름)<input name="name" required placeholder="예: 일산영업"></label>
     <label>드라이브 문자<input name="letter" maxlength="1" placeholder="예: O" style="width:80px"></label>
@@ -569,9 +599,8 @@ async function adminOverview() {
     h += `<div class="card ov" style="max-width:760px;margin-bottom:16px;border-color:var(--accent)">
       <h3 style="color:var(--accent)">시작하기</h3>
       <ol class="muted" style="line-height:2;margin:0 0 4px 1.1em">
-        <li><a href="#/admin/groups" data-nav="admin/groups">그룹(팀)</a> 만들기 — 예: 영업팀, 개발팀</li>
-        <li><a href="#/admin/shares" data-nav="admin/shares">드라이브·권한</a>에서 팀 드라이브 만들고(예: 영업 O:), 팀에 권한 주기</li>
-        <li><a href="#/admin/users" data-nav="admin/users">사용자</a>에서 직원 계정 만들고 팀에 넣기</li>
+        <li><a href="#/admin/shares" data-nav="admin/shares">드라이브·권한</a>에서 <b>[+ 부서 문서함 추가]</b> — 팀·드라이브·권한을 한 번에 만듭니다 (예: 영업팀 → 영업 O:)</li>
+        <li><a href="#/admin/users" data-nav="admin/users">사용자</a>에서 직원 계정 만들고 그 팀에 넣기 (권한은 팀만 바꾸면 됩니다)</li>
         <li>직원 PC에서 <a href="/download/setup">PC 프로그램 설치</a> → 로그인하면 드라이브가 보입니다</li>
         <li><a href="#/admin/backup" data-nav="admin/backup">백업·복구</a>에서 USB 백업 준비 (재해 대비)</li>
       </ol>
