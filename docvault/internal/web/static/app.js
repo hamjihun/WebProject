@@ -563,7 +563,21 @@ async function adminOverview() {
   const bk = d.backupConfigured
     ? (d.backup ? `<span class="ok">${fmtTime(Date.parse(d.backup.finishedAt) / 1000)}</span>` : `<span class="warn">아직 없음</span>`)
     : `<span class="muted">미설정</span>`;
-  let h = `<h2>현황</h2><p class="muted">사내 문서중앙화 상태를 한눈에 봅니다.</p>
+  let h = `<h2>현황</h2><p class="muted">사내 문서중앙화 상태를 한눈에 봅니다.</p>`;
+  // First-run getting-started guide (only admin + the personal drive exist).
+  if (st.users <= 1 && st.shares <= 1) {
+    h += `<div class="card ov" style="max-width:760px;margin-bottom:16px;border-color:var(--accent)">
+      <h3 style="color:var(--accent)">시작하기</h3>
+      <ol class="muted" style="line-height:2;margin:0 0 4px 1.1em">
+        <li><a href="#/admin/groups" data-nav="admin/groups">그룹(팀)</a> 만들기 — 예: 영업팀, 개발팀</li>
+        <li><a href="#/admin/shares" data-nav="admin/shares">드라이브·권한</a>에서 팀 드라이브 만들고(예: 영업 O:), 팀에 권한 주기</li>
+        <li><a href="#/admin/users" data-nav="admin/users">사용자</a>에서 직원 계정 만들고 팀에 넣기</li>
+        <li>직원 PC에서 <a href="/download/setup">PC 프로그램 설치</a> → 로그인하면 드라이브가 보입니다</li>
+        <li><a href="#/admin/backup" data-nav="admin/backup">백업·복구</a>에서 USB 백업 준비 (재해 대비)</li>
+      </ol>
+    </div>`;
+  }
+  h += `
     <div class="tiles">
       ${tile("사용 중인 계정", st.users)}
       ${tile("팀(그룹)", st.groups)}
