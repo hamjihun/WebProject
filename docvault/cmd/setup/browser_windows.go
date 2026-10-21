@@ -68,19 +68,17 @@ func removeBrowserPolicies() {
 }
 
 func removePolicyValues(key string) {
-	{
-		k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
-		if err != nil {
-			return
-		}
-		k.DeleteValue("DownloadDirectory")
-		k.DeleteValue("PromptForDownloadLocation")
-		names, _ := k.ReadValueNames(0)
-		subs, _ := k.ReadSubKeyNames(0)
-		k.Close()
-		if len(names) == 0 && len(subs) == 0 {
-			registry.DeleteKey(registry.LOCAL_MACHINE, key)
-		}
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	k.DeleteValue("DownloadDirectory")
+	k.DeleteValue("PromptForDownloadLocation")
+	names, _ := k.ReadValueNames(0)
+	subs, _ := k.ReadSubKeyNames(0)
+	k.Close()
+	if len(names) == 0 && len(subs) == 0 {
+		registry.DeleteKey(registry.LOCAL_MACHINE, key)
 	}
 }
 
