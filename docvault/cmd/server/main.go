@@ -51,8 +51,10 @@ type Config struct {
 	// Offline backup target: a USB/외장 디스크 drive letter or folder, e.g.
 	// "E:\" . When set, the server backs up (DB + new files) here once a day
 	// and whenever an admin asks. Empty = no automatic backup.
-	BackupDir  string `json:"backup_dir"`
-	BackupHour int    `json:"backup_hour"` // hour of day for the daily backup (0-23), default 2
+	// Offline backup target: a USB/외장 디스크 drive letter or folder, e.g.
+	// "E:\" . Used by the [지금 백업] button on the admin page and as the
+	// default for 'docvault-server backup'. Backups are manual (no schedule).
+	BackupDir string `json:"backup_dir"`
 }
 
 func exeDir() string {
@@ -143,8 +145,7 @@ func defaultConfigText(cfg *Config) string {
 		"  \"public_url\": \"\",\r\n" +
 		"  \"store_user\": \"\",\r\n" +
 		"  \"store_password\": \"\",\r\n" +
-		"  \"backup_dir\": \"\",\r\n" +
-		"  \"backup_hour\": 2\r\n" +
+		"  \"backup_dir\": \"\"\r\n" +
 		"}\r\n"
 }
 
@@ -231,33 +232,6 @@ func newServer() (*server, error) {
 }
 
 // serve runs until ctx is cancelled.
-// runBackups backs up to BackupDir once a day at BackupHour, when configured
-// and the target is reachable (e.g. the USB drive is plugged in).
-func (s *server) runBackups(ctx context.Context) {
-	if s.cfg.BackupDir == "" {
-		return
-	}
-	hour := s.cfg.BackupHour
-	if hour < 0 || hour > 23 {
-		hour = 2
-	}
-	t := time.NewTicker(10 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		now := time.Now()
-		last := backup.LoadLast(s.cfg.BackupDir)
-		doneToday := last != nil && last.FinishedAt.YearDay() == now.YearDay() && last.FinishedAt.Year() == now.Year()
-		if now.Hour() == hour && !doneToday {
-			s.backupNow()
-		}
-	}
-}
-
 // backupNow runs one backup and logs the outcome. Safe to call concurrently
 // (guarded by backupMu).
 func (s *server) backupNow() (*backup.Result, error) {
@@ -279,7 +253,6 @@ func (s *server) backupNow() (*backup.Result, error) {
 
 func (s *server) serve(ctx context.Context) error {
 	go s.vault.RunMaintenance(ctx)
-	go s.runBackups(ctx)
 	errc := make(chan error, 1)
 	go func() {
 		scheme := "http"

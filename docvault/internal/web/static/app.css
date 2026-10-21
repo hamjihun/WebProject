@@ -1,12 +1,14 @@
 :root {
   --bg: #f4f6f9; --panel: #ffffff; --text: #1d2433; --muted: #6b7486; --line: #e2e6ee;
   --accent: #2459d6; --accent-weak: #e8eefc; --danger: #c62f2f; --ok: #1f8a4c; --warn: #b7791f;
+  --code-bg: #eef1f6; --code-text: #1d2433;
   font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", system-ui, sans-serif;
   font-size: 14px; color: var(--text); background: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #14171d; --panel: #1d2129; --text: #e6e9ef; --muted: #98a1b3; --line: #2d333e;
-    --accent: #6d95ff; --accent-weak: #222c45; --danger: #ff6b6b; --ok: #4cc287; --warn: #e0a84a; }
+    --accent: #6d95ff; --accent-weak: #222c45; --danger: #ff6b6b; --ok: #4cc287; --warn: #e0a84a;
+    --code-bg: #10141b; --code-text: #c9d4e6; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
@@ -88,3 +90,8 @@ td.actions { white-space: nowrap; text-align: right; }
 .setup-link { text-align: center; color: var(--accent); text-decoration: none; border-top: 1px solid var(--line); padding-top: 12px; }
 .pair-card { max-width: 480px; padding: 24px; display: grid; gap: 12px; }
 .pair-card .device { font-size: 18px; font-weight: 700; }
+
+code, pre, .codeblock { background: var(--code-bg); color: var(--code-text); border: 1px solid var(--line);
+  border-radius: 6px; font-family: ui-monospace, Consolas, "D2Coding", monospace; }
+code { padding: 1px 6px; }
+pre, .codeblock { padding: 12px 14px; margin: 8px 0; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }

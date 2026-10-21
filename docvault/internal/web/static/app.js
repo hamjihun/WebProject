@@ -556,14 +556,15 @@ const BLOCK_LABELS = {
 async function adminBackup() {
   const b = await api("GET", "/api/admin/backup");
   const fmtT = (t) => t && !t.startsWith("0001") ? fmtTime(Date.parse(t) / 1000) : "없음";
-  let h = `<h2>백업 · 복구 (재해 대비)</h2>`;
+  let h = `<h2>백업 · 복구 (재해 대비)</h2><p class="muted">서버·NAS가 모두 고장나거나 랜섬웨어에 감염돼도 복구할 수 있도록, USB/외장 디스크에 <b>수동으로</b> 백업합니다.</p>`;
   if (!b.configured) {
     h += `<div class="card" style="padding:18px;max-width:760px">
-      <p><b>자동 백업이 꺼져 있습니다.</b></p>
-      <p class="muted">서버에 USB/외장 디스크를 꽂고, 서버 폴더의 <b>docvault.json</b>에 백업 위치를 적은 뒤 서비스를 다시 시작하세요:</p>
-      <pre style="background:var(--code,#f4f5f7);padding:12px;border-radius:8px">"backup_dir": "E:\\",
-"backup_hour": 2</pre>
-      <p class="muted">그러면 매일 새벽 2시에 자동으로 백업하고, 아래 [지금 백업]으로 즉시 백업할 수도 있습니다. 백업은 <b>바뀐 파일만</b> 복사하므로 평소엔 금방 끝납니다. 랜섬웨어 대비로 백업이 끝나면 USB를 <b>뽑아서 따로 보관</b>하세요.</p>
+      <p><b>백업 위치가 설정되어 있지 않습니다.</b></p>
+      <p class="muted">웹에서 [지금 백업] 버튼으로 백업하려면, 서버에 USB/외장 디스크를 꽂고 서버 폴더의 <b>docvault.json</b>에 백업 위치를 적은 뒤 서비스를 다시 시작하세요:</p>
+      <div class="codeblock">"backup_dir": "E:\\"</div>
+      <p class="muted">설정이 번거로우면, 서버에서 명령창으로 바로 백업해도 됩니다 (USB 드라이브 문자를 직접 지정):</p>
+      <div class="codeblock">docvault-server.exe backup E:\</div>
+      <p class="muted">백업은 <b>바뀐 파일만</b> 복사하므로 평소엔 금방 끝납니다. 백업이 끝나면 USB를 <b>뽑아서 따로 보관</b>하세요 (꽂혀 있지 않으면 랜섬웨어가 백업까지 암호화할 수 없습니다).</p>
     </div>`;
     $("#main").innerHTML = h;
     return;
