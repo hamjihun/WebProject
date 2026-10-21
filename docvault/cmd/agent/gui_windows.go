@@ -121,6 +121,8 @@ const (
 	mbIconWarning      = 0x30
 	mbIconInformation  = 0x40
 	mbSetForeground    = 0x10000
+	mbTopmost          = 0x40000
+	mbSystemModal      = 0x1000
 	idYes              = 6
 	imageIcon          = 1
 	lrLoadFromFile     = 0x10
@@ -454,7 +456,7 @@ func (g *gui) popupBlocked(title, text string) {
 	}
 	go func() {
 		defer popupShowing.Store(false)
-		msgBox(0, title+"\n\n"+text, mbIconWarning)
+		msgBox(0, title+"\n\n"+text, mbIconWarning|mbTopmost|mbSystemModal)
 	}()
 }
 
