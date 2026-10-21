@@ -76,6 +76,17 @@ func validName(name string) error {
 	return nil
 }
 
+// isReserved reports folders Windows creates on local disks (the Recycle Bin
+// and system folders). Refusing them makes Explorer delete straight to the
+// server's trash instead of a hidden recycle-bin folder on the drive.
+func isReserved(name string) bool {
+	switch strings.ToLower(name) {
+	case "$recycle.bin", "recycler", "recycled", "system volume information", "$recycle":
+		return true
+	}
+	return false
+}
+
 // isTransient reports names of lock/temp files that Office, Windows and other
 // programs create while saving. They are not versioned, logged or kept in the trash.
 func isTransient(name string) bool {
@@ -201,6 +212,9 @@ func (v *Vault) resolveParent(q querier, l *loc) (*Node, string, error) {
 	name := l.parts[len(l.parts)-1]
 	if err := validName(name); err != nil {
 		return nil, "", err
+	}
+	if isReserved(name) {
+		return nil, "", ErrForbidden
 	}
 	parent, err := v.resolve(q, l, l.parts[:len(l.parts)-1])
 	if err == ErrNotFound || (err == nil && !parent.IsDir) {

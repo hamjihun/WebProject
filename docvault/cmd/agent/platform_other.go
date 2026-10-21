@@ -31,7 +31,11 @@ func prepareTarget(t string) error { return os.MkdirAll(t, 0o700) }
 
 func cleanupTarget(t string) { os.Remove(t) }
 
-func platformMountArgs(d Drive) []string { return []string{"--volname", d.Name} }
+func platformMountArgs(d Drive) []string { return nil }
+
+func setDriveIcon(string, bool) {}
+
+func clearDriveIcons() {}
 
 func hideWindow(*exec.Cmd) {}
 

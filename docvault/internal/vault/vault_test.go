@@ -392,3 +392,13 @@ func TestPolicyBlocksUsersButNotAdmins(t *testing.T) {
 		t.Fatalf("copy exemption %v", p)
 	}
 }
+
+func TestRecycleBinFolderRefused(t *testing.T) {
+	e := newEnv(t)
+	if err := e.v.Mkdir(e.kim, "영업", "/$RECYCLE.BIN"); err != ErrForbidden {
+		t.Fatalf("mkdir recycle bin: %v", err)
+	}
+	if _, _, err := e.v.Put(e.kim, "영업", "/System Volume Information", strings.NewReader("x")); err != ErrForbidden {
+		t.Fatalf("put system folder: %v", err)
+	}
+}

@@ -273,6 +273,7 @@ func cmdLogout(cfg *Config) error {
 	os.Remove(tokenPath())
 	// Disconnect the drives now instead of waiting for the next heartbeat.
 	stopOtherAgents()
+	clearDriveIcons()
 	os.RemoveAll(cfg.CacheDir)
 	fmt.Println("로그아웃했습니다. 문서 드라이브 연결을 해제했습니다.")
 	fmt.Println("다시 사용하려면 시작 메뉴의 'DocVault 문서 드라이브'를 실행하세요.")
@@ -368,6 +369,7 @@ func (a *agent) start(d Drive) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("rclone 실행 실패 (%s): %w", a.cfg.Rclone, err)
 	}
+	setDriveIcon(letter, true)
 	m := &mount{drive: d, cmd: cmd, done: make(chan struct{})}
 	go func() { cmd.Wait(); close(m.done) }()
 	a.mounts[letter] = m
@@ -388,6 +390,7 @@ func (a *agent) stop(letter string) {
 		<-m.done
 	}
 	cleanupTarget(mountTarget(letter))
+	setDriveIcon(letter, false)
 	os.RemoveAll(filepath.Join(a.cfg.CacheDir, letter))
 	delete(a.mounts, letter)
 	log.Printf("해제: %s: %s", letter, m.drive.Name)
@@ -455,6 +458,7 @@ func openLog() func() {
 }
 
 func newAgent(cfg *Config) *agent {
+	clearDriveIcons()
 	a := &agent{cfg: cfg, client: newClient(cfg, loadToken()), mounts: map[string]*mount{}}
 	go a.watchEvents()
 	return a

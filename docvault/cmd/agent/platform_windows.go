@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 const rcloneExe = "rclone.exe"
@@ -59,10 +61,54 @@ func prepareTarget(target string) error {
 
 func cleanupTarget(string) {}
 
-// Network mode makes Explorer treat the drive like a mapped network drive
-// (no Recycle Bin on it: deletions go to the server's trash instead).
-func platformMountArgs(d Drive) []string {
-	return []string{"--network-mode", "--volname", `\\DocVault\` + d.Name}
+// Drives are mounted as local disks (no --network-mode) so Explorer lists them
+// under "장치 및 드라이브" as "이름 (F:)", like a local disk.
+func platformMountArgs(d Drive) []string { return nil }
+
+// setDriveIcon shows the DocVault icon for a drive letter in Explorer (per
+// user, no admin rights needed); on=false removes it again.
+// clearDriveIcons removes DocVault icons left behind (e.g. after a crash), so a
+// USB stick that later gets the same letter does not show the DocVault icon.
+func clearDriveIcons() {
+	const base = `Software\Classes\Applications\Explorer.exe\Drives`
+	k, err := registry.OpenKey(registry.CURRENT_USER, base, registry.ENUMERATE_SUB_KEYS)
+	if err != nil {
+		return
+	}
+	letters, _ := k.ReadSubKeyNames(-1)
+	k.Close()
+	for _, l := range letters {
+		ik, err := registry.OpenKey(registry.CURRENT_USER, base+`\`+l+`\DefaultIcon`, registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		v, _, _ := ik.GetStringValue("")
+		ik.Close()
+		if strings.Contains(strings.ToLower(v), "docvault-agent.exe") {
+			setDriveIcon(l, false)
+		}
+	}
+}
+
+func setDriveIcon(letter string, on bool) {
+	key := `Software\Classes\Applications\Explorer.exe\Drives\` + letter
+	if on {
+		exe, err := os.Executable()
+		if err != nil {
+			return
+		}
+		k, _, err := registry.CreateKey(registry.CURRENT_USER, key+`\DefaultIcon`, registry.SET_VALUE)
+		if err != nil {
+			return
+		}
+		k.SetStringValue("", exe+",0")
+		k.Close()
+	} else {
+		registry.DeleteKey(registry.CURRENT_USER, key+`\DefaultIcon`)
+		registry.DeleteKey(registry.CURRENT_USER, key)
+	}
+	// SHCNE_ASSOCCHANGED: make Explorer pick up the icon change
+	windows.NewLazySystemDLL("shell32.dll").NewProc("SHChangeNotify").Call(0x08000000, 0, 0, 0)
 }
 
 func hideWindow(cmd *exec.Cmd) {
