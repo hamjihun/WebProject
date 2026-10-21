@@ -44,8 +44,8 @@ func watchLocalFolders(a *agent) {
 	}()
 }
 
-// localDisk is true for fixed and removable disks that are not DocVault
-// (WinFsp) drives.
+// localDisk is true for fixed and removable disks (not DocVault or other
+// virtual drives).
 func localDisk(root string) bool {
 	p, _ := windows.UTF16PtrFromString(root)
 	if t, _, _ := procGetDriveType.Call(uintptr(unsafe.Pointer(p))); t != driveRemovable && t != driveFixed {
@@ -55,8 +55,13 @@ func localDisk(root string) bool {
 	if windows.GetVolumeInformation(p, nil, 0, nil, nil, nil, &fs[0], uint32(len(fs))) != nil {
 		return false // e.g. empty card reader
 	}
-	name := strings.ToLower(windows.UTF16ToString(fs[:]))
-	return !strings.Contains(name, "rclone") && !strings.HasPrefix(name, "fuse")
+	// Only real disks: virtual drives of other programs (e.g. another
+	// document system's drives) are left alone.
+	switch strings.ToLower(windows.UTF16ToString(fs[:])) {
+	case "ntfs", "fat", "fat32", "exfat", "refs":
+		return true
+	}
+	return false
 }
 
 // watchDir reports changed files under root until the folder goes away
