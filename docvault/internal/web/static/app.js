@@ -109,6 +109,7 @@ async function loadSide() {
     h += `<a href="#/admin/shares" data-nav="admin/shares">드라이브·권한</a>`;
     h += `<a href="#/admin/audit" data-nav="admin/audit">감사 로그</a>`;
     h += `<a href="#/admin/sessions" data-nav="admin/sessions">접속 PC·세션</a>`;
+    h += `<a href="#/admin/backup" data-nav="admin/backup">백업·복구</a>`;
     h += `<a href="#/admin/settings" data-nav="admin/settings">설정</a>`;
   }
   $("#side").innerHTML = h;
@@ -136,7 +137,7 @@ function route() {
     exports: viewMyExports,
     pair: () => viewPair(rest[0]),
     approvals: viewApprovals,
-    admin: () => ({ users: adminUsers, groups: adminGroups, shares: adminShares, audit: adminAudit, sessions: adminSessions, settings: adminSettings }[rest[0]] || (() => {}))(),
+    admin: () => ({ users: adminUsers, groups: adminGroups, shares: adminShares, audit: adminAudit, sessions: adminSessions, backup: adminBackup, settings: adminSettings }[rest[0]] || (() => {}))(),
   };
   (views[page] ? guard(views[page]) : () => {})();
 }
@@ -551,6 +552,61 @@ const BLOCK_LABELS = {
   allow_post_export: ["후결재 반출 허용", "반출 신청 때 [후결재]를 고르면 바로 개인문서함\\반출 폴더에 넣고 결재는 나중에 받습니다. 결재자가 반려하면 반출 폴더에서 회수됩니다 (이미 밖으로 복사한 것은 감사 로그로 확인)"],
   block_browser_upload: ["웹브라우저 업로드 차단", "크롬·엣지·웨일·파이어폭스가 문서함 파일을 읽지 못하게 합니다 (웹메일 첨부, 웹 업로드 차단). 문서함의 PDF를 브라우저로 여는 것도 막힙니다"],
 };
+
+async function adminBackup() {
+  const b = await api("GET", "/api/admin/backup");
+  const fmtT = (t) => t && !t.startsWith("0001") ? fmtTime(Date.parse(t) / 1000) : "없음";
+  let h = `<h2>백업 · 복구 (재해 대비)</h2>`;
+  if (!b.configured) {
+    h += `<div class="card" style="padding:18px;max-width:760px">
+      <p><b>자동 백업이 꺼져 있습니다.</b></p>
+      <p class="muted">서버에 USB/외장 디스크를 꽂고, 서버 폴더의 <b>docvault.json</b>에 백업 위치를 적은 뒤 서비스를 다시 시작하세요:</p>
+      <pre style="background:var(--code,#f4f5f7);padding:12px;border-radius:8px">"backup_dir": "E:\\",
+"backup_hour": 2</pre>
+      <p class="muted">그러면 매일 새벽 2시에 자동으로 백업하고, 아래 [지금 백업]으로 즉시 백업할 수도 있습니다. 백업은 <b>바뀐 파일만</b> 복사하므로 평소엔 금방 끝납니다. 랜섬웨어 대비로 백업이 끝나면 USB를 <b>뽑아서 따로 보관</b>하세요.</p>
+    </div>`;
+    $("#main").innerHTML = h;
+    return;
+  }
+  const last = b.last;
+  h += `<div class="card" style="padding:18px;max-width:760px">
+    <table style="width:100%"><tbody>
+    <tr><td class="muted" style="width:160px">백업 위치</td><td><b>${esc(b.dir)}</b></td></tr>
+    <tr><td class="muted">마지막 백업</td><td>${last ? fmtT(last.finishedAt) : "<b>아직 없음</b>"}</td></tr>
+    ${last ? `<tr><td class="muted">백업된 파일</td><td>${last.blobsTotal.toLocaleString()}개 (${fmtSize(last.bytesTotal)})</td></tr>
+    <tr><td class="muted">마지막에 새로 복사</td><td>${last.blobsCopied.toLocaleString()}개 (${fmtSize(last.bytesCopied)}), ${last.durationSec}초</td></tr>
+    <tr><td class="muted">백업 디스크 남은 용량</td><td>${last.targetFreeGB ? last.targetFreeGB.toFixed(0) + " GB" : "-"}</td></tr>
+    <tr><td class="muted">DB 스냅샷</td><td>${esc(last.dbSnapshot || "-")}</td></tr>` : ""}
+    </tbody></table>
+    <div class="buttons" style="margin-top:14px"><button id="bkNow" class="primary">지금 백업</button></div>
+    <p id="bkMsg" class="muted" style="margin-top:8px"></p>
+  </div>
+  <div class="card" style="padding:18px;max-width:760px;margin-top:14px">
+    <h3 style="margin-top:0">복구 방법 (서버·NAS를 모두 잃었을 때)</h3>
+    <ol class="muted" style="line-height:1.9">
+      <li>새(또는 복구된) 서버에 DocVault를 설치합니다.</li>
+      <li>백업 USB/디스크를 서버에 꽂습니다.</li>
+      <li>서버 폴더에서 명령창을 열고 아래를 실행합니다:<br>
+        <code>docvault-server.exe restore E:\</code> &nbsp;(E: 는 백업 디스크)</li>
+      <li>YES 를 입력하면 파일과 계정·권한·버전이 모두 복구됩니다.</li>
+      <li>서비스를 시작하면 직원들이 그대로 사용합니다.</li>
+    </ol>
+    <p class="muted">백업 디스크에는 날짜별 DB 스냅샷이 여러 개 있습니다. 특정 시점으로 되돌리려면 <code>restore E:\ docvault-20260101-020000.db</code> 처럼 스냅샷을 지정하세요.</p>
+  </div>`;
+  $("#main").innerHTML = h;
+  $("#bkNow").onclick = guard(async () => {
+    $("#bkNow").disabled = true;
+    $("#bkMsg").textContent = "백업 중입니다... (바뀐 파일만 복사하지만, 처음이거나 많이 바뀌었으면 오래 걸릴 수 있습니다)";
+    try {
+      const r = await api("POST", "/api/admin/backup");
+      $("#bkMsg").textContent = `완료: 새 파일 ${r.blobsCopied.toLocaleString()}개 (${fmtSize(r.bytesCopied)}), 전체 ${r.blobsTotal.toLocaleString()}개. ${r.durationSec}초 걸렸습니다.`;
+      setTimeout(() => route(), 1200);
+    } catch (e) {
+      $("#bkMsg").textContent = "백업 실패: " + e.message;
+      $("#bkNow").disabled = false;
+    }
+  });
+}
 
 async function adminSettings() {
   const s = await api("GET", "/api/admin/settings");

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"docvault/internal/backup"
 	"docvault/internal/netutil"
 	"docvault/internal/vault"
 )
@@ -25,8 +26,10 @@ type API struct {
 	V            *vault.Vault
 	TrustProxy   bool
 	SecureCookie bool
-	DownloadDir  string // holds docvault-setup.exe for employees to download
-	PublicURL    string // address PCs use to reach the server (default: from the request)
+	DownloadDir  string                         // holds docvault-setup.exe for employees to download
+	PublicURL    string                         // address PCs use to reach the server (default: from the request)
+	BackupDir    string                         // configured offline backup location (empty = off)
+	RunBackup    func() (*backup.Result, error) // run a backup now (set by the server)
 }
 
 type ctx struct {
@@ -85,6 +88,8 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/settings", s.admin(s.setSettings))
 	mux.HandleFunc("POST /api/admin/maintain", s.admin(s.maintain))
 	mux.HandleFunc("GET /api/admin/store-check", s.admin(s.storeCheck))
+	mux.HandleFunc("GET /api/admin/backup", s.admin(s.backupStatus))
+	mux.HandleFunc("POST /api/admin/backup", s.admin(s.runBackup))
 }
 
 // ---- plumbing ----
@@ -798,6 +803,27 @@ func (s *API) storeCheck(w http.ResponseWriter, r *http.Request, c *ctx) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"checked": checked, "missing": missing})
+}
+
+func (s *API) backupStatus(w http.ResponseWriter, r *http.Request, c *ctx) {
+	out := map[string]any{"configured": s.BackupDir != "", "dir": s.BackupDir}
+	if s.BackupDir != "" {
+		out["last"] = backup.LoadLast(s.BackupDir)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *API) runBackup(w http.ResponseWriter, r *http.Request, c *ctx) {
+	if s.RunBackup == nil || s.BackupDir == "" {
+		fail(w, errors.New("백업 위치가 설정되어 있지 않습니다 (docvault.json의 backup_dir)"))
+		return
+	}
+	res, err := s.RunBackup()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *API) maintain(w http.ResponseWriter, r *http.Request, c *ctx) {

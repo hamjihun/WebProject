@@ -45,7 +45,8 @@ lines = ['  "listen": ":8080"']
 if sys.argv[2]:
     lines.append('  "store_dir": "%s"' % sys.argv[2])
 lines += ['  "store_user": ""', '  "store_password": ""',
-          '  "tls_cert": ""', '  "tls_key": ""', '  "trust_proxy": false', '  "public_url": ""']
+          '  "tls_cert": ""', '  "tls_key": ""', '  "trust_proxy": false', '  "public_url": ""',
+          '  "backup_dir": ""', '  "backup_hour": 2']
 open(sys.argv[1], "w", newline="").write("{\r\n" + ",\r\n".join(lines) + "\r\n}\r\n")
 PY
 (cd dist && python3 -c "

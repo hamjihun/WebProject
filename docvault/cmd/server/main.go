@@ -23,10 +23,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"docvault/internal/api"
+	"docvault/internal/backup"
 	"docvault/internal/blob"
 	"docvault/internal/dav"
 	"docvault/internal/db"
@@ -46,6 +48,11 @@ type Config struct {
 	// as the system account, which cannot use passwords saved in Explorer.
 	StoreUser     string `json:"store_user"`
 	StorePassword string `json:"store_password"`
+	// Offline backup target: a USB/외장 디스크 drive letter or folder, e.g.
+	// "E:\" . When set, the server backs up (DB + new files) here once a day
+	// and whenever an admin asks. Empty = no automatic backup.
+	BackupDir  string `json:"backup_dir"`
+	BackupHour int    `json:"backup_hour"` // hour of day for the daily backup (0-23), default 2
 }
 
 func exeDir() string {
@@ -93,7 +100,7 @@ func parseConfig(b []byte, cfg *Config) error {
 	if err := json.Unmarshal(raw, cfg); err != nil {
 		return err
 	}
-	for _, p := range []*string{&cfg.DataDir, &cfg.StoreDir, &cfg.TLSCert, &cfg.TLSKey} {
+	for _, p := range []*string{&cfg.DataDir, &cfg.StoreDir, &cfg.TLSCert, &cfg.TLSKey, &cfg.BackupDir} {
 		*p = cleanWinPath(*p)
 	}
 	return nil
@@ -135,14 +142,17 @@ func defaultConfigText(cfg *Config) string {
 		"  \"trust_proxy\": false,\r\n" +
 		"  \"public_url\": \"\",\r\n" +
 		"  \"store_user\": \"\",\r\n" +
-		"  \"store_password\": \"\"\r\n" +
+		"  \"store_password\": \"\",\r\n" +
+		"  \"backup_dir\": \"\",\r\n" +
+		"  \"backup_hour\": 2\r\n" +
 		"}\r\n"
 }
 
 type server struct {
-	cfg   *Config
-	vault *vault.Vault
-	http  *http.Server
+	cfg      *Config
+	vault    *vault.Vault
+	http     *http.Server
+	backupMu sync.Mutex
 }
 
 func open(cfg *Config) (*vault.Vault, error) {
@@ -198,6 +208,7 @@ func newServer() (*server, error) {
 	if err := bootstrap(cfg, v); err != nil {
 		return nil, err
 	}
+	s := &server{cfg: cfg, vault: v}
 	mux := http.NewServeMux()
 	dh := &dav.Handler{V: v, Prefix: "/dav", TrustProxy: cfg.TrustProxy}
 	mux.Handle("/dav/", dh)
@@ -205,19 +216,70 @@ func newServer() (*server, error) {
 	downloads := filepath.Join(exeDir(), "downloads")
 	os.MkdirAll(downloads, 0o755)
 	(&api.API{V: v, TrustProxy: cfg.TrustProxy, SecureCookie: cfg.TLSCert != "",
-		DownloadDir: downloads, PublicURL: cfg.PublicURL}).Register(mux)
+		DownloadDir: downloads, PublicURL: cfg.PublicURL,
+		BackupDir: cfg.BackupDir,
+		RunBackup: func() (*backup.Result, error) { return s.backupNow() },
+	}).Register(mux)
 	mux.Handle("/", web.Handler())
-	return &server{cfg: cfg, vault: v, http: &http.Server{
+	s.http = &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       5 * time.Minute,
-	}}, nil
+	}
+	return s, nil
 }
 
 // serve runs until ctx is cancelled.
+// runBackups backs up to BackupDir once a day at BackupHour, when configured
+// and the target is reachable (e.g. the USB drive is plugged in).
+func (s *server) runBackups(ctx context.Context) {
+	if s.cfg.BackupDir == "" {
+		return
+	}
+	hour := s.cfg.BackupHour
+	if hour < 0 || hour > 23 {
+		hour = 2
+	}
+	t := time.NewTicker(10 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		now := time.Now()
+		last := backup.LoadLast(s.cfg.BackupDir)
+		doneToday := last != nil && last.FinishedAt.YearDay() == now.YearDay() && last.FinishedAt.Year() == now.Year()
+		if now.Hour() == hour && !doneToday {
+			s.backupNow()
+		}
+	}
+}
+
+// backupNow runs one backup and logs the outcome. Safe to call concurrently
+// (guarded by backupMu).
+func (s *server) backupNow() (*backup.Result, error) {
+	s.backupMu.Lock()
+	defer s.backupMu.Unlock()
+	if _, err := os.Stat(s.cfg.BackupDir); err != nil {
+		log.Printf("백업 건너뜀: 백업 위치에 접근할 수 없습니다 (%s). USB/디스크 연결을 확인하세요.", s.cfg.BackupDir)
+		return nil, fmt.Errorf("백업 위치에 접근할 수 없습니다: %s (USB/디스크 연결 확인)", s.cfg.BackupDir)
+	}
+	log.Printf("백업 시작 → %s", s.cfg.BackupDir)
+	r, err := backup.Run(s.vault.DB, s.cfg.StoreDir, s.cfg.BackupDir, func(line string) { log.Printf("백업: %s", line) })
+	if err != nil {
+		log.Printf("백업 실패: %v", err)
+		return r, err
+	}
+	log.Printf("백업 완료: 새 파일 %d개, 전체 %d개", r.BlobsCopied, r.BlobsTotal)
+	return r, nil
+}
+
 func (s *server) serve(ctx context.Context) error {
 	go s.vault.RunMaintenance(ctx)
+	go s.runBackups(ctx)
 	errc := make(chan error, 1)
 	go func() {
 		scheme := "http"
@@ -277,8 +339,21 @@ func main() {
 		err = resetPassword(os.Args[2], os.Args[3])
 	case "maintain":
 		err = maintainNow()
+	case "backup":
+		dest := cfgBackupDirOr(os.Args)
+		err = backupNowCLI(dest)
+	case "restore":
+		if len(os.Args) < 3 {
+			err = errors.New(`사용법: docvault-server restore <백업위치> [DB스냅샷파일]  (예: docvault-server restore E:\)`)
+		} else {
+			snap := ""
+			if len(os.Args) > 3 {
+				snap = os.Args[3]
+			}
+			err = restoreCLI(os.Args[2], snap)
+		}
 	default:
-		err = fmt.Errorf("알 수 없는 명령: %s (run | install | uninstall | start | stop | reset-password | maintain)", cmd)
+		err = fmt.Errorf("알 수 없는 명령: %s (run | install | uninstall | start | stop | reset-password | maintain | backup | restore)", cmd)
 	}
 	if err != nil {
 		reportStartupError(err)
@@ -311,6 +386,59 @@ func resetPassword(user, pw string) error {
 		}
 	}
 	return errors.New("사용자를 찾을 수 없습니다: " + user)
+}
+
+// cfgBackupDirOr returns the backup dir from the command line (arg 2) or the
+// config's backup_dir.
+func cfgBackupDirOr(args []string) string {
+	if len(args) > 2 && strings.TrimSpace(args[2]) != "" {
+		return args[2]
+	}
+	cfg, _, err := loadConfig()
+	if err == nil {
+		return cfg.BackupDir
+	}
+	return ""
+}
+
+func backupNowCLI(dest string) error {
+	if dest == "" {
+		return errors.New(`백업 위치가 없습니다. docvault.json의 backup_dir 를 정하거나 'docvault-server backup E:\' 처럼 지정하세요`)
+	}
+	cfg, _, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	v, err := open(cfg)
+	if err != nil {
+		return err
+	}
+	defer v.DB.Close()
+	fmt.Println("백업 위치:", dest)
+	r, err := backup.Run(v.DB, cfg.StoreDir, dest, func(line string) { fmt.Println("  " + line) })
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n✅ 백업 완료: 새 파일 %d개, 전체 %d개, DB 스냅샷 %s\n", r.BlobsCopied, r.BlobsTotal, r.DBSnapshot)
+	return nil
+}
+
+func restoreCLI(src, snap string) error {
+	cfg, _, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("백업 위치: %s\n복구 대상: 데이터=%s, 저장소=%s\n", src, cfg.DataDir, cfg.StoreDir)
+	fmt.Print("기존 데이터를 덮어쓸 수 있습니다. 계속하려면 YES 를 입력하세요: ")
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if strings.TrimSpace(line) != "YES" {
+		return errors.New("취소했습니다")
+	}
+	if err := backup.Restore(src, cfg.StoreDir, cfg.DataDir, snap, func(l string) { fmt.Println("  " + l) }); err != nil {
+		return err
+	}
+	fmt.Println("\n✅ 복구 완료. 이제 서버를 시작하세요 (윈도우서비스로설치.bat 또는 서비스시작.bat).")
+	return nil
 }
 
 func maintainNow() error {
