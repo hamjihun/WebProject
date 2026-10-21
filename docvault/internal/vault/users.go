@@ -281,7 +281,7 @@ func (v *Vault) Login(username, password, kind, device, ip string) (string, *Use
 	var lockedUntil int64
 	row := v.DB.QueryRow(`SELECT `+userCols+`, password_hash, failed_logins, locked_until FROM users WHERE username=?`, strings.TrimSpace(username))
 	u = &User{}
-	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &hash, &failed, &lockedUntil)
+	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &u.DLPFree, &hash, &failed, &lockedUntil)
 	if err != nil {
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		v.Audit(a, "login_fail", "", "", "없는 아이디: "+username)
@@ -394,7 +394,7 @@ func (v *Vault) AuthenticateBasic(username, password string) (*User, error) {
 	var lockedUntil int64
 	u = &User{}
 	err := v.DB.QueryRow(`SELECT `+userCols+`, password_hash, locked_until FROM users WHERE username=?`, username).
-		Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &hash, &lockedUntil)
+		Scan(&u.ID, &u.Username, &u.DisplayName, &u.IsAdmin, &u.Disabled, &u.WriteBlocked, &u.AllowCopy, &u.DLPFree, &hash, &lockedUntil)
 	if err != nil || u.Disabled || lockedUntil > now {
 		return nil, ErrUnauthorized
 	}
