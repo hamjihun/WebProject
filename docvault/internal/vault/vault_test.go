@@ -603,3 +603,32 @@ func TestPostApprovalExport(t *testing.T) {
 		t.Fatal("post export should be refused when disabled")
 	}
 }
+
+func TestAuditRetention(t *testing.T) {
+	e := newEnv(t)
+	// two old audit rows and one recent (time-travel via e.now)
+	base := e.now
+	e.now = base - 400*86400
+	e.v.Audit(e.admin, "login", "", "", "old1")
+	e.v.Audit(e.admin, "login", "", "", "old2")
+	e.now = base - 10*86400
+	e.v.Audit(e.admin, "login", "", "", "recent")
+	e.now = base
+	e.v.SetSetting(e.admin, "audit_keep_days", 365)
+	r, err := e.v.Maintain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.PrunedAudit != 2 {
+		t.Fatalf("pruned %d audit rows, want 2", r.PrunedAudit)
+	}
+	var n int
+	e.v.DB.QueryRow(`SELECT COUNT(*) FROM audit WHERE detail='recent'`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("recent row missing: %d", n)
+	}
+	e.v.DB.QueryRow(`SELECT COUNT(*) FROM audit WHERE detail IN ('old1','old2')`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("old rows not pruned: %d", n)
+	}
+}

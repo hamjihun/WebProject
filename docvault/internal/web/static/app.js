@@ -545,6 +545,7 @@ const SETTING_LABELS = {
   session_agent_days: ["PC 에이전트 로그인 유지 (일)", "사용하는 동안에는 자동 연장됩니다"],
   guard_threshold: ["랜섬웨어 의심 기준 (건수, 0=사용 안 함)", "아래 시간 안에 기존 파일을 이만큼 수정(덮어쓰기·이름변경)하면 그 계정의 쓰기를 자동 차단합니다. 삭제는 2건을 1건으로 계산합니다 (폴더 통째 삭제 오탐 방지)"],
   guard_window_sec: ["랜섬웨어 감지 시간 (초)", ""],
+  audit_keep_days: ["감사 로그 보관 기간 (일, 0=영구)", "이 기간이 지난 로그는 자동 삭제됩니다. 오래 보관할수록 DB가 커집니다"],
 };
 
 const BLOCK_LABELS = {
@@ -572,6 +573,7 @@ async function adminOverview() {
       ${tile("쓰기 차단 계정", st.writeBlocked, "랜섬웨어 의심", st.writeBlocked ? "danger" : "")}
       ${tile("휴지통", st.trashItems, "복원 가능")}
       ${tile("문서 사용량", fmtSize(st.storeBytes), "현재 버전")}
+      ${tile("저장소(NAS)", d.storeOK ? "정상" : "오류", d.storeOK ? "연결됨" : "접근 불가", d.storeOK ? "" : "danger")}
     </div>
     <div class="cards2">
       <div class="card ov"><h3>백업</h3><div class="ov-row"><span class="muted">마지막 백업</span>${bk}</div>

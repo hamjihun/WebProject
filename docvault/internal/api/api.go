@@ -39,6 +39,7 @@ type ctx struct {
 }
 
 func (s *API) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/logout", s.auth(s.logout))
 	mux.HandleFunc("GET /api/me", s.auth(s.me))
@@ -806,8 +807,27 @@ func (s *API) storeCheck(w http.ResponseWriter, r *http.Request, c *ctx) {
 	writeJSON(w, http.StatusOK, map[string]any{"checked": checked, "missing": missing})
 }
 
+// healthz is an unauthenticated liveness/readiness check for monitoring:
+// 200 when the database and the file store (NAS) both respond, 503 otherwise.
+func (s *API) healthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := s.V.DB.Ping(); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, "db: "+err.Error())
+		return
+	}
+	if err := s.V.Blobs.Healthy(); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, "store: 저장소(NAS)에 접근할 수 없습니다")
+		return
+	}
+	io.WriteString(w, "ok")
+}
+
 func (s *API) overview(w http.ResponseWriter, r *http.Request, c *ctx) {
-	out := map[string]any{"stats": s.V.Overview(), "setupVersion": s.setupVersion()}
+	storeOK := s.V.Blobs.Healthy() == nil
+	out := map[string]any{"stats": s.V.Overview(), "setupVersion": s.setupVersion(), "storeOK": storeOK}
 	if s.BackupDir != "" {
 		out["backup"] = backup.LoadLast(s.BackupDir)
 		out["backupConfigured"] = true

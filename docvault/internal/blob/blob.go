@@ -119,3 +119,13 @@ func (s *Store) Walk(fn func(sha string)) error {
 		return nil
 	})
 }
+
+// Healthy reports whether the store directory is reachable and writable
+// (e.g. the NAS is up). Used by the health check and the admin overview.
+func (s *Store) Healthy() error {
+	name := filepath.Join(s.root, "tmp", ".health")
+	if err := os.WriteFile(name, []byte("ok"), 0o600); err != nil {
+		return err
+	}
+	return os.Remove(name)
+}

@@ -13,6 +13,7 @@ type MaintenanceResult struct {
 	PrunedVersions int64
 	ExpiredExports int64
 	DeletedBlobs   int
+	PrunedAudit    int64
 }
 
 // Maintain applies the retention rules: empties trash items older than the
@@ -71,11 +72,18 @@ func (v *Vault) Maintain() (MaintenanceResult, error) {
 
 	v.DB.Exec(`DELETE FROM sessions WHERE expires_at<?`, now)
 
+	// Keep the audit log from growing without bound (0 = keep forever).
+	if d := v.Setting("audit_keep_days"); d > 0 {
+		if res, err := v.DB.Exec(`DELETE FROM audit WHERE ts<?`, now-d*86400); err == nil {
+			r.PrunedAudit, _ = res.RowsAffected()
+		}
+	}
+
 	r.DeletedBlobs, err = v.collectGarbage()
 	if err != nil {
 		return r, err
 	}
-	if r.PurgedItems > 0 || r.PrunedVersions > 0 || r.DeletedBlobs > 0 || r.ExpiredExports > 0 {
+	if r.PurgedItems > 0 || r.PrunedVersions > 0 || r.DeletedBlobs > 0 || r.ExpiredExports > 0 || r.PrunedAudit > 0 {
 		v.Audit(Actor{Client: "system"}, "maintenance", "", "", fmt.Sprintf("휴지통 영구삭제 %d건, 이전버전 정리 %d건, 반출만료 %d건, 파일내용 정리 %d건",
 			r.PurgedItems, r.PrunedVersions, r.ExpiredExports, r.DeletedBlobs))
 	}
