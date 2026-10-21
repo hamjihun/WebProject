@@ -38,6 +38,7 @@ var dv = struct {
 	allow      string // lower-case folder (no slashes) whose files stay readable
 	eventsPath string
 	block      map[string]string // lower-case exe name -> kind
+	watch      map[string]bool   // lower-case exe name: report its reads of the allow folder
 	policyMod  time.Time
 	checked    time.Time
 	procs      map[int]dvProc
@@ -48,6 +49,7 @@ var dv = struct {
 	allow:      strings.ToLower(strings.Trim(os.Getenv("DOCVAULT_ALLOW"), "/")),
 	eventsPath: os.Getenv("DOCVAULT_EVENTS"),
 	block:      map[string]string{},
+	watch:      map[string]bool{},
 	procs:      map[int]dvProc{},
 	marked:     map[uint64]string{},
 	reported:   map[uint64]bool{},
@@ -70,6 +72,7 @@ func reloadPolicy() {
 	}
 	var p struct {
 		Block map[string]string `json:"block"`
+		Watch []string          `json:"watch"`
 	}
 	if json.Unmarshal(b, &p) != nil {
 		return
@@ -78,7 +81,11 @@ func reloadPolicy() {
 	for k, v := range p.Block {
 		block[strings.ToLower(k)] = v
 	}
-	dv.block, dv.policyMod = block, st.ModTime()
+	watch := map[string]bool{}
+	for _, k := range p.Watch {
+		watch[strings.ToLower(k)] = true
+	}
+	dv.block, dv.watch, dv.policyMod = block, watch, st.ModTime()
 }
 
 // procName returns the lower-case executable name of a process, cached for
@@ -121,24 +128,47 @@ func dvWriteLocked(path string) bool {
 	return !(strings.HasPrefix(name, "~$") || strings.HasSuffix(name, ".tmp"))
 }
 
-func dvOnOpen(path string, fi *fuse.FileInfo_t) {
+func dvOnOpen(path string, fi *fuse.FileInfo_t, size int64) {
 	_, _, pid := fuse.Getcontext()
 	dv.mu.Lock()
 	defer dv.mu.Unlock()
 	reloadPolicy()
-	if len(dv.block) == 0 {
-		return
-	}
-	if dvInAllow(path) {
+	if len(dv.block) == 0 && len(dv.watch) == 0 {
 		return
 	}
 	name := procName(pid)
+	if dvInAllow(path) {
+		// A copy-capable program read a file in the 반출 folder: report it so
+		// the agent lets a matching copy on the PC stay (only that file may
+		// leave; the identical original elsewhere may not).
+		if dv.watch[name] {
+			dvExportRead(size)
+		}
+		return
+	}
 	kind, ok := dv.block[name]
 	if !ok {
 		return
 	}
 	fi.DirectIo = true // bypass the Windows cache so the read check always runs
 	dv.marked[fi.Fh] = name + "|" + kind
+}
+
+// dvExportRead records that an approved (반출 folder) file of this size was
+// just served to a copy-capable program.
+func dvExportRead(size int64) {
+	if dv.eventsPath == "" || size <= 0 {
+		return
+	}
+	line, _ := json.Marshal(map[string]any{"time": time.Now().Unix(), "kind": "export-read", "size": size})
+	dvEventMu.Lock()
+	defer dvEventMu.Unlock()
+	f, err := os.OpenFile(dv.eventsPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	f.Write(append(line, '\n'))
+	f.Close()
 }
 
 func dvCheckRead(path string, fh uint64) int {

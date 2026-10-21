@@ -345,10 +345,13 @@ func TestApprovedExportGoesToExportFolder(t *testing.T) {
 	if err := e.v.Delete(e.kim, "개인문서함", "/반출/견적 (2).xlsx"); err != nil {
 		t.Fatalf("delete from export folder: %v", err)
 	}
-	// the copy-out check lets exported content leave the system
+	// The original (영업:/견적.xlsx) is still protected even after an export:
+	// the copy out of the 반출 folder is governed by the drive program, not
+	// by content here, so CopyCheck must still flag the content (it matches
+	// the protected original).
 	h := sha256.Sum256([]byte("v1"))
-	if _, _, found := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), 2); found {
-		t.Fatal("exported content should be allowed out")
+	if _, _, found := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), 2); !found {
+		t.Fatal("original should still be protected after export")
 	}
 }
 
@@ -495,8 +498,20 @@ func TestCopyCheck(t *testing.T) {
 	if err := e.v.DecideExport(e.boss, ex.ID, true, "승인"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := e.v.CopyCheck(e.kim.User, sum("quote"), 5); ok {
-		t.Fatal("approved export should be allowed")
+	// The original 영업:/견적.xlsx remains protected; the 반출 copy is governed
+	// by the drive program, not by matching content here.
+	if _, _, ok := e.v.CopyCheck(e.kim.User, sum("quote"), 5); !ok {
+		t.Fatal("original should still be protected after export")
+	}
+	// A file that exists ONLY in the 반출 folder (no protected original) is
+	// allowed out.
+	h := sha256.Sum256([]byte("onlyexport"))
+	e.put(t, e.kim, "개인문서함", "/mine.dat", "onlyexport")
+	ex2, _ := e.v.RequestExport(e.kim, "개인문서함", "/mine.dat", "x", false)
+	e.v.DecideExport(e.admin, ex2.ID, true, "")
+	e.v.Delete(e.kim, "개인문서함", "/mine.dat")
+	if _, _, ok := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), int64(len("onlyexport"))); ok {
+		t.Fatal("a file only in the export folder should be allowed out")
 	}
 }
 
@@ -553,8 +568,8 @@ func TestPostApprovalExport(t *testing.T) {
 		t.Fatalf("delivered at once: %v", got)
 	}
 	h := sha256.Sum256([]byte("v1"))
-	if _, _, found := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), 2); found {
-		t.Fatal("post export content should be allowed out")
+	if _, _, found := e.v.CopyCheck(e.kim.User, hex.EncodeToString(h[:]), 2); !found {
+		t.Fatal("original should still be protected (반출 copy is governed by the drive)")
 	}
 	inbox, _ := e.v.ListExports(e.boss.User, "inbox")
 	if len(inbox) != 1 || !inbox[0].CanApprove {

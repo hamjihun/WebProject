@@ -319,7 +319,11 @@ func (fsys *FS) OpenEx(path string, fi *fuse.FileInfo_t) (errc int) {
 	}
 
 	fi.Fh = fsys.openHandle(handle)
-	dvOnOpen(path, fi) // DocVault: remember handles opened by blocked programs
+	var dvSize int64 = -1
+	if entry := handle.Node().DirEntry(); entry != nil {
+		dvSize = entry.Size()
+	}
+	dvOnOpen(path, fi, dvSize) // DocVault: blocked-program handles + export-folder read reports
 	return 0
 }
 

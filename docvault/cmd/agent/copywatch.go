@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	copySettle   = 400 * time.Millisecond // wait until the file stops changing
+	copySettle   = 700 * time.Millisecond // wait until the file stops changing
 	copyMaxTries = 30                     // file still being written / locked
 	copyMaxSize  = 4 << 30
 )
@@ -27,6 +27,45 @@ const (
 type copyPending struct {
 	last  time.Time
 	tries int
+}
+
+// Export-read tokens: the drive program reports when a copy-capable program
+// reads a file in the 반출 folder. A new PC file whose content matches a
+// protected drive file is kept only if it matches a recent token (so the file
+// just taken out of 반출 stays, while the identical original cannot leave).
+const exportTokenTTL = 90 * time.Second
+
+var exportTokens = struct {
+	sync.Mutex
+	bySize map[int64]time.Time
+}{bySize: map[int64]time.Time{}}
+
+func (a *agent) noteExportRead(size int64) {
+	if size <= 0 {
+		return
+	}
+	exportTokens.Lock()
+	exportTokens.bySize[size] = time.Now()
+	if len(exportTokens.bySize) > 4096 {
+		for k, t := range exportTokens.bySize {
+			if time.Since(t) > exportTokenTTL {
+				delete(exportTokens.bySize, k)
+			}
+		}
+	}
+	exportTokens.Unlock()
+}
+
+// takeExportToken reports (and consumes) a live token for this size.
+func takeExportToken(size int64) bool {
+	exportTokens.Lock()
+	defer exportTokens.Unlock()
+	t, ok := exportTokens.bySize[size]
+	if ok && time.Since(t) <= exportTokenTTL {
+		delete(exportTokens.bySize, size)
+		return true
+	}
+	return false
 }
 
 var copyQueue = struct {
@@ -138,6 +177,11 @@ func (a *agent) checkLocal(path string) (retry bool) {
 		return err != errUnauthorized
 	}
 	if !res.Block {
+		return false
+	}
+	if takeExportToken(st.Size()) {
+		// This file was just taken out of the 반출 folder: allowed to leave.
+		log.Printf("반출 폴더에서 꺼낸 파일: %s (허용)", path)
 		return false
 	}
 	if err := removeCopy(path); err != nil {

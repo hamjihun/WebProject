@@ -50,6 +50,16 @@ func (v *Vault) Policy(u *User) map[string]string {
 	return block
 }
 
+// CopyWatchProcs are the programs whose reads of the 반출 folder the drive
+// program reports (so a copy out of that folder is recognised): Explorer and
+// the command-line/archiver copy tools.
+func (v *Vault) CopyWatchProcs(u *User) []string {
+	if !v.CopyWatch(u) {
+		return nil
+	}
+	return append([]string{"explorer.exe"}, copyOutProcesses...)
+}
+
 // CopyWatch reports whether the agent should remove copies of drive files
 // that appear on u's PC (Explorer copy/drag to the desktop, USB, ...).
 func (v *Vault) CopyWatch(u *User) bool {
@@ -62,12 +72,6 @@ func (v *Vault) CopyWatch(u *User) bool {
 // It returns the drive name and path of the matching file.
 func (v *Vault) CopyCheck(u *User, sha string, size int64) (drive, p string, found bool) {
 	if !v.CopyWatch(u) || size <= 0 || len(sha) != 64 {
-		return "", "", false
-	}
-	var exported int
-	v.DB.QueryRow(`SELECT COUNT(*) FROM exports e JOIN versions ver ON ver.id=e.version_id
-		WHERE e.requester_id=? AND e.status IN ('approved','expired','post') AND ver.blob_sha=?`, u.ID, sha).Scan(&exported)
-	if exported > 0 {
 		return "", "", false
 	}
 	rows, err := v.DB.Query(`SELECT n.id, n.share_id, n.owner_id FROM nodes n
@@ -93,7 +97,13 @@ func (v *Vault) CopyCheck(u *User, sha string, size int64) (drive, p string, fou
 		if err != nil {
 			continue
 		}
-		return s.Name, pathOf(v.DB, n), true
+		fp := pathOf(v.DB, n)
+		// A file sitting in the 반출 folder is approved to leave; only an
+		// original elsewhere is protected.
+		if s.Personal && (strings.EqualFold(fp, "/"+ExportFolder) || strings.HasPrefix(strings.ToLower(fp), strings.ToLower("/"+ExportFolder+"/"))) {
+			continue
+		}
+		return s.Name, fp, true
 	}
 	return "", "", false
 }

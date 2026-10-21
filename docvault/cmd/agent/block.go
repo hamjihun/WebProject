@@ -33,6 +33,7 @@ var notifyBlockedPopup = func(title, text string) { log.Printf("%s: %s", title, 
 func (a *agent) updatePolicy() {
 	var p struct {
 		Block         map[string]string `json:"block"`
+		Watch         []string          `json:"watch"`
 		CopyWatch     bool              `json:"copyWatch"`
 		BlockDownload bool              `json:"blockDownload"`
 	}
@@ -48,7 +49,7 @@ func (a *agent) updatePolicy() {
 	if p.Block == nil {
 		p.Block = map[string]string{}
 	}
-	b, _ := json.Marshal(map[string]any{"block": p.Block}) // the drive program only needs the block list
+	b, _ := json.Marshal(map[string]any{"block": p.Block, "watch": p.Watch}) // block list + 반출-folder read watch
 	if old, err := os.ReadFile(policyPath()); err == nil && bytes.Equal(old, b) {
 		return
 	}
@@ -64,12 +65,13 @@ type blockEvent struct {
 	Proc string `json:"proc"`
 	Kind string `json:"kind"`
 	Path string `json:"path"`
+	Size int64  `json:"size"`
 }
 
 // watchEvents follows the refusal logs of all drives.
 func (a *agent) watchEvents() {
 	offsets := map[string]int64{}
-	for range time.Tick(2 * time.Second) {
+	for range time.Tick(300 * time.Millisecond) {
 		files, _ := filepath.Glob(filepath.Join(stateDir(), "events-*.jsonl"))
 		for _, f := range files {
 			letter := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "events-"), ".jsonl")
@@ -100,7 +102,11 @@ func (a *agent) watchEvents() {
 			for sc.Scan() {
 				var ev blockEvent
 				if json.Unmarshal(sc.Bytes(), &ev) == nil {
-					a.reportBlocked(letter, ev)
+					if ev.Kind == "export-read" {
+						a.noteExportRead(ev.Size)
+					} else {
+						a.reportBlocked(letter, ev)
+					}
 				}
 			}
 			pos, _ := fh.Seek(0, io.SeekCurrent)

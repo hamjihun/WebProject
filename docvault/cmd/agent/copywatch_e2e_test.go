@@ -103,3 +103,58 @@ func TestCopyWatchRemovesDriveCopies(t *testing.T) {
 		t.Fatal("admin should not be blocked")
 	}
 }
+
+// A copy that matches a protected drive file is removed, unless the drive
+// just reported serving that content out of the 반출 folder (export token).
+func TestExportTokenKeepsCopy(t *testing.T) {
+	dir := t.TempDir()
+	d, err := db.Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	bs, _ := blob.New(filepath.Join(dir, "store"))
+	v := vault.New(d, bs)
+	admin := vault.Actor{Client: "test"}
+	kim, _ := v.CreateUser(admin, "kim", "kim", "password123", false)
+	v.CreateShare(admin, "개인문서함", "F", true, 0)
+	body := "quarterly report body"
+	v.Put(vault.Actor{User: kim, Client: "test"}, "개인문서함", "/report.xlsx", strings.NewReader(body))
+	tok, _, _ := v.Login("kim", "password123", "agent", "pc", "127.0.0.1")
+	mux := http.NewServeMux()
+	(&api.API{V: v}).Register(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	a := &agent{cfg: &Config{Server: srv.URL}, mounts: map[string]*mount{}}
+	a.client = newClient(a.cfg, tok)
+	t.Setenv("LOCALAPPDATA", dir)
+	a.updatePolicy()
+
+	desk := filepath.Join(dir, "Desktop")
+	os.MkdirAll(desk, 0o755)
+	write := func(name string) string {
+		p := filepath.Join(desk, name)
+		os.WriteFile(p, []byte(body), 0o644)
+		return p
+	}
+
+	// No token: an ordinary copy of the original is removed.
+	p1 := write("report.xlsx")
+	a.checkLocal(p1)
+	if _, err := os.Stat(p1); !os.IsNotExist(err) {
+		t.Fatal("copy without a token should be removed")
+	}
+	// Token present (drive served it from 반출): the copy is kept.
+	a.noteExportRead(int64(len(body)))
+	p2 := write("report (2).xlsx")
+	a.checkLocal(p2)
+	if _, err := os.Stat(p2); err != nil {
+		t.Fatal("copy with an export token should be kept")
+	}
+	// Token is single-use: a second copy is removed again.
+	p3 := write("report (3).xlsx")
+	a.checkLocal(p3)
+	if _, err := os.Stat(p3); !os.IsNotExist(err) {
+		t.Fatal("token should be consumed; second copy removed")
+	}
+}
