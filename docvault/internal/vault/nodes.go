@@ -3,8 +3,8 @@ package vault
 import (
 	"database/sql"
 	"errors"
-	"log"
 	"io"
+	"log"
 	"os"
 	"path"
 	"strings"
