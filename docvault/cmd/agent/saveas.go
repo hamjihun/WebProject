@@ -32,6 +32,34 @@ var docSession = struct {
 	lastOpen time.Time
 }{open: map[uint64]time.Time{}}
 
+const archiveWindow = 90 * time.Second
+
+var archiveReadAt struct {
+	sync.Mutex
+	at time.Time
+}
+
+func (a *agent) noteArchiveRead() {
+	archiveReadAt.Lock()
+	archiveReadAt.at = time.Now()
+	archiveReadAt.Unlock()
+}
+
+func (a *agent) archiveActive() bool {
+	archiveReadAt.Lock()
+	defer archiveReadAt.Unlock()
+	return time.Since(archiveReadAt.at) < archiveWindow
+}
+
+var archiveExts = map[string]bool{
+	"zip": true, "alz": true, "egg": true, "7z": true, "rar": true, "tar": true,
+	"gz": true, "tgz": true, "bz2": true, "lzh": true, "cab": true, "iso": true, "jar": true,
+}
+
+func isArchiveFile(path string) bool {
+	return archiveExts[strings.ToLower(path[strings.LastIndex(path, ".")+1:])]
+}
+
 func (a *agent) noteDocOpen(fh uint64) {
 	docSession.Lock()
 	docSession.open[fh] = time.Now()

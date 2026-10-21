@@ -10,9 +10,16 @@ import "strings"
 // PC's folders and USB drives and asks CopyCheck about each new file.
 var (
 	// Copying out to the PC: command-line copy, archivers.
-	copyOutProcesses = []string{"cmd.exe", "powershell.exe", "pwsh.exe", "robocopy.exe", "xcopy.exe",
-		"bandizip.exe", "bz.exe", "alzip.exe", "7zfm.exe", "7zg.exe", "7z.exe", "winrar.exe", "rar.exe",
-		"winzip32.exe", "winzip64.exe"}
+	// copyOutProcesses: reads of drive files are refused outright (command-line
+	// copy tools). Archivers are NOT here — blocking their reads also hides
+	// "압축 풀기" and breaks opening archives; instead an archive they build
+	// on the PC from a drive file is removed afterwards (see archiveProcesses).
+	copyOutProcesses = []string{"cmd.exe", "powershell.exe", "pwsh.exe", "robocopy.exe", "xcopy.exe"}
+	// archiveProcesses may read drive files (so extracting/opening archives
+	// works), but if one reads a confidential file and then creates an archive
+	// on a local disk, that archive is removed (압축 유출 차단).
+	archiveProcesses = []string{"bandizip.exe", "bz.exe", "alzip.exe", "7zfm.exe", "7zg.exe", "7z.exe",
+		"winrar.exe", "rar.exe", "winzip32.exe", "winzip64.exe", "egg.exe", "peazip.exe"}
 	messengerProcesses = []string{"kakaotalk.exe", "telegram.exe", "line.exe", "whatsapp.exe", "discord.exe"}
 	browserProcesses   = []string{"chrome.exe", "msedge.exe", "whale.exe", "firefox.exe", "iexplore.exe"}
 )
@@ -48,6 +55,15 @@ func (v *Vault) Policy(u *User) map[string]string {
 		}
 	}
 	return block
+}
+
+// ArchivePrograms are the archivers the drive program reports (archive-read)
+// so the agent can remove an archive they build on the PC from drive files.
+func (v *Vault) ArchivePrograms(u *User) []string {
+	if !v.CopyWatch(u) {
+		return nil
+	}
+	return archiveProcesses
 }
 
 // DocPrograms are the document editors whose "save to PC" (e.g. Excel

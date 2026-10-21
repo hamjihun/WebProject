@@ -759,7 +759,7 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 // agentPolicy tells the PC agent which programs may not read drive files.
 func (s *API) agentPolicy(w http.ResponseWriter, r *http.Request, c *ctx) {
 	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User), "copyWatch": s.V.CopyWatch(c.a.User),
-		"blockDownload": s.V.BlockDownload(c.a.User), "watch": s.V.CopyWatchProcs(c.a.User), "docWatch": s.V.DocPrograms(c.a.User)})
+		"blockDownload": s.V.BlockDownload(c.a.User), "watch": s.V.CopyWatchProcs(c.a.User), "docWatch": s.V.DocPrograms(c.a.User), "archiveWatch": s.V.ArchivePrograms(c.a.User)})
 }
 
 // agentCopyCheck answers whether a new file on the PC is a copy of a drive

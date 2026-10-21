@@ -148,7 +148,30 @@ func (a *agent) handleLocal(path string) (retry bool) {
 	if a.docActive() && isDocumentFile(path) {
 		return a.redirectSave(path)
 	}
+	if a.archiveActive() && isArchiveFile(path) {
+		return a.removeArchive(path)
+	}
 	return a.checkLocal(path)
+}
+
+// removeArchive deletes an archive built on the PC right after an archiver
+// read a confidential drive file (압축 유출 차단). Extracting/opening archives
+// is unaffected because that does not create a new archive from a drive file.
+func (a *agent) removeArchive(path string) (retry bool) {
+	st, err := os.Stat(path)
+	if err != nil || !st.Mode().IsRegular() || st.Size() <= 0 {
+		return false
+	}
+	if time.Since(st.ModTime()) > archiveWindow { // pre-existing archive, not just made
+		return false
+	}
+	if err := removeCopy(path); err != nil {
+		return !os.IsNotExist(err)
+	}
+	log.Printf("문서함 파일을 압축한 파일 삭제: %s", path)
+	notifyBlockedPopup("압축해서 PC로 내보낼 수 없습니다",
+		"문서함 파일을 압축해 "+filepath.Base(path)+" 로 PC에 내보낼 수 없습니다.\n필요하면 문서함에서 파일을 오른쪽 클릭 → [DocVault 반출 신청]을 하세요.")
+	return false
 }
 
 // checkLocal checks one file and removes it when it is a copy of a drive

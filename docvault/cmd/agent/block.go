@@ -35,6 +35,7 @@ func (a *agent) updatePolicy() {
 		Block         map[string]string `json:"block"`
 		Watch         []string          `json:"watch"`
 		DocWatch      []string          `json:"docWatch"`
+		ArchiveWatch  []string          `json:"archiveWatch"`
 		CopyWatch     bool              `json:"copyWatch"`
 		BlockDownload bool              `json:"blockDownload"`
 	}
@@ -50,7 +51,7 @@ func (a *agent) updatePolicy() {
 	if p.Block == nil {
 		p.Block = map[string]string{}
 	}
-	b, _ := json.Marshal(map[string]any{"block": p.Block, "watch": p.Watch, "docWatch": p.DocWatch})
+	b, _ := json.Marshal(map[string]any{"block": p.Block, "watch": p.Watch, "docWatch": p.DocWatch, "archiveWatch": p.ArchiveWatch})
 	if old, err := os.ReadFile(policyPath()); err == nil && bytes.Equal(old, b) {
 		return
 	}
@@ -111,6 +112,8 @@ func (a *agent) watchEvents() {
 						a.noteDocOpen(ev.FH)
 					case "doc-close":
 						a.noteDocClose(ev.FH)
+					case "archive-read":
+						a.noteArchiveRead()
 					default:
 						a.reportBlocked(letter, ev)
 					}

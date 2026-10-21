@@ -239,3 +239,38 @@ func TestSaveAsRedirect(t *testing.T) {
 		t.Fatal("doc should be inactive after close and window")
 	}
 }
+
+// An archive built on the PC right after an archiver read a drive file is
+// removed; a stale archive and non-archive files are kept.
+func TestArchiveExfilBlocked(t *testing.T) {
+	a := &agent{cfg: &Config{}, mounts: map[string]*mount{}}
+	dir := t.TempDir()
+	mk := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		os.WriteFile(p, []byte(body), 0o644)
+		return p
+	}
+	if !isArchiveFile("a.ZIP") || !isArchiveFile("x.alz") || isArchiveFile("a.txt") {
+		t.Fatal("isArchiveFile")
+	}
+	if a.archiveActive() {
+		t.Fatal("inactive before any archive-read")
+	}
+	// Archiver just read a drive file → a fresh archive on the PC is removed.
+	a.noteArchiveRead()
+	if !a.archiveActive() {
+		t.Fatal("active after archive-read")
+	}
+	z1 := mk("secret.zip", "compressed drive content")
+	a.removeArchive(z1)
+	if _, err := os.Stat(z1); !os.IsNotExist(err) {
+		t.Fatal("exfil archive should be removed")
+	}
+	// A pre-existing archive (old mtime) is not removed.
+	z2 := mk("old.zip", "data")
+	os.Chtimes(z2, time.Now().Add(-10*time.Minute), time.Now().Add(-10*time.Minute))
+	a.removeArchive(z2)
+	if _, err := os.Stat(z2); err != nil {
+		t.Fatal("stale archive should be kept")
+	}
+}

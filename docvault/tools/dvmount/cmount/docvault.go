@@ -40,6 +40,7 @@ var dv = struct {
 	block      map[string]string // lower-case exe name -> kind
 	watch      map[string]bool   // lower-case exe name: report its reads of the allow folder
 	docWatch   map[string]bool   // lower-case exe name: document programs (report open/close)
+	archWatch  map[string]bool   // lower-case exe name: archivers (report archive-read)
 	docHandles map[uint64]bool   // handles a document program holds open
 	policyMod  time.Time
 	checked    time.Time
@@ -53,6 +54,7 @@ var dv = struct {
 	block:      map[string]string{},
 	watch:      map[string]bool{},
 	docWatch:   map[string]bool{},
+	archWatch:  map[string]bool{},
 	docHandles: map[uint64]bool{},
 	procs:      map[int]dvProc{},
 	marked:     map[uint64]string{},
@@ -75,9 +77,10 @@ func reloadPolicy() {
 		return
 	}
 	var p struct {
-		Block    map[string]string `json:"block"`
-		Watch    []string          `json:"watch"`
-		DocWatch []string          `json:"docWatch"`
+		Block     map[string]string `json:"block"`
+		Watch     []string          `json:"watch"`
+		DocWatch  []string          `json:"docWatch"`
+		ArchWatch []string          `json:"archiveWatch"`
 	}
 	if json.Unmarshal(b, &p) != nil {
 		return
@@ -94,7 +97,11 @@ func reloadPolicy() {
 	for _, k := range p.DocWatch {
 		docWatch[strings.ToLower(k)] = true
 	}
-	dv.block, dv.watch, dv.docWatch, dv.policyMod = block, watch, docWatch, st.ModTime()
+	archWatch := map[string]bool{}
+	for _, k := range p.ArchWatch {
+		archWatch[strings.ToLower(k)] = true
+	}
+	dv.block, dv.watch, dv.docWatch, dv.archWatch, dv.policyMod = block, watch, docWatch, archWatch, st.ModTime()
 }
 
 // procName returns the lower-case executable name of a process, cached for
@@ -142,10 +149,16 @@ func dvOnOpen(path string, fi *fuse.FileInfo_t, size int64) {
 	dv.mu.Lock()
 	defer dv.mu.Unlock()
 	reloadPolicy()
-	if len(dv.block) == 0 && len(dv.watch) == 0 && len(dv.docWatch) == 0 {
+	if len(dv.block) == 0 && len(dv.watch) == 0 && len(dv.docWatch) == 0 && len(dv.archWatch) == 0 {
 		return
 	}
 	name := procName(pid)
+	if dv.archWatch[name] && !dvInAllow(path) {
+		// An archiver read a confidential file: if it then builds an archive
+		// on a local disk, the agent removes it (압축 유출 차단). Opening and
+		// extracting archives still works (reads are not refused).
+		dvDocEvent("archive-read", fi.Fh)
+	}
 	if dv.docWatch[name] && !dvInAllow(path) {
 		// A document program (Excel, Word, ...) opened a confidential file.
 		// While it holds the file open, the agent moves any document saved to
