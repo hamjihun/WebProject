@@ -71,6 +71,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/event", s.auth(s.agentEvent))
 	mux.HandleFunc("POST /api/agent/copy-check", s.auth(s.agentCopyCheck))
 	mux.HandleFunc("GET /api/agent/upload", s.auth(s.agentUpload))
+	mux.HandleFunc("POST /api/agent/upload-log", s.auth(s.agentUploadLog))
 	mux.HandleFunc("GET /ext/update.xml", s.extUpdateXML)
 	mux.HandleFunc("GET /ext/docvault.crx", s.extCRX)
 	s.registerPairing(mux)
@@ -777,16 +778,33 @@ func (s *API) agentPolicy(w http.ResponseWriter, r *http.Request, c *ctx) {
 // turned off.
 func (s *API) agentUpload(w http.ResponseWriter, r *http.Request, c *ctx) {
 	u := c.a.User
-	enabled := s.V.WebUploadEnabled() && !u.IsAdmin && !u.DLPFree
+	mode := s.V.WebUploadMode(u)
 	resp := map[string]any{
-		"enabled":      enabled,
+		"mode":         mode,
 		"allowDomains": s.V.WebUploadAllowDomains(),
 		"hashes":       []vault.HashSize{},
 	}
-	if enabled {
+	if mode == vault.WebUploadBlock {
 		resp["hashes"] = s.V.UploadAllowedHashes(u)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// agentUploadLog records a web file attachment the browser extension reported
+// (both allowed and blocked), for the audit log.
+func (s *API) agentUploadLog(w http.ResponseWriter, r *http.Request, c *ctx) {
+	var in struct {
+		Name    string `json:"name"`
+		Domain  string `json:"domain"`
+		Size    int64  `json:"size"`
+		Blocked bool   `json:"blocked"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	s.V.RecordWebUpload(c.a, in.Name, in.Domain, in.Size, in.Blocked)
+	ok(w)
 }
 
 // extUpdateXML is the Chrome/Edge/Whale force-install update manifest. The

@@ -27,6 +27,7 @@ const ACTIONS = {
   admin_group_delete: "[관리] 그룹 삭제", admin_share_create: "[관리] 드라이브 생성", admin_share_update: "[관리] 드라이브 변경",
   admin_share_delete: "[관리] 드라이브 삭제", admin_share_acl: "[관리] 권한 변경", admin_setting: "[관리] 설정 변경",
   admin_session_revoke: "[관리] 접속 강제 종료", admin_audit_export: "[관리] 로그 내보내기", agent_pair: "PC 연결", block_copy: "PC 복사 차단", block_messenger: "메신저 첨부 차단", block_upload: "웹 업로드 차단", block_custom: "프로그램 차단",
+  web_upload: "웹 첨부 (기록)", web_upload_block: "웹 첨부 차단", block_download: "웹 다운로드 PC저장 차단",
 };
 const CLIENTS = { drive: "가상드라이브", web: "웹", agent: "PC에이전트", system: "시스템" };
 
@@ -713,8 +714,13 @@ async function adminSettings() {
   }
   h += `<label>추가로 차단할 프로그램 (쉼표로 구분)<input name="block_extra_processes" value="${esc(s.block_extra_processes || "")}" placeholder="예: slack.exe, teams.exe"><span class="muted">작업 관리자의 [세부 정보] 탭에 보이는 실행 파일 이름</span></label>`;
   h += `<h3 style="margin:10px 0 0">웹 첨부관리 (브라우저 확장)</h3>`;
-  h += `<label class="row" style="align-items:flex-start"><input type="checkbox" name="block_web_upload" ${s.block_web_upload ? "checked" : ""}><span><b>웹 첨부 차단 (반출 파일만 허용)</b><br><span class="muted">크롬·엣지·웨일에 DocVault 확장을 설치해, 웹사이트에 파일을 첨부할 때 반출(승인)받은 파일만 올릴 수 있게 합니다. 아래 예외 사이트에서는 어떤 파일이든 자유롭게 올릴 수 있습니다. 관리자·free권한 사용자는 제외됩니다.</span></span></label>`;
-  h += `<label>예외 사이트 (한 줄에 하나)<textarea name="web_upload_allow_domains" rows="5" style="width:100%;font-family:inherit" placeholder="groupware.ilsan.co.kr&#10;partner.example.com&#10;bank.example.com">${esc(s.web_upload_allow_domains || "")}</textarea><span class="muted">여기 적은 사이트에서는 업로드를 막지 않습니다. 하위 주소(subdomain)도 자동 포함됩니다. 예: naver.com 을 적으면 mail.naver.com 도 허용.</span></label>`;
+  const wm = Number(s.web_upload_mode || 0);
+  h += `<label>동작 모드<select name="web_upload_mode">
+    <option value="0" ${wm === 0 ? "selected" : ""}>끄기 (제한·기록 없음)</option>
+    <option value="1" ${wm === 1 ? "selected" : ""}>기록만 (첨부 허용 + 감사 로그에 기록)</option>
+    <option value="2" ${wm === 2 ? "selected" : ""}>차단 (반출 파일만 허용 + 기록)</option>
+  </select><span class="muted">크롬·엣지·웨일에 DocVault 확장이 설치돼 있어야 동작합니다. 관리자·free권한 사용자는 제외됩니다. <b>기록만</b>은 첨부를 막지 않고 [계정·파일명·사이트·시각]을 감사 로그에 남깁니다(사내 규정상 직원 고지·동의 후 사용 권장). <b>차단</b>은 반출 승인 파일만 허용합니다.</span></label>`;
+  h += `<label>예외 사이트 (한 줄에 하나)<textarea name="web_upload_allow_domains" rows="5" style="width:100%;font-family:inherit" placeholder="groupware.ilsan.co.kr&#10;partner.example.com&#10;bank.example.com">${esc(s.web_upload_allow_domains || "")}</textarea><span class="muted"><b>차단</b> 모드에서 이 사이트들은 막지 않습니다(기록은 남김). 하위 주소(subdomain)도 자동 포함됩니다. 예: naver.com 을 적으면 mail.naver.com 도 허용.</span></label>`;
   h += `<h3 style="margin:10px 0 0">보관·보안</h3>`;
   for (const [k, [label, help]] of Object.entries(SETTING_LABELS)) {
     h += `<label>${esc(label)}<input type="number" min="0" name="${k}" value="${s[k]}">${help ? `<span class="muted">${esc(help)}</span>` : ""}</label>`;
@@ -726,7 +732,7 @@ async function adminSettings() {
     const body = {}; for (const k of Object.keys(SETTING_LABELS)) body[k] = Number(e.target[k].value);
     for (const k of Object.keys(BLOCK_LABELS)) body[k] = e.target[k].checked ? 1 : 0;
     body.block_extra_processes = e.target.block_extra_processes.value;
-    body.block_web_upload = e.target.block_web_upload.checked ? 1 : 0;
+    body.web_upload_mode = Number(e.target.web_upload_mode.value);
     body.web_upload_allow_domains = e.target.web_upload_allow_domains.value;
     await api("POST", "/api/admin/settings", body); toast("저장했습니다");
   });

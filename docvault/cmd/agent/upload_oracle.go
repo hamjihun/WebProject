@@ -27,9 +27,16 @@ const (
 	oraclePortSpan = 6
 )
 
+// Web-attachment modes (match internal/vault).
+const (
+	webUploadOff   = 0 // do nothing
+	webUploadLog   = 1 // record attachments, do not block
+	webUploadBlock = 2 // record and block
+)
+
 type uploadState struct {
 	mu      sync.RWMutex
-	enabled bool
+	mode    int64
 	domains []string
 	shas    map[string]bool
 	sizes   map[int64]bool
@@ -40,9 +47,9 @@ func newUploadState() *uploadState {
 	return &uploadState{shas: map[string]bool{}, sizes: map[int64]bool{}}
 }
 
-func (s *uploadState) set(enabled bool, domains []string, shas map[string]bool, sizes map[int64]bool) {
+func (s *uploadState) set(mode int64, domains []string, shas map[string]bool, sizes map[int64]bool) {
 	s.mu.Lock()
-	s.enabled, s.domains, s.shas, s.sizes = enabled, domains, shas, sizes
+	s.mode, s.domains, s.shas, s.sizes = mode, domains, shas, sizes
 	s.mu.Unlock()
 }
 
@@ -52,10 +59,10 @@ func (s *uploadState) setPort(p int) {
 	s.mu.Unlock()
 }
 
-func (s *uploadState) snapshot() (bool, []string) {
+func (s *uploadState) snapshot() (int64, []string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.enabled, s.domains
+	return s.mode, s.domains
 }
 
 func (s *uploadState) allowed(sha string, size int64) bool {
@@ -77,7 +84,7 @@ func (a *agent) fetchUploadPolicy() {
 		return
 	}
 	var p struct {
-		Enabled      bool     `json:"enabled"`
+		Mode         int64    `json:"mode"`
 		AllowDomains []string `json:"allowDomains"`
 		Hashes       []struct {
 			SHA  string `json:"sha"`
@@ -86,7 +93,7 @@ func (a *agent) fetchUploadPolicy() {
 	}
 	if err := a.client.call("GET", "/api/agent/upload", nil, &p); err != nil {
 		if err == errUnauthorized {
-			a.up.set(false, nil, map[string]bool{}, map[int64]bool{})
+			a.up.set(webUploadOff, nil, map[string]bool{}, map[int64]bool{})
 		}
 		return
 	}
@@ -100,7 +107,7 @@ func (a *agent) fetchUploadPolicy() {
 			sizes[h.Size] = true
 		}
 	}
-	a.up.set(p.Enabled, p.AllowDomains, shas, sizes)
+	a.up.set(p.Mode, p.AllowDomains, shas, sizes)
 }
 
 // serveUploadOracle binds the first free port in the range and serves the
@@ -145,12 +152,12 @@ func corsWrap(h http.Handler) http.Handler {
 }
 
 func (a *agent) oraclePolicy(w http.ResponseWriter, r *http.Request) {
-	enabled, domains := a.up.snapshot()
+	mode, domains := a.up.snapshot()
 	if domains == nil {
 		domains = []string{}
 	}
 	writeOracleJSON(w, map[string]any{
-		"enabled":      enabled,
+		"mode":         mode,
 		"allowDomains": domains,
 		"loggedIn":     loadToken() != "",
 	})
@@ -158,16 +165,42 @@ func (a *agent) oraclePolicy(w http.ResponseWriter, r *http.Request) {
 
 func (a *agent) oracleCheck(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		SHA  string `json:"sha"`
-		Size int64  `json:"size"`
+		SHA    string `json:"sha"`
+		Size   int64  `json:"size"`
+		Name   string `json:"name"`
+		Domain string `json:"domain"`
 	}
 	json.NewDecoder(r.Body).Decode(&in)
-	allow := a.up.allowed(in.SHA, in.Size)
+	mode, domains := a.up.snapshot()
+
+	// Decide whether to block. Log mode never blocks; block mode allows export
+	// approved files and exception sites.
+	allow := true
+	if mode == webUploadBlock {
+		allow = hostExcepted(in.Domain, domains) || a.up.allowed(in.SHA, in.Size)
+	}
+	// Record the attachment (allowed or blocked) for the audit log.
+	if mode >= webUploadLog {
+		go a.client.call("POST", "/api/agent/upload-log",
+			map[string]any{"name": in.Name, "domain": in.Domain, "size": in.Size, "blocked": !allow}, nil)
+	}
 	reason := ""
 	if !allow {
 		reason = "반출 승인된 파일만 웹에 첨부할 수 있습니다. 필요하면 파일을 오른쪽 클릭 → 반출 신청을 하세요."
 	}
 	writeOracleJSON(w, map[string]any{"allow": allow, "reason": reason})
+}
+
+// hostExcepted reports whether host matches one of the exception domains
+// (exact or a subdomain).
+func hostExcepted(host string, domains []string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, d := range domains {
+		if d != "" && (host == d || strings.HasSuffix(host, "."+d)) {
+			return true
+		}
+	}
+	return false
 }
 
 func writeOracleJSON(w http.ResponseWriter, v any) {

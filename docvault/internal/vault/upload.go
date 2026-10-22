@@ -14,8 +14,38 @@ type HashSize struct {
 	Size int64  `json:"size"`
 }
 
-// WebUploadEnabled reports whether web-attachment control is on.
-func (v *Vault) WebUploadEnabled() bool { return v.Setting("block_web_upload") != 0 }
+// Web-attachment modes.
+const (
+	WebUploadOff   = 0 // do nothing
+	WebUploadLog   = 1 // record attachments, do not block
+	WebUploadBlock = 2 // record and block (반출 파일만 허용, 예외 사이트 제외)
+)
+
+// WebUploadMode returns the effective mode for user u. Admins and free권한 users
+// are exempt (off).
+func (v *Vault) WebUploadMode(u *User) int64 {
+	if u == nil || u.IsAdmin || u.DLPFree {
+		return WebUploadOff
+	}
+	m := v.Setting("web_upload_mode")
+	if m < 0 || m > WebUploadBlock {
+		return WebUploadOff
+	}
+	return m
+}
+
+// RecordWebUpload logs a web file attachment reported by the browser extension.
+func (v *Vault) RecordWebUpload(a Actor, name, domain string, size int64, blocked bool) {
+	action := "web_upload"
+	if blocked {
+		action = "web_upload_block"
+	}
+	detail := "사이트: " + domain
+	if size > 0 {
+		detail += " / " + sizeText(size)
+	}
+	v.Audit(a, action, "", name, detail)
+}
 
 // WebUploadAllowDomains is the list of exception sites (host names). Uploads on
 // these sites are always allowed. Entries are stored one per line (commas also

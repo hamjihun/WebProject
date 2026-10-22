@@ -12,7 +12,8 @@
 
   var HASH_LIMIT = 64 * 1024 * 1024; // 이보다 큰 파일은 해시 생략(크기로 대조)
   var passNext = new WeakSet(); // 우리가 다시 보낸 change 이벤트는 그대로 통과
-  var policy = { enabled: false, allowDomains: [] };
+  // mode: 0=끄기, 1=기록만, 2=차단
+  var policy = { mode: 0, allowDomains: [] };
 
   function refreshPolicy() {
     try {
@@ -99,10 +100,10 @@
     }
   }
 
-  // managedHere reports whether this site must be checked, from the cached
-  // policy. Used as a fail-closed fallback when the background can't be reached.
-  function managedHere() {
-    return policy.enabled && !hostExcepted();
+  // blockMode reports whether this site would block (차단 모드 & 예외 아님).
+  // Used as a fail-closed fallback when the background can't be reached.
+  function blockMode() {
+    return policy.mode === 2 && !hostExcepted();
   }
 
   function block(inp, reason, name) {
@@ -113,27 +114,24 @@
   }
 
   async function decide(inp, files) {
-    // 1) 이 사이트가 관리 대상인지 먼저 확인(꺼짐/예외 사이트면 해시 생략).
+    // 1) 이 사이트가 관리 대상인지(기록만/차단) 먼저 확인. 꺼짐이면 그냥 통과.
     var gate = await send({ type: "gate", host: location.hostname });
     if (!gate) {
-      // 백그라운드 응답 없음 → 캐시 정책으로 판단(관리 사이트면 안전하게 차단).
-      if (managedHere()) {
-        block(inp, "첨부 확인 중이라 잠시 제한됩니다. 잠시 후 다시 시도하세요.");
-      } else {
-        release(inp);
-      }
+      // 백그라운드 응답 없음 → 차단 모드면 안전하게 차단, 그 외엔 통과.
+      if (blockMode()) block(inp, "첨부 확인 중이라 잠시 제한됩니다. 잠시 후 다시 시도하세요.");
+      else release(inp);
       return;
     }
     if (!gate.manage) {
       release(inp);
       return;
     }
-    // 2) 파일 지문을 만들어 허용 여부를 묻는다.
+    // 2) 파일 지문을 만들어 허용 여부를 묻는다(에이전트가 기록도 남긴다).
     var fps = await Promise.all(files.map(fingerprint));
     var resp = await send({ type: "check", host: location.hostname, files: fps });
     if (!resp) {
-      // 확인 실패 → 안전하게 차단.
-      block(inp, "첨부 확인에 실패해 제한되었습니다. 잠시 후 다시 시도하세요.");
+      if (blockMode()) block(inp, "첨부 확인에 실패해 제한되었습니다. 잠시 후 다시 시도하세요.");
+      else release(inp);
       return;
     }
     if (resp.allow === false) {
@@ -144,22 +142,34 @@
   }
 
   // ---- 드래그&드롭 업로드 ----
-  // 드롭은 해시를 미리 계산할 수 없어(동기 처리 필요) 관리 대상 사이트에서는
-  // 막고 첨부 버튼 사용을 안내한다(안전 우선).
+  // 드롭은 해시를 미리 계산할 수 없다(동기 처리 필요). 차단 모드(예외 아님)에선
+  // 막고 첨부 버튼 사용을 안내한다. 기록만 모드에선 통과시키되 기록은 남긴다.
   document.addEventListener(
     "drop",
     function (e) {
-      if (!policy.enabled || hostExcepted()) return;
+      if (policy.mode === 0) return;
       var dt = e.dataTransfer;
       if (!dt) return;
       var types = Array.prototype.slice.call(dt.types || []);
       if (types.indexOf("Files") < 0) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      showBlock("드래그&드롭 업로드는 제한됩니다. 첨부(파일 선택) 버튼으로 올려 주세요. 반출 승인된 파일만 첨부됩니다.", "");
+      var files = Array.prototype.slice.call(dt.files || []);
+      if (blockMode()) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        showBlock("드래그&드롭 업로드는 제한됩니다. 첨부(파일 선택) 버튼으로 올려 주세요. 반출 승인된 파일만 첨부됩니다.", "");
+      }
+      // 기록(차단이든 허용이든): 에이전트가 감사 로그에 남긴다.
+      if (files.length) logDrop(files);
     },
     true
   );
+
+  // logDrop reports dropped files to the agent for the audit log (fire and
+  // forget). The check call records them as a side effect.
+  async function logDrop(files) {
+    var fps = await Promise.all(files.map(fingerprint));
+    send({ type: "check", host: location.hostname, files: fps });
+  }
 
   // ---- 안내 표시 ----
   var toast = null;

@@ -637,7 +637,7 @@ func (g *gui) startSession() {
 func (g *gui) endSession() {
 	g.ag.copyWatch.Store(false)
 	g.ag.blockDownload.Store(false)
-	g.ag.up.set(false, nil, map[string]bool{}, map[int64]bool{})
+	g.ag.up.set(webUploadOff, nil, map[string]bool{}, map[int64]bool{})
 	g.mu.Lock()
 	stop := g.stop
 	g.stop, g.loggedIn, g.drives = nil, false, nil
