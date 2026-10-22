@@ -209,7 +209,26 @@ func verify(path string) {
 	if !hasManifest {
 		fail("zip 안에 manifest.json이 없습니다")
 	}
-	fmt.Printf("검증 통과: version=3, header=%dB, zip=%dB, files=%d, extension_id=%s\n", hlen, len(zipBytes), len(zr.File), string(id))
+	// Verify the RSA signature exactly as Chrome does: over
+	// "CRX3 SignedData\0" + le32(len(signed_header_data)) + signed_header_data + zip.
+	sd := pbField(header, 10000)          // signed_header_data
+	sig := pbField(pbField(header, 2), 2) // proof(field 2) -> signature(field 2)
+	pk, err := x509.ParsePKIXPublicKey(pub)
+	ck(err)
+	rsaPub, ok := pk.(*rsa.PublicKey)
+	if !ok {
+		fail("RSA 공개키가 아닙니다")
+	}
+	var signed bytes.Buffer
+	signed.WriteString("CRX3 SignedData\x00")
+	binary.Write(&signed, binary.LittleEndian, uint32(len(sd)))
+	signed.Write(sd)
+	signed.Write(zipBytes)
+	digest := sha256.Sum256(signed.Bytes())
+	if err := rsa.VerifyPKCS1v15(rsaPub, crypto.SHA256, digest[:], sig); err != nil {
+		fail("서명 검증 실패: " + err.Error())
+	}
+	fmt.Printf("검증 통과(서명 OK): version=3, header=%dB, zip=%dB, files=%d, extension_id=%s\n", hlen, len(zipBytes), len(zr.File), string(id))
 }
 
 // firstPublicKey walks the CrxFileHeader protobuf to the first proof's public_key.
