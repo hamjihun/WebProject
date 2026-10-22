@@ -15,55 +15,68 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// Browsers' ExtensionInstallForcelist policy: force-install the DocVault web
-// attachment extension from the server (self-hosted, no Chrome Web Store).
-var extForcelistKeys = []string{
-	`SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist`,
-	`SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist`,
-	`SOFTWARE\Policies\NAVER\Whale\ExtensionInstallForcelist`,
+// Browser extension policy roots per browser (Chromium family). Under each we
+// force-install the DocVault web-attachment extension from the server AND add
+// it to the install allowlist, so a managed browser that blocklists all
+// extensions (e.g. an existing ClouDoc/IT lockdown) still permits ours.
+var extPolicyRoots = []string{
+	`SOFTWARE\Policies\Google\Chrome`,
+	`SOFTWARE\Policies\Microsoft\Edge`,
+	`SOFTWARE\Policies\NAVER\Whale`,
 }
 
 func setExtensionPolicy(server string) {
-	entry := buildinfo.ExtensionID + ";" + strings.TrimRight(server, "/") + "/ext/update.xml"
-	for _, key := range extForcelistKeys {
-		k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
-		if err != nil {
-			continue
-		}
-		// Reuse our slot if present, else take the next free numbered slot so we
-		// never clobber another forcelisted extension.
-		names, _ := k.ReadValueNames(0)
-		slot, max := "", 0
-		for _, n := range names {
-			if v, _, _ := k.GetStringValue(n); strings.HasPrefix(v, buildinfo.ExtensionID+";") {
-				slot = n
-			}
-			if i, err := strconv.Atoi(n); err == nil && i > max {
-				max = i
-			}
-		}
-		if slot == "" {
-			slot = strconv.Itoa(max + 1)
-		}
-		k.SetStringValue(slot, entry)
-		k.Close()
+	force := buildinfo.ExtensionID + ";" + strings.TrimRight(server, "/") + "/ext/update.xml"
+	for _, root := range extPolicyRoots {
+		setListEntry(root+`\ExtensionInstallForcelist`, buildinfo.ExtensionID+";", force)
+		setListEntry(root+`\ExtensionInstallAllowlist`, buildinfo.ExtensionID, buildinfo.ExtensionID)
 	}
 	fmt.Println("      웹 첨부 보호 확장을 크롬·엣지·웨일에 자동 설치하도록 설정했습니다.")
 }
 
 func removeExtensionPolicy() {
-	for _, key := range extForcelistKeys {
-		k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
-		if err != nil {
-			continue
+	for _, root := range extPolicyRoots {
+		removeListEntry(root+`\ExtensionInstallForcelist`, buildinfo.ExtensionID+";")
+		removeListEntry(root+`\ExtensionInstallAllowlist`, buildinfo.ExtensionID)
+	}
+}
+
+// setListEntry writes value into a Chrome numbered-list policy (value names are
+// "1","2",...). It reuses our slot (matched by prefix) or takes the next free
+// one so another product's entries are never clobbered.
+func setListEntry(key, matchPrefix, value string) {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	names, _ := k.ReadValueNames(0)
+	slot, max := "", 0
+	for _, n := range names {
+		if v, _, _ := k.GetStringValue(n); strings.HasPrefix(v, matchPrefix) {
+			slot = n
 		}
-		names, _ := k.ReadValueNames(0)
-		for _, n := range names {
-			if v, _, _ := k.GetStringValue(n); strings.HasPrefix(v, buildinfo.ExtensionID+";") {
-				k.DeleteValue(n)
-			}
+		if i, err := strconv.Atoi(n); err == nil && i > max {
+			max = i
 		}
-		k.Close()
+	}
+	if slot == "" {
+		slot = strconv.Itoa(max + 1)
+	}
+	k.SetStringValue(slot, value)
+}
+
+func removeListEntry(key, matchPrefix string) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	names, _ := k.ReadValueNames(0)
+	for _, n := range names {
+		if v, _, _ := k.GetStringValue(n); strings.HasPrefix(v, matchPrefix) {
+			k.DeleteValue(n)
+		}
 	}
 }
 
