@@ -67,6 +67,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/agent/policy", s.auth(s.agentPolicy))
 	mux.HandleFunc("POST /api/agent/event", s.auth(s.agentEvent))
 	mux.HandleFunc("POST /api/agent/copy-check", s.auth(s.agentCopyCheck))
+	mux.HandleFunc("GET /api/agent/upload", s.auth(s.agentUpload))
 	s.registerPairing(mux)
 
 	mux.HandleFunc("GET /api/admin/users", s.admin(s.listUsers))
@@ -716,6 +717,7 @@ func (s *API) getSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 		out[k] = v
 	}
 	out["block_extra_processes"] = s.V.StringSetting("block_extra_processes")
+	out["web_upload_allow_domains"] = s.V.StringSetting("web_upload_allow_domains")
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -727,7 +729,7 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 	}
 	cur := s.V.Settings()
 	for k, raw := range in {
-		if k == "block_extra_processes" {
+		if k == "block_extra_processes" || k == "web_upload_allow_domains" {
 			var v string
 			if json.Unmarshal(raw, &v) != nil {
 				fail(w, vault.ErrBadRequest)
@@ -761,6 +763,25 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 func (s *API) agentPolicy(w http.ResponseWriter, r *http.Request, c *ctx) {
 	writeJSON(w, http.StatusOK, map[string]any{"block": s.V.Policy(c.a.User), "copyWatch": s.V.CopyWatch(c.a.User),
 		"blockDownload": s.V.BlockDownload(c.a.User), "watch": s.V.CopyWatchProcs(c.a.User), "docWatch": s.V.DocPrograms(c.a.User), "archiveWatch": s.V.ArchivePrograms(c.a.User)})
+}
+
+// agentUpload gives the PC agent the web-attachment policy (웹 첨부관리):
+// whether it is on, the exception sites, and the fingerprints of files the
+// user may attach (반출 승인받은 파일). The agent caches these and answers the
+// browser extension over localhost. DLP-exempt users (admin, free권한) get it
+// turned off.
+func (s *API) agentUpload(w http.ResponseWriter, r *http.Request, c *ctx) {
+	u := c.a.User
+	enabled := s.V.WebUploadEnabled() && !u.IsAdmin && !u.DLPFree
+	resp := map[string]any{
+		"enabled":      enabled,
+		"allowDomains": s.V.WebUploadAllowDomains(),
+		"hashes":       []vault.HashSize{},
+	}
+	if enabled {
+		resp["hashes"] = s.V.UploadAllowedHashes(u)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // agentCopyCheck answers whether a new file on the PC is a copy of a drive

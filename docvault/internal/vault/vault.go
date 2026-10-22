@@ -115,6 +115,7 @@ var defaultSettings = map[string]int64{
 	"block_copy_out":       1,   // 탐색기·명령창·압축 프로그램으로 PC에 복사 차단
 	"block_messenger":      1,   // 카카오톡 등 메신저 첨부 차단
 	"block_browser_upload": 0,   // 웹브라우저 업로드(웹메일 첨부 등) 차단
+	"block_web_upload":     0,   // 웹 첨부관리: 브라우저 확장으로 웹 첨부 차단(반출 파일만 허용, 예외 사이트 제외)
 	"block_download_local": 1,   // 웹브라우저 다운로드를 PC(바탕화면 등)에 저장 차단
 	"allow_post_export":    1,   // 후결재 반출: 신청하면 바로 반출 폴더에, 결재는 나중에
 	"audit_keep_days":      365, // 감사 로그 보관 기간(일), 이후 자동 삭제 (0=영구 보관)
@@ -122,7 +123,8 @@ var defaultSettings = map[string]int64{
 
 // String settings (stored in the same table).
 var defaultStringSettings = map[string]string{
-	"block_extra_processes": "", // 추가로 차단할 프로그램 (쉼표로 구분, 예: slack.exe, teams.exe)
+	"block_extra_processes":    "", // 추가로 차단할 프로그램 (쉼표로 구분, 예: slack.exe, teams.exe)
+	"web_upload_allow_domains": "", // 웹 첨부 예외 사이트(이 사이트들은 자유 업로드). 한 줄에 하나, 예: mail.ilsan.co.kr
 }
 
 func (v *Vault) StringSetting(key string) string {
@@ -148,7 +150,7 @@ func (v *Vault) SetStringSetting(a Actor, key, val string) error {
 func SettingKeys() []string {
 	return []string{"retention_days", "version_keep_days", "version_keep_count",
 		"export_valid_days", "export_max_downloads", "session_web_hours", "session_agent_days",
-		"guard_threshold", "guard_window_sec", "block_copy_out", "block_messenger", "block_browser_upload", "block_download_local", "allow_post_export", "audit_keep_days"}
+		"guard_threshold", "guard_window_sec", "block_copy_out", "block_messenger", "block_browser_upload", "block_web_upload", "block_download_local", "allow_post_export", "audit_keep_days"}
 }
 
 func (v *Vault) Setting(key string) int64 {

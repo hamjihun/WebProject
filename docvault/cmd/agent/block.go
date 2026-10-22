@@ -48,6 +48,7 @@ func (a *agent) updatePolicy() {
 	}
 	a.copyWatch.Store(p.CopyWatch)
 	a.blockDownload.Store(p.BlockDownload)
+	a.fetchUploadPolicy()
 	if p.Block == nil {
 		p.Block = map[string]string{}
 	}
