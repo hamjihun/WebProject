@@ -48,7 +48,7 @@
     return info;
   }
 
-  function send(msg) {
+  function sendOnce(msg) {
     return new Promise(function (resolve) {
       try {
         chrome.runtime.sendMessage(msg, function (resp) {
@@ -59,6 +59,15 @@
         resolve(null);
       }
     });
+  }
+
+  // send retries once: the MV3 service worker may be asleep and the first
+  // message can fail while it wakes, which should not falsely block an upload.
+  async function send(msg) {
+    var r = await sendOnce(msg);
+    if (r) return r;
+    await new Promise(function (f) { setTimeout(f, 200); });
+    return sendOnce(msg);
   }
 
   // ---- 파일 선택창(input[type=file]) ----
@@ -74,7 +83,6 @@
         return; // 우리가 승인 후 다시 보낸 이벤트
       }
       if (!inp.files || inp.files.length === 0) return;
-      console.log("[dv] change intercepted");
       e.stopImmediatePropagation();
       e.preventDefault();
       decide(inp, Array.prototype.slice.call(inp.files));
@@ -107,7 +115,6 @@
   async function decide(inp, files) {
     // 1) 이 사이트가 관리 대상인지 먼저 확인(꺼짐/예외 사이트면 해시 생략).
     var gate = await send({ type: "gate", host: location.hostname });
-    console.log("[dv] gate=", JSON.stringify(gate));
     if (!gate) {
       // 백그라운드 응답 없음 → 캐시 정책으로 판단(관리 사이트면 안전하게 차단).
       if (managedHere()) {
@@ -123,9 +130,7 @@
     }
     // 2) 파일 지문을 만들어 허용 여부를 묻는다.
     var fps = await Promise.all(files.map(fingerprint));
-    console.log("[dv] fps=", JSON.stringify(fps));
     var resp = await send({ type: "check", host: location.hostname, files: fps });
-    console.log("[dv] check=", JSON.stringify(resp));
     if (!resp) {
       // 확인 실패 → 안전하게 차단.
       block(inp, "첨부 확인에 실패해 제한되었습니다. 잠시 후 다시 시도하세요.");
