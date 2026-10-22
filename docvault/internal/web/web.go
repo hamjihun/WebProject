@@ -10,6 +10,13 @@ import (
 //go:embed static
 var static embed.FS
 
+// ExtensionCRX is the signed browser-extension package the server hosts for
+// force-install. Served by the API with the Chrome CRX MIME type.
+func ExtensionCRX() []byte {
+	b, _ := static.ReadFile("static/ext/docvault.crx")
+	return b
+}
+
 func Handler() http.Handler {
 	sub, _ := fs.Sub(static, "static")
 	fsrv := http.FileServer(http.FS(sub))

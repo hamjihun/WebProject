@@ -20,6 +20,7 @@ import (
 	"docvault/internal/buildinfo"
 	"docvault/internal/netutil"
 	"docvault/internal/vault"
+	"docvault/internal/web"
 )
 
 const cookieName = "dv_session"
@@ -71,6 +72,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/copy-check", s.auth(s.agentCopyCheck))
 	mux.HandleFunc("GET /api/agent/upload", s.auth(s.agentUpload))
 	mux.HandleFunc("GET /ext/update.xml", s.extUpdateXML)
+	mux.HandleFunc("GET /ext/docvault.crx", s.extCRX)
 	s.registerPairing(mux)
 
 	mux.HandleFunc("GET /api/admin/users", s.admin(s.listUsers))
@@ -801,6 +803,19 @@ func (s *API) extUpdateXML(w http.ResponseWriter, r *http.Request) {
   </app>
 </gupdate>
 `, buildinfo.ExtensionID, base, buildinfo.Version)
+}
+
+// extCRX serves the signed extension package with the Chrome CRX MIME type so
+// Chrome/Edge/Whale accept it for policy-based force-install.
+func (s *API) extCRX(w http.ResponseWriter, r *http.Request) {
+	b := web.ExtensionCRX()
+	if len(b) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-chrome-extension")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(b)
 }
 
 // agentCopyCheck answers whether a new file on the PC is a copy of a drive
