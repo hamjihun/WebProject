@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"docvault/internal/backup"
+	"docvault/internal/buildinfo"
 	"docvault/internal/netutil"
 	"docvault/internal/vault"
 )
@@ -68,6 +70,7 @@ func (s *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/event", s.auth(s.agentEvent))
 	mux.HandleFunc("POST /api/agent/copy-check", s.auth(s.agentCopyCheck))
 	mux.HandleFunc("GET /api/agent/upload", s.auth(s.agentUpload))
+	mux.HandleFunc("GET /ext/update.xml", s.extUpdateXML)
 	s.registerPairing(mux)
 
 	mux.HandleFunc("GET /api/admin/users", s.admin(s.listUsers))
@@ -782,6 +785,22 @@ func (s *API) agentUpload(w http.ResponseWriter, r *http.Request, c *ctx) {
 		resp["hashes"] = s.V.UploadAllowedHashes(u)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// extUpdateXML is the Chrome/Edge/Whale force-install update manifest. The
+// browser's ExtensionInstallForcelist policy points at this URL; it tells the
+// browser where to download the signed .crx and which version it is.
+func (s *API) extUpdateXML(w http.ResponseWriter, r *http.Request) {
+	base := s.publicURL(r)
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">
+  <app appid="%s">
+    <updatecheck codebase="%s/ext/docvault.crx" version="%s" />
+  </app>
+</gupdate>
+`, buildinfo.ExtensionID, base, buildinfo.Version)
 }
 
 // agentCopyCheck answers whether a new file on the PC is a copy of a drive

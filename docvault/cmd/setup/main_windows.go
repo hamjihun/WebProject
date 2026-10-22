@@ -244,6 +244,7 @@ func installFiles(server string) error {
 	os.Remove(logoutLink()) // replaced by the menu of the notification-area icon
 	registerUninstall(dir, installedByUs)
 	setBrowserPolicies(server)
+	setExtensionPolicy(server)
 	addExportMenu(agent)
 	addVersionsMenu(agent)
 	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte(setupVersion()), 0o644); err != nil {
@@ -449,6 +450,7 @@ func doUninstall() error {
 	}
 	removeUserData()
 	removeBrowserPolicies()
+	removeExtensionPolicy()
 	removeExportMenu()
 	removeVersionsMenu()
 

@@ -8,7 +8,13 @@ import (
 	"strings"
 )
 
-const Version = "0.9.14"
+const Version = "0.9.15"
+
+// ExtensionID is the Chrome/Edge/Whale id of the DocVault web-attachment
+// extension (extension/). It is fixed by the public key baked into
+// extension/manifest.json ("key") and signed with tools/crxpack/docvault-ext.key.pem.
+// The server hosts the signed .crx and setup force-installs it by this id.
+const ExtensionID = "cgglaolghimphgolgefjjidkofnfbcbp"
 
 // SetupMarkerPrefix starts the "DVSETUPVER:<version>;" text embedded in
 // docvault-setup.exe, from which the server reads the version it offers.

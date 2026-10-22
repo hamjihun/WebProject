@@ -6,11 +6,66 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"docvault/internal/buildinfo"
+
 	"golang.org/x/sys/windows/registry"
 )
+
+// Browsers' ExtensionInstallForcelist policy: force-install the DocVault web
+// attachment extension from the server (self-hosted, no Chrome Web Store).
+var extForcelistKeys = []string{
+	`SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist`,
+	`SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist`,
+	`SOFTWARE\Policies\NAVER\Whale\ExtensionInstallForcelist`,
+}
+
+func setExtensionPolicy(server string) {
+	entry := buildinfo.ExtensionID + ";" + strings.TrimRight(server, "/") + "/ext/update.xml"
+	for _, key := range extForcelistKeys {
+		k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
+		if err != nil {
+			continue
+		}
+		// Reuse our slot if present, else take the next free numbered slot so we
+		// never clobber another forcelisted extension.
+		names, _ := k.ReadValueNames(0)
+		slot, max := "", 0
+		for _, n := range names {
+			if v, _, _ := k.GetStringValue(n); strings.HasPrefix(v, buildinfo.ExtensionID+";") {
+				slot = n
+			}
+			if i, err := strconv.Atoi(n); err == nil && i > max {
+				max = i
+			}
+		}
+		if slot == "" {
+			slot = strconv.Itoa(max + 1)
+		}
+		k.SetStringValue(slot, entry)
+		k.Close()
+	}
+	fmt.Println("      웹 첨부 보호 확장을 크롬·엣지·웨일에 자동 설치하도록 설정했습니다.")
+}
+
+func removeExtensionPolicy() {
+	for _, key := range extForcelistKeys {
+		k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.SET_VALUE|registry.QUERY_VALUE|registry.WOW64_64KEY)
+		if err != nil {
+			continue
+		}
+		names, _ := k.ReadValueNames(0)
+		for _, n := range names {
+			if v, _, _ := k.GetStringValue(n); strings.HasPrefix(v, buildinfo.ExtensionID+";") {
+				k.DeleteValue(n)
+			}
+		}
+		k.Close()
+	}
+}
 
 // Browser policies: downloads go to the personal DocVault drive by default.
 // Set as recommended (not mandatory) policies, so a user may still pick

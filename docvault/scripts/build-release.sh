@@ -12,6 +12,14 @@ P=cmd/setup/payload
 python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],'w',zipfile.ZIP_DEFLATED); z.write(sys.argv[2],'rclone.exe'); z.close()" $P/rclone.zip $P/rclone.exe
 rm -f $P/rclone.exe
 [ -f $P/winfsp.msi ] || curl -fsSL -o $P/winfsp.msi "https://github.com/winfsp/winfsp/releases/download/$WINFSP_TAG/$WINFSP_MSI"
+
+# Web-attachment browser extension: keep its version in step with the release,
+# then pack the signed .crx the server embeds and force-installs (built as a
+# host tool, before cross-compiling for Windows).
+VER=$(grep -oE 'const Version = "[^"]+"' internal/buildinfo/buildinfo.go | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+python3 -c "import re,sys; p='extension/manifest.json'; s=open(p,encoding='utf-8').read(); s=re.sub(r'(\"version\":\s*\")[^\"]+(\")', r'\g<1>'+sys.argv[1]+r'\g<2>', s, count=1); open(p,'w',encoding='utf-8',newline='').write(s)" "$VER"
+go run ./tools/crxpack pack extension tools/crxpack/docvault-ext.key.pem internal/web/static/ext/docvault.crx
+
 export GOOS=windows GOARCH=amd64
 F="-trimpath"
 go build $F -ldflags="-s -w -H=windowsgui" -o $P/docvault-agent.exe ./cmd/agent
