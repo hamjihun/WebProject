@@ -245,6 +245,7 @@ func installFiles(server string) error {
 	registerUninstall(dir, installedByUs)
 	setBrowserPolicies(server)
 	addExportMenu(agent)
+	addVersionsMenu(agent)
 	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte(setupVersion()), 0o644); err != nil {
 		return err
 	}
@@ -449,6 +450,7 @@ func doUninstall() error {
 	removeUserData()
 	removeBrowserPolicies()
 	removeExportMenu()
+	removeVersionsMenu()
 
 	fmt.Println("[3/4] 가상 드라이브 구성요소(WinFsp) 제거")
 	restart := false

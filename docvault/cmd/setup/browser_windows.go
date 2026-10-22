@@ -105,3 +105,28 @@ func removeExportMenu() {
 	registry.DeleteKey(registry.LOCAL_MACHINE, exportMenuKey+`\command`)
 	registry.DeleteKey(registry.LOCAL_MACHINE, exportMenuKey)
 }
+
+// Explorer's right-click menu on files: "DocVault 이전 버전" → shows the saved
+// versions of a drive file and lets the user roll back to one.
+const versionsMenuKey = `SOFTWARE\Classes\*\shell\DocVaultVersions`
+
+func addVersionsMenu(agent string) {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, versionsMenuKey, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	k.SetStringValue("", "DocVault 이전 버전")
+	k.SetStringValue("Icon", `"`+agent+`",0`)
+	k.Close()
+	c, _, err := registry.CreateKey(registry.LOCAL_MACHINE, versionsMenuKey+`\command`, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	c.SetStringValue("", `"`+agent+`" versions "%1"`)
+	c.Close()
+}
+
+func removeVersionsMenu() {
+	registry.DeleteKey(registry.LOCAL_MACHINE, versionsMenuKey+`\command`)
+	registry.DeleteKey(registry.LOCAL_MACHINE, versionsMenuKey)
+}

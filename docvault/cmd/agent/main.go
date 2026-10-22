@@ -661,6 +661,12 @@ func main() {
 			} else {
 				err = cmdExport(cfg, os.Args[2])
 			}
+		case "versions": // 탐색기 오른쪽 클릭 → DocVault 이전 버전
+			if len(os.Args) < 3 {
+				err = errors.New("이전 버전을 볼 파일을 지정하세요")
+			} else {
+				err = cmdVersions(cfg, os.Args[2])
+			}
 		case "version":
 			fmt.Println(version)
 		default:
