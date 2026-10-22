@@ -74,6 +74,7 @@
         return; // 우리가 승인 후 다시 보낸 이벤트
       }
       if (!inp.files || inp.files.length === 0) return;
+      console.log("[dv] change intercepted");
       e.stopImmediatePropagation();
       e.preventDefault();
       decide(inp, Array.prototype.slice.call(inp.files));
@@ -90,21 +91,48 @@
     }
   }
 
+  // managedHere reports whether this site must be checked, from the cached
+  // policy. Used as a fail-closed fallback when the background can't be reached.
+  function managedHere() {
+    return policy.enabled && !hostExcepted();
+  }
+
+  function block(inp, reason, name) {
+    try {
+      inp.value = "";
+    } catch (e) {}
+    showBlock(reason, name);
+  }
+
   async function decide(inp, files) {
     // 1) 이 사이트가 관리 대상인지 먼저 확인(꺼짐/예외 사이트면 해시 생략).
     var gate = await send({ type: "gate", host: location.hostname });
-    if (!gate || !gate.manage) {
+    console.log("[dv] gate=", JSON.stringify(gate));
+    if (!gate) {
+      // 백그라운드 응답 없음 → 캐시 정책으로 판단(관리 사이트면 안전하게 차단).
+      if (managedHere()) {
+        block(inp, "첨부 확인 중이라 잠시 제한됩니다. 잠시 후 다시 시도하세요.");
+      } else {
+        release(inp);
+      }
+      return;
+    }
+    if (!gate.manage) {
       release(inp);
       return;
     }
     // 2) 파일 지문을 만들어 허용 여부를 묻는다.
     var fps = await Promise.all(files.map(fingerprint));
+    console.log("[dv] fps=", JSON.stringify(fps));
     var resp = await send({ type: "check", host: location.hostname, files: fps });
-    if (resp && resp.allow === false) {
-      try {
-        inp.value = "";
-      } catch (e) {}
-      showBlock(resp.reason, resp.blocked);
+    console.log("[dv] check=", JSON.stringify(resp));
+    if (!resp) {
+      // 확인 실패 → 안전하게 차단.
+      block(inp, "첨부 확인에 실패해 제한되었습니다. 잠시 후 다시 시도하세요.");
+      return;
+    }
+    if (resp.allow === false) {
+      block(inp, resp.reason, resp.blocked);
       return;
     }
     release(inp);
