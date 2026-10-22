@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DocVault 웹 첨부 보호",
-  "version": "0.9.15",
+  "version": "0.9.16",
   "description": "문서중앙화 정책에 따라 웹 파일 첨부를 관리합니다. 반출 승인된 파일만 첨부할 수 있고, 지정된 예외 사이트에서는 자유롭게 올릴 수 있습니다.",
   "minimum_chrome_version": "102",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz3D5ze+JsJctuOtEfLwkv7GPlytNS3QrPOjrYxwc3bCHfoMCstwnc29zgP2+UTRay7d1R9UbV5PBQ3qusBB1qkjLRtpq7QorMsyrX4a3Y3HUnhh8BQniFj1tH12ilyP0T+pe559RDa9bNsES0yi/X+UjNi17cFg9etcYbz0Gti0aPRIYSMwXfWxgsXCSVIZ2QcdRl/knzDoSDHcgyncUM1mBzD8tunv+cTSgROkTAIk70Nq1R/UHvUNiPb4Bm8+C0dmv6wh9v/vRRgDw8Mqn+U8dNnkGZ3Op3qZo0pXJFNfIYE4JLM+DK0UoOl3lJb7Q2Ifz3cSjY3CIApMBzFon1wIDAQAB",

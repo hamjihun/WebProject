@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const Version = "0.9.15"
+const Version = "0.9.16"
 
 // ExtensionID is the Chrome/Edge/Whale id of the DocVault web-attachment
 // extension (extension/). It is fixed by the public key baked into
