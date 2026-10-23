@@ -244,8 +244,10 @@ func installFiles(server string) error {
 	os.Remove(logoutLink()) // replaced by the menu of the notification-area icon
 	registerUninstall(dir, installedByUs)
 	setBrowserPolicies(server)
-	setExtensionPolicy(server)
-	setEnrollmentToken(enrollmentToken(server))
+	// 웹 첨부 차단 기능 보류: 확장 자동설치 정책·CBCM 토큰을 심지 않고, 기존
+	// PC에 남아 있으면 제거한다. (재개하려면 아래 두 줄을 set... 으로 되돌린다)
+	removeExtensionPolicy()
+	removeEnrollmentToken()
 	addExportMenu(agent)
 	addVersionsMenu(agent)
 	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte(setupVersion()), 0o644); err != nil {

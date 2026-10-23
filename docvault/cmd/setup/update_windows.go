@@ -164,15 +164,11 @@ func checkForUpdate(ctx context.Context, failures map[string]int) bool {
 	if err != nil {
 		return false
 	}
-	var info struct {
-		Version         string
-		EnrollmentToken string
-	}
+	var info struct{ Version string }
 	json.NewDecoder(resp.Body).Decode(&info)
 	resp.Body.Close()
-	// Apply the CBCM enrollment token every cycle (SYSTEM can write HKLM), so a
-	// token entered later rolls out without waiting for a version bump.
-	setEnrollmentToken(info.EnrollmentToken)
+	// 웹 첨부 차단 보류: CBCM 토큰을 심지 않고 남아 있으면 지운다.
+	removeEnrollmentToken()
 	have := installedVersion()
 	if info.Version == "" || !buildinfo.NewerThan(info.Version, have) || failures[info.Version] >= 3 {
 		return false
