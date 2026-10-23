@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // The extension probes this small port range to find the agent.
@@ -34,17 +35,41 @@ const (
 	webUploadBlock = 2 // record and block
 )
 
+// Browsers we protect with the extension vs. those we never cover. When web
+// attachment protection is on, uncovered browsers can't run our extension so
+// their reads of drive files are always blocked; covered browsers are blocked
+// only when the extension stops reporting (감시 스위치).
+var (
+	coveredBrowsers   = []string{"chrome.exe", "msedge.exe", "whale.exe"}
+	uncoveredBrowsers = []string{"firefox.exe", "iexplore.exe", "opera.exe", "brave.exe", "vivaldi.exe"}
+)
+
 type uploadState struct {
-	mu      sync.RWMutex
-	mode    int64
-	domains []string
-	shas    map[string]bool
-	sizes   map[int64]bool
-	port    int
+	mu       sync.RWMutex
+	mode     int64
+	domains  []string
+	shas     map[string]bool
+	sizes    map[int64]bool
+	port     int
+	lastSeen int64 // unix seconds of the last extension contact (heartbeat)
 }
 
 func newUploadState() *uploadState {
 	return &uploadState{shas: map[string]bool{}, sizes: map[int64]bool{}}
+}
+
+// seen records a heartbeat from the browser extension.
+func (s *uploadState) seen() {
+	s.mu.Lock()
+	s.lastSeen = time.Now().Unix()
+	s.mu.Unlock()
+}
+
+// extAlive reports whether the extension contacted us recently (within 3 min).
+func (s *uploadState) extAlive() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastSeen > 0 && time.Now().Unix()-s.lastSeen < 180
 }
 
 func (s *uploadState) set(mode int64, domains []string, shas map[string]bool, sizes map[int64]bool) {
@@ -152,6 +177,8 @@ func corsWrap(h http.Handler) http.Handler {
 }
 
 func (a *agent) oraclePolicy(w http.ResponseWriter, r *http.Request) {
+	a.up.seen()
+	a.writePolicyFile() // extension is alive → lift any dead-man browser block now
 	mode, domains := a.up.snapshot()
 	if domains == nil {
 		domains = []string{}
@@ -164,6 +191,7 @@ func (a *agent) oraclePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *agent) oracleCheck(w http.ResponseWriter, r *http.Request) {
+	a.up.seen()
 	var in struct {
 		SHA    string `json:"sha"`
 		Size   int64  `json:"size"`

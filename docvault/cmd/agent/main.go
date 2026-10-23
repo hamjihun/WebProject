@@ -353,12 +353,13 @@ type agent struct {
 	mu     sync.Mutex
 	mounts map[string]*mount // by drive letter
 
-	copyWatch     atomic.Bool  // remove copies of drive files made on this PC
-	blockDownload atomic.Bool  // refuse browser downloads saved on this PC
-	up            *uploadState // 웹 첨부관리: policy + exportable hashes for the browser extension
-	user          string       // signed-in account, keys the drive caches (under mu)
-	personalDrive string       // name of the personal drive (개인문서함), under mu
-	offline       atomic.Bool  // server down: drives stay disconnected (see health)
+	copyWatch     atomic.Bool                  // remove copies of drive files made on this PC
+	blockDownload atomic.Bool                  // refuse browser downloads saved on this PC
+	up            *uploadState                 // 웹 첨부관리: policy + exportable hashes for the browser extension
+	srvPol        atomic.Pointer[serverPolicy] // last program-block policy from the server
+	user          string                       // signed-in account, keys the drive caches (under mu)
+	personalDrive string                       // name of the personal drive (개인문서함), under mu
+	offline       atomic.Bool                  // server down: drives stay disconnected (see health)
 }
 
 func (a *agent) personalDriveName() string {
@@ -548,6 +549,7 @@ func newAgent(cfg *Config) *agent {
 	go a.watchEvents()
 	go a.copyWatchLoop()
 	go a.serveUploadOracle()
+	go a.deadmanLoop()
 	watchLocalFolders(a)
 	return a
 }

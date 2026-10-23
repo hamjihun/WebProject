@@ -18,6 +18,15 @@ import (
 	"time"
 )
 
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 func policyPath() string              { return filepath.Join(stateDir(), "policy.json") }
 func eventsPath(letter string) string { return filepath.Join(stateDir(), "events-"+letter+".jsonl") }
 
@@ -29,6 +38,15 @@ var notifyBlocked = func(title, text string) { log.Printf("%s: %s", title, text)
 // for PC-copy and PC-download blocks the user must notice. Rate-limited so a
 // burst of blocked files shows one popup. The Windows tray app replaces it.
 var notifyBlockedPopup = func(title, text string) { log.Printf("%s: %s", title, text) }
+
+// serverPolicy is the program-block policy the server sends; the agent merges
+// it with the dead-man browser blocks before writing policy.json.
+type serverPolicy struct {
+	block        map[string]string
+	watch        []string
+	docWatch     []string
+	archiveWatch []string
+}
 
 func (a *agent) updatePolicy() {
 	var p struct {
@@ -52,7 +70,52 @@ func (a *agent) updatePolicy() {
 	if p.Block == nil {
 		p.Block = map[string]string{}
 	}
-	b, _ := json.Marshal(map[string]any{"block": p.Block, "watch": p.Watch, "docWatch": p.DocWatch, "archiveWatch": p.ArchiveWatch})
+	a.srvPol.Store(&serverPolicy{block: p.Block, watch: p.Watch, docWatch: p.DocWatch, archiveWatch: p.ArchiveWatch})
+	a.writePolicyFile()
+}
+
+// browserBlocks returns the browsers whose drive-file reads must be refused
+// because of the web-attachment 감시 스위치 (dead-man switch). Only applies when
+// web attachment protection is on (기록만/차단).
+func (a *agent) browserBlocks() map[string]string {
+	if a.up == nil {
+		return nil
+	}
+	mode, _ := a.up.snapshot()
+	if mode < webUploadLog {
+		return nil
+	}
+	m := map[string]string{}
+	// Browsers we don't cover can never run our extension → always blocked.
+	for _, b := range uncoveredBrowsers {
+		m[b] = "upload"
+	}
+	// Covered browsers: blocked only while the extension isn't reporting.
+	if !a.up.extAlive() {
+		for _, b := range coveredBrowsers {
+			m[b] = "upload"
+		}
+	}
+	return m
+}
+
+// writePolicyFile merges the server policy with the dead-man browser blocks and
+// writes policy.json (only when it changed).
+func (a *agent) writePolicyFile() {
+	sp := a.srvPol.Load()
+	if sp == nil {
+		return
+	}
+	block := map[string]string{}
+	for k, v := range sp.block {
+		block[k] = v
+	}
+	for k, v := range a.browserBlocks() {
+		if _, ok := block[k]; !ok {
+			block[k] = v
+		}
+	}
+	b, _ := json.Marshal(map[string]any{"block": block, "watch": sp.watch, "docWatch": sp.docWatch, "archiveWatch": sp.archiveWatch})
 	if old, err := os.ReadFile(policyPath()); err == nil && bytes.Equal(old, b) {
 		return
 	}
@@ -60,6 +123,14 @@ func (a *agent) updatePolicy() {
 	tmp := policyPath() + ".tmp"
 	if os.WriteFile(tmp, b, 0o600) == nil {
 		os.Rename(tmp, policyPath())
+	}
+}
+
+// deadmanLoop re-applies the browser blocks as the extension's liveness changes
+// (it may stop reporting between server heartbeats).
+func (a *agent) deadmanLoop() {
+	for range time.Tick(20 * time.Second) {
+		a.writePolicyFile()
 	}
 }
 
@@ -152,8 +223,16 @@ func (a *agent) reportBlocked(letter string, ev blockEvent) {
 		notifyBlocked("PC로 복사가 차단되었습니다",
 			"문서함 파일("+name+")은 바탕화면 등 PC로 복사할 수 없습니다.\n필요하면 웹에서 반출 신청을 하세요.")
 	case "upload":
-		notifyBlocked("웹 업로드가 차단되었습니다",
-			"문서함 파일("+name+")은 웹브라우저로 올릴 수 없습니다.\n필요하면 웹에서 반출 신청을 하세요.")
+		if contains(coveredBrowsers, strings.ToLower(ev.Proc)) {
+			notifyBlockedPopup("웹 첨부 보호 확장이 꺼져 있습니다",
+				"보호 확장이 꺼져 있어 "+ev.Proc+"의 문서함 파일 업로드가 차단되었습니다.\n확장을 다시 켜면 정상 동작합니다. (chrome://extensions)")
+		} else if contains(uncoveredBrowsers, strings.ToLower(ev.Proc)) {
+			notifyBlocked("이 브라우저로는 올릴 수 없습니다",
+				ev.Proc+"로는 문서함 파일("+name+")을 웹에 올릴 수 없습니다.\n크롬·엣지·웨일을 사용하세요.")
+		} else {
+			notifyBlocked("웹 업로드가 차단되었습니다",
+				"문서함 파일("+name+")은 웹브라우저로 올릴 수 없습니다.\n필요하면 웹에서 반출 신청을 하세요.")
+		}
 	default:
 		notifyBlocked("파일 사용이 차단되었습니다",
 			ev.Proc+" 프로그램은 문서함 파일("+name+")을 열 수 없습니다.")

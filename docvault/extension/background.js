@@ -91,6 +91,18 @@ async function checkFiles(host, files) {
   return { allow: true };
 }
 
+// Heartbeat: periodically contact the agent so it knows the extension is alive.
+// If this stops (extension disabled/removed), the agent blocks the browser from
+// reading drive files (감시 스위치). refresh() itself hits the agent.
+chrome.alarms.create("dv-heartbeat", { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === "dv-heartbeat") {
+    cache.at = 0; // force a fresh contact
+    refresh();
+  }
+});
+refresh();
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
   if (msg.type === "policy") {
