@@ -172,7 +172,8 @@ func (s *API) setupAvailable(w http.ResponseWriter, r *http.Request) {
 // It also gives the version of the PC program the server offers, which the
 // PCs' update service installs when it is newer than their own.
 func (s *API) setupInfo(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"downloadDrive": s.V.DownloadDrive(), "version": s.setupVersion()})
+	writeJSON(w, http.StatusOK, map[string]string{"downloadDrive": s.V.DownloadDrive(), "version": s.setupVersion(),
+		"enrollmentToken": s.V.StringSetting("chrome_enrollment_token")})
 }
 
 var setupVer struct {

@@ -164,9 +164,15 @@ func checkForUpdate(ctx context.Context, failures map[string]int) bool {
 	if err != nil {
 		return false
 	}
-	var info struct{ Version string }
+	var info struct {
+		Version         string
+		EnrollmentToken string
+	}
 	json.NewDecoder(resp.Body).Decode(&info)
 	resp.Body.Close()
+	// Apply the CBCM enrollment token every cycle (SYSTEM can write HKLM), so a
+	// token entered later rolls out without waiting for a version bump.
+	setEnrollmentToken(info.EnrollmentToken)
 	have := installedVersion()
 	if info.Version == "" || !buildinfo.NewerThan(info.Version, have) || failures[info.Version] >= 3 {
 		return false

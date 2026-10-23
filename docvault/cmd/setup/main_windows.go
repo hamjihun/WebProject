@@ -245,6 +245,7 @@ func installFiles(server string) error {
 	registerUninstall(dir, installedByUs)
 	setBrowserPolicies(server)
 	setExtensionPolicy(server)
+	setEnrollmentToken(enrollmentToken(server))
 	addExportMenu(agent)
 	addVersionsMenu(agent)
 	if err := os.WriteFile(filepath.Join(dir, "version.txt"), []byte(setupVersion()), 0o644); err != nil {
@@ -451,6 +452,7 @@ func doUninstall() error {
 	removeUserData()
 	removeBrowserPolicies()
 	removeExtensionPolicy()
+	removeEnrollmentToken()
 	removeExportMenu()
 	removeVersionsMenu()
 

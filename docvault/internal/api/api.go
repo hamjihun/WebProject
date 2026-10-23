@@ -724,6 +724,7 @@ func (s *API) getSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 	}
 	out["block_extra_processes"] = s.V.StringSetting("block_extra_processes")
 	out["web_upload_allow_domains"] = s.V.StringSetting("web_upload_allow_domains")
+	out["chrome_enrollment_token"] = s.V.StringSetting("chrome_enrollment_token")
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -735,7 +736,7 @@ func (s *API) setSettings(w http.ResponseWriter, r *http.Request, c *ctx) {
 	}
 	cur := s.V.Settings()
 	for k, raw := range in {
-		if k == "block_extra_processes" || k == "web_upload_allow_domains" {
+		if k == "block_extra_processes" || k == "web_upload_allow_domains" || k == "chrome_enrollment_token" {
 			var v string
 			if json.Unmarshal(raw, &v) != nil {
 				fail(w, vault.ErrBadRequest)

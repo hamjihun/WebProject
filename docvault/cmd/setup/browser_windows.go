@@ -41,6 +41,50 @@ func removeExtensionPolicy() {
 	}
 }
 
+// Chrome Browser Cloud Management (CBCM) enrollment token. Writing it enrolls
+// the browser into the org's Google Admin console on next launch, which makes
+// it "managed" so our self-hosted extension can be force-installed without
+// Active Directory. CBCM is Chrome-specific.
+const chromePolicyRoot = `SOFTWARE\Policies\Google\Chrome`
+
+func setEnrollmentToken(token string) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		removeEnrollmentToken()
+		return
+	}
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, chromePolicyRoot, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	k.SetStringValue("CloudManagementEnrollmentToken", token)
+	k.Close()
+}
+
+func removeEnrollmentToken() {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, chromePolicyRoot, registry.SET_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return
+	}
+	k.DeleteValue("CloudManagementEnrollmentToken")
+	k.Close()
+}
+
+// enrollmentToken asks the server for the CBCM token (empty if none set).
+func enrollmentToken(server string) string {
+	c := &http.Client{Timeout: 10 * time.Second}
+	resp, err := c.Get(strings.TrimRight(server, "/") + "/api/setup-info")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var info struct{ EnrollmentToken string }
+	if json.NewDecoder(resp.Body).Decode(&info) != nil {
+		return ""
+	}
+	return strings.TrimSpace(info.EnrollmentToken)
+}
+
 // setListEntry writes value into a Chrome numbered-list policy (value names are
 // "1","2",...). It reuses our slot (matched by prefix) or takes the next free
 // one so another product's entries are never clobbered.

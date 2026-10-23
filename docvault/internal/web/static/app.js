@@ -721,6 +721,7 @@ async function adminSettings() {
     <option value="2" ${wm === 2 ? "selected" : ""}>차단 (반출 파일만 허용 + 기록)</option>
   </select><span class="muted">크롬·엣지·웨일에 DocVault 확장이 설치돼 있어야 동작합니다. 관리자·free권한 사용자는 제외됩니다. <b>기록만</b>은 첨부를 막지 않고 [계정·파일명·사이트·시각]을 감사 로그에 남깁니다(사내 규정상 직원 고지·동의 후 사용 권장). <b>차단</b>은 반출 승인 파일만 허용합니다.</span></label>`;
   h += `<label>예외 사이트 (한 줄에 하나)<textarea name="web_upload_allow_domains" rows="5" style="width:100%;font-family:inherit" placeholder="groupware.ilsan.co.kr&#10;partner.example.com&#10;bank.example.com">${esc(s.web_upload_allow_domains || "")}</textarea><span class="muted"><b>차단</b> 모드에서 이 사이트들은 막지 않습니다(기록은 남김). 하위 주소(subdomain)도 자동 포함됩니다. 예: naver.com 을 적으면 mail.naver.com 도 허용.</span></label>`;
+  h += `<label>크롬 자동설치 토큰 (CBCM, 선택)<input name="chrome_enrollment_token" value="${esc(s.chrome_enrollment_token || "")}" placeholder="구글 관리콘솔에서 발급한 등록 토큰" style="font-family:monospace"><span class="muted">확장을 <b>크롬에 자동설치(강제설치)</b>하려면 필요합니다. 구글 관리콘솔(admin.google.com) → Chrome 브라우저 → 등록 토큰 생성 → 여기에 붙여넣기. 각 PC가 ~10분 내 자동 등록되어, 확장이 자동 설치됩니다. (비우면 자동설치 안 함 — 수동 로드로도 사용 가능)</span></label>`;
   h += `<h3 style="margin:10px 0 0">보관·보안</h3>`;
   for (const [k, [label, help]] of Object.entries(SETTING_LABELS)) {
     h += `<label>${esc(label)}<input type="number" min="0" name="${k}" value="${s[k]}">${help ? `<span class="muted">${esc(help)}</span>` : ""}</label>`;
@@ -734,6 +735,7 @@ async function adminSettings() {
     body.block_extra_processes = e.target.block_extra_processes.value;
     body.web_upload_mode = Number(e.target.web_upload_mode.value);
     body.web_upload_allow_domains = e.target.web_upload_allow_domains.value;
+    body.chrome_enrollment_token = e.target.chrome_enrollment_token.value;
     await api("POST", "/api/admin/settings", body); toast("저장했습니다");
   });
   $("#ckBtn").onclick = guard(async () => {

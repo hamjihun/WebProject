@@ -125,6 +125,7 @@ var defaultSettings = map[string]int64{
 var defaultStringSettings = map[string]string{
 	"block_extra_processes":    "", // 추가로 차단할 프로그램 (쉼표로 구분, 예: slack.exe, teams.exe)
 	"web_upload_allow_domains": "", // 웹 첨부 예외 사이트(이 사이트들은 자유 업로드). 한 줄에 하나, 예: mail.ilsan.co.kr
+	"chrome_enrollment_token":  "", // 크롬 클라우드 관리(CBCM) 등록 토큰 — 자체 확장 자동설치용
 }
 
 func (v *Vault) StringSetting(key string) string {
