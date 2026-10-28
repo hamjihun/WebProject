@@ -36,7 +36,6 @@ REM Run missed schedules as soon as the PC is on, also on battery
 powershell -NoProfile -Command "Set-ScheduledTask -TaskName '%TASK%' -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)" >nul 2>&1
 
 REM Clean up the old multi-file version if present
-schtasks /query /tn "%TASK%" >nul 2>&1
 if exist "C:\Scripts\TempCleaner" rd /s /q "C:\Scripts\TempCleaner" 2>nul
 
 REM Run the first clean as a separate task (this file may itself be inside TEMP)
