@@ -6,6 +6,8 @@ param(
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
+# Never ask "Are you sure?" - always delete without confirmation
+$ConfirmPreference = 'None'
 
 $temp = [System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')
 $logFile = Join-Path $PSScriptRoot 'cleanup.log'
@@ -21,7 +23,12 @@ $before = (Get-ChildItem $temp -Recurse -Force -File | Measure-Object Length -Su
 
 Get-ChildItem $temp -Force | Where-Object { $_.LastWriteTime -le $cutoff } | ForEach-Object {
     # Remove-Item deletes permanently (does not go to the Recycle Bin)
-    Remove-Item -LiteralPath $_.FullName -Recurse -Force
+    Remove-Item -LiteralPath $_.FullName -Recurse -Force -Confirm:$false
+    # Fallback for items Remove-Item cannot handle (long paths, read-only trees); /q = quiet, no prompt
+    if (Test-Path -LiteralPath $_.FullName) {
+        if ($_.PSIsContainer) { cmd /c rd /s /q "`"$($_.FullName)`"" 2>$null }
+        else { cmd /c del /f /q /a "`"$($_.FullName)`"" 2>$null }
+    }
 }
 
 $after = (Get-ChildItem $temp -Recurse -Force -File | Measure-Object Length -Sum).Sum
