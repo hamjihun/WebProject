@@ -1,7 +1,8 @@
 # Installs clean-temp.ps1 to C:\Scripts\TempCleaner and registers a scheduled task
-# that runs it at every logon and every day at the given time.
+# that runs it once a week on the given day and time.
 param(
-    [string]$DailyAt = '11:50',
+    [string]$DayOfWeek = 'Wednesday',
+    [string]$At = '11:50',
     [int]$MinAgeHours = 0,
     [string]$TargetUser = "$env:USERDOMAIN\$env:USERNAME"
 )
@@ -14,7 +15,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $isAdmin) {
     Start-Process powershell.exe -Verb RunAs -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"",
-        '-DailyAt', $DailyAt, '-MinAgeHours', $MinAgeHours, '-TargetUser', "`"$TargetUser`"")
+        '-DayOfWeek', $DayOfWeek, '-At', $At, '-MinAgeHours', $MinAgeHours, '-TargetUser', "`"$TargetUser`"")
     exit
 }
 
@@ -28,18 +29,16 @@ $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
     "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass " +
     "-File `"$installDir\clean-temp.ps1`" -MinAgeHours $MinAgeHours")
 
-$logon = New-ScheduledTaskTrigger -AtLogOn -User $TargetUser
-$logon.Delay = 'PT5M'   # wait 5 minutes after logon
-$daily = New-ScheduledTaskTrigger -Daily -At $DailyAt
+$weekly = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $DayOfWeek -At $At
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
 $principal = New-ScheduledTaskPrincipal -UserId $TargetUser -LogonType Interactive -RunLevel Limited
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $logon, $daily `
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $weekly `
     -Settings $settings -Principal $principal -Force | Out-Null
 
-Write-Host "Installed. Task '$taskName' runs at logon and daily at $DailyAt for $TargetUser."
+Write-Host "Installed. Task '$taskName' runs every $DayOfWeek at $At for $TargetUser."
 Write-Host "Running once now..."
 Start-ScheduledTask -TaskName $taskName
 Write-Host "Log: $installDir\cleanup.log"
