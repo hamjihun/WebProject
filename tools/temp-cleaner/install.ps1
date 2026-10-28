@@ -1,7 +1,7 @@
 # Installs clean-temp.ps1 to C:\Scripts\TempCleaner and registers a scheduled task
 # that runs it at every logon and every day at the given time.
 param(
-    [string]$DailyAt = '12:00',
+    [string]$DailyAt = '11:50',
     [int]$MinAgeHours = 0,
     [string]$TargetUser = "$env:USERDOMAIN\$env:USERNAME"
 )
