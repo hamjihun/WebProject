@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.41.0';
+const VERSION = '1.42.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -29,6 +29,8 @@ const sched = require('./schedule').create({ file: SCHEDULE_FILE, log: console.l
 const MEMO_FILE = process.env.MEMO_FILE || path.join(__dirname, 'data', 'memo.json');             // 메모 보드 (사람별)
 const DEVICES_FILE = process.env.DEVICES_FILE || path.join(__dirname, 'data', 'devices.json');     // 에이전트 없는 장비 (Ping·포트 감시)
 const devices = require('./devices').create({ file: DEVICES_FILE, log: console.log });
+const SECURITY_FILE = process.env.SECURITY_FILE || path.join(__dirname, 'data', 'security.json'); // 보안 이벤트 (랜섬웨어·BitLocker·해킹 의심)
+const secmon = require('./security').create({ file: SECURITY_FILE, log: console.log });
 const memo = require('./memo').create({ file: MEMO_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
@@ -406,6 +408,13 @@ function ingest(raw, remoteIp) {
   if (entry.history.length > HISTORY) entry.history.splice(0, entry.history.length - HISTORY);
   dirty = true;
   if (LOG_FILE) fs.appendFile(LOG_FILE, JSON.stringify(m) + '\n', () => {});
+  if (raw.security && typeof raw.security === 'object') {          // 보안 이벤트: 처음 보는 것만 알림 (30분 넘게 지난 일은 기록만)
+    const fresh = secmon.ingest(m.host, raw.security);
+    if (fresh.length) {
+      for (const e of fresh) if (e.sev !== 'info') console.log(`[${new Date().toLocaleTimeString()}] [보안] ${m.name || m.host}: ${e.sev === 'crit' ? '위험' : '주의'} ${e.msg}`);
+      alerter.securityEvents(m.host, m.name, fresh.filter((e) => Date.now() - e.t < 30 * 60000));
+    }
+  }
   return m;
 }
 
@@ -430,7 +439,7 @@ function serversView() {
     const all = Array.isArray(e.latest.disks) ? e.latest.disks : [];
     const disks = hide.size ? all.filter((d) => !hide.has(String(d.mount || '').toLowerCase())) : all;
     const growth = diskGrowth(e, host).filter((g) => !hide.has(String(g.mount || '').toLowerCase()));
-    list.push({ ...e.latest, disks, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth, days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host), all_disks: all.map((d) => d.mount), hide_disks: hideList });
+    list.push({ ...e.latest, disks, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth, days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host), all_disks: all.map((d) => d.mount), hide_disks: hideList, sec: secmon.summary(host) });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));
@@ -447,7 +456,7 @@ function removeHost(host) {
   delete hourly[host]; delete hourCur[host]; hourlyDirty = true;
   if (topology.nodes[host] && !topology.nodes[host].custom) { delete topology.nodes[host]; topology.links = topology.links.filter((l) => l.a !== host && l.b !== host); }
   order = order.filter((h) => h !== host); delete backupDays[host];
-  alerter.forget(host);
+  alerter.forget(host); secmon.forget(host);
   if (existed) dirty = true;
   return existed;
 }
@@ -907,6 +916,24 @@ const server = http.createServer(async (req, res) => {
         const d = await devices.checkNow(String(raw.id || ''));
         alerter.evaluateDevices(devices.list());
         return json(res, 200, { ok: true, device: d, devices: devices.list() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+  // ---- 보안 이벤트 ----
+  if (url.pathname === '/api/security' || url.pathname === '/api/security/ack') {
+    try {
+      if (req.method === 'GET') {
+        const one = url.searchParams.get('host');
+        const hosts = serversView().filter((s) => s.sec && (!one || s.host === one))
+          .map((s) => ({ host: s.host, name: s.name || '', online: s.online, ...s.sec, events: secmon.events(s.host, one ? 200 : 60) }));
+        return json(res, 200, { ok: true, hosts });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/security/ack') {
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const list = raw.host ? [String(raw.host)] : secmon.hosts();
+        let n = 0; for (const h of list) n += secmon.ack(h, raw.ids === 'all' || !raw.ids ? 'all' : raw.ids, me ? (me.name || me.id) : '');
+        if (n) console.log(`[${new Date().toLocaleTimeString()}] [보안] 확인 처리 ${n}건 (${me ? me.name || me.id : ''})`);
+        return json(res, 200, { ok: true, acked: n });
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }

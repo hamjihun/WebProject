@@ -29,6 +29,7 @@ const DEFAULTS = {
     hum_high: 80, hum_low: 20,                  // 습도 상한 / 하한 (%)
     env_minutes: 3,                             // 이 시간 이상 지속되면 알림 (순간 튀는 값 무시)
     device_on: true,                            // 에이전트 없는 장비(Ping·포트) 응답 없음 알림
+    security_on: true,                          // 보안 이벤트 알림 (랜섬웨어·BitLocker·해킹 의심). 위험은 조용한 시간에도 보냄
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
@@ -390,9 +391,22 @@ function create({ settingsFile, logDir, log = console.log }) {
     for (const key of [...states.keys()]) if (key.startsWith('dev:') && !keep.has(key)) states.delete(key);
   }
 
+  // 보안 이벤트: 상태가 아니라 한 번 생기는 일이라 바로 보낸다. 위험(crit)은 조용한 시간에도, 한 번에 많이 오면 3건 + 나머지 요약
+  function securityEvents(host, name, evs) {
+    if (!settings.enabled || settings.rules.security_on === false || (settings.muted && settings.muted[host])) return;
+    const list = (evs || []).filter((e) => e.sev === 'crit' || e.sev === 'warn').sort((a, b) => (a.sev === 'crit' ? 0 : 1) - (b.sev === 'crit' ? 0 : 1));
+    if (!list.length) return;
+    for (const e of list.slice(0, 3)) deliver(push({ kind: 'alert', host, name, rule: 'security', sev: e.sev, msg: `${e.sev === 'crit' ? '🚨 보안 위험' : '⚠ 보안 주의'}: ${e.msg}` }), e.sev === 'crit');
+    if (list.length > 3) {
+      const crit = list.slice(3).some((e) => e.sev === 'crit');
+      deliver(push({ kind: 'alert', host, name, rule: 'security', sev: crit ? 'crit' : 'warn', msg: `보안 이벤트 ${list.length - 3}건 더 — 서버 현황 → 🛡 보안 에서 확인` }), crit);
+    }
+  }
+
   return {
     evaluate,
     evaluateDevices,
+    securityEvents,
     forget(host) {
       for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key);
       let changed = false;

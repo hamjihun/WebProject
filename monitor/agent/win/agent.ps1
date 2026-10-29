@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.7.1"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.8.0"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -198,6 +198,15 @@ function Get-CpuPercent {
   } catch {}
   try { return [double](Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average } catch { return 0 }
 }
+# 보안 감시: security.ps1(이벤트 로그·미끼 파일·BitLocker·섀도 복사본)을 1분마다 별도 프로세스로 + 파일 대량 변경 감시(fswatch.ps1)
+# agent.conf SECURITY=0 이면 둘 다 끔
+$SecScript = Join-Path $Dir "security.ps1"; $SecOut = Join-Path $DataDir "security.json"
+$HasSec = (Test-Path $SecScript) -and ($conf['SECURITY'] -ne '0')
+$secLast = (Get-Date).AddMinutes(-2); $secProc = $null; $secCache = $null; $secStamp = $null
+if ($HasSec) {
+  Log "보안 감시 시작: 이벤트 로그·미끼 파일·BitLocker 를 1분마다 확인합니다"
+  try { . (Join-Path $Dir "fswatch.ps1"); Start-FsWatch $BackupPaths } catch { Log "파일 감시 불러오기 실패: $($_.Exception.Message)" }
+}
 Get-CpuPercent | Out-Null   # 첫 샘플
 
 while ($true) {
@@ -257,14 +266,43 @@ while ($true) {
         }
       } catch {}
     }
+    $security = $null
+    if ($HasSec) {
+      if ((-not $secProc -or $secProc.HasExited) -and ((Get-Date) - $secLast).TotalSeconds -ge 60) {
+        $secLast = Get-Date
+        try { $secProc = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$SecScript`" -ConfPath `"$confPath`"" -WindowStyle Hidden -PassThru; try { $secProc.PriorityClass = 'BelowNormal' } catch {} } catch { Log "보안 감시 실행 실패: $($_.Exception.Message)" }
+      }
+      try {
+        if (Test-Path $SecOut) {
+          $wt = (Get-Item $SecOut).LastWriteTime
+          if ($wt -ne $secStamp) { $secCache = Get-Content $SecOut -Raw -Encoding UTF8 | ConvertFrom-Json; $secStamp = $wt }
+          if (((Get-Date) - $wt).TotalMinutes -lt 15) { $security = $secCache }
+        }
+      } catch {}
+      try {
+        if (Get-Command Step-FsWatch -ErrorAction SilentlyContinue) {
+          Step-FsWatch
+          $fsSt = Get-FsStatus
+          if ($fsSt) {
+            if (-not $security) { $security = New-Object PSObject; $security | Add-Member NoteProperty events @() }
+            $sec2 = New-Object PSObject
+            foreach ($pp in $security.PSObject.Properties) { $sec2 | Add-Member NoteProperty $pp.Name $pp.Value }
+            $sec2 | Add-Member NoteProperty fs $fsSt -Force
+            $sec2 | Add-Member NoteProperty events (@($fsEvents) + @($security.events | Where-Object { $_ })) -Force
+            $security = $sec2
+          }
+        }
+      } catch {}
+    }
     $payload = @{
       host = $HostName; name = (Get-DisplayName); os = $osName; token = $Token
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
-      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; paths = @($BackupPaths) }
+      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; security = [bool]$HasSec; paths = @($BackupPaths) }
     }
     if ($backups) { $payload.backups = $backups }
+    if ($security) { $payload.security = $security }
     $envNow = Get-EnvReading
     if ($envNow) { $payload.env = $envNow }
     $body = $payload | ConvertTo-Json -Depth 8 -Compress

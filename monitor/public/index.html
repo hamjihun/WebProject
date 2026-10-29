@@ -125,6 +125,27 @@
   #envbar:empty + #devAdd { margin-left:auto; }
   #devAdd:hover { border-color:var(--accent); color:var(--accent); }
   body.embed #devAdd { display:none; }
+  /* 보안 감시 */
+  #secBtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; font-size:13px; }
+  #secBtn:hover { border-color:var(--accent); }
+  #secBtn b { background:var(--warn); color:#111; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
+  #secBtn.crit { border-color:var(--bad); color:var(--bad); animation:secblink 1.2s infinite; }
+  #secBtn.crit b { background:var(--bad); color:#fff; }
+  @keyframes secblink { 50% { background:rgba(239,68,68,.2); } }
+  .card.secbad { border-color:var(--bad); box-shadow:inset 0 0 0 1px var(--bad); }
+  #soverlay[hidden] { display:none; }
+  #soverlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:11; }
+  #spanel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(1200px,100%); max-height:92vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+  #spanel h2 { margin:0; font-size:18px; } #spanel .sub { color:var(--muted); font-size:12.5px; }
+  #spanel h3, #sectable h3 { margin:18px 0 8px; font-size:13px; color:var(--muted); font-weight:600; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  #spanel h3 { border-top:1px solid var(--line); padding-top:14px; }
+  .sev { display:inline-block; border-radius:4px; padding:0 6px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .sev.crit { background:var(--bad); color:#fff; } .sev.warn { background:var(--warn); color:#111; } .sev.info { background:var(--barbg); color:var(--muted); font-weight:400; }
+  table.ev tr.acked td { opacity:.55; }
+  .sbtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:5px; padding:2px 8px; cursor:pointer; font-size:11.5px; font-weight:400; white-space:nowrap; }
+  .sbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .schk { font-weight:400; font-size:12px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+  .sstat { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--muted); } .sstat b { color:var(--text); font-weight:600; }
   #devs { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:8px; }
   .dv { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--ok); border-radius:8px; padding:7px 10px 6px; cursor:pointer; min-width:0; }
   .dv:hover { border-color:var(--accent); }
@@ -190,6 +211,7 @@
   <div id="envbar"></div>
   <button id="devAdd" title="스위치·방화벽·프린터·CCTV·UPS 처럼 에이전트를 깔 수 없는 장비를 Ping·포트로 감시">＋ 장비 추가</button>
   <div class="ver" id="ver"></div>
+  <button id="secBtn" title="보안 감시: 랜섬웨어 · BitLocker · 해킹 의심">🛡 보안<b id="seccnt" hidden>0</b></button>
   <button class="bell" id="bell" title="알림 설정과 이력">🔔 알림<b id="bellcnt" hidden>0</b></button>
 </header>
 <div id="vermismatch" hidden></div>
@@ -201,6 +223,12 @@
 </section>
 </div>
 <div id="devmask" hidden><div id="devbox"></div></div>
+<div id="soverlay" hidden>
+  <div id="spanel">
+    <div class="dtop"><h2>🛡 보안 감시</h2><span class="sub">랜섬웨어 · BitLocker · 해킹 의심을 서버마다 1분마다 확인합니다 (에이전트 1.8.0 이상)</span><button class="close" id="sclose">닫기 ✕</button></div>
+    <div id="sbody"></div>
+  </div>
+</div>
 <div id="aoverlay" hidden>
   <div id="apanel">
     <div class="dtop"><h2>알림</h2><button class="close" id="aclose">닫기 ✕</button></div>
@@ -266,6 +294,7 @@
     <div class="form">
       <label class="chk"><input type="checkbox" id="rEnvOn"> 온습도 알림 사용</label>
       <label class="chk"><input type="checkbox" id="rDevOn"> 네트워크 장비(Ping·포트) 응답 없음 알림</label>
+      <label class="chk"><input type="checkbox" id="rSecOn"> 보안 이벤트 알림 (랜섬웨어·BitLocker·해킹 의심 — 위험은 방해 금지 시간에도)</label>
       <label>온도 상한 (℃)<input type="number" id="rTempHi" min="-40" max="80" step="0.5"></label>
       <label>온도 하한 (℃)<input type="number" id="rTempLo" min="-40" max="80" step="0.5"></label>
       <label>습도 상한 (%)<input type="number" id="rHumHi" min="0" max="100"></label>
@@ -301,6 +330,7 @@
     <div class="dtop"><h2 id="dtitle"></h2><span class="sub" id="dsub"></span><button class="close" id="dclose">닫기 ✕</button></div>
     <div id="gtable"></div>
     <div id="bktable"></div>
+    <div id="sectable"></div>
     <h3>CPU / 메모리 추이</h3>
     <div class="legend"><span style="background:#38bdf8"></span>CPU %<span style="background:#a78bfa"></span>메모리 %</div>
     <canvas id="chart"></canvas>
@@ -329,7 +359,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.41.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.42.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -393,13 +423,14 @@ function cardHtml(s) {
   }).join('');
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
-  return `<div class="card ${s.online ? '' : 'off'} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
+  return `<div class="card ${s.online ? '' : 'off'} ${s.sec && s.sec.level === 'crit' ? 'secbad' : ''} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
     <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인',backup:'백업',temp:'온도',hum:'습도',env:'온습도'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : '<span class="badge">오프라인</span>'}<span class="ip">${esc(s.ip || '')}</span></div>
     <div class="hostline">${s.name ? esc(s.host) : '&nbsp;'}</div>
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
     ${disks}
     ${s.backups ? bkStages(s.backups).map(st => `<div class="bk ${st.cls}" title="카드를 클릭하면 상세"><span>💾 ${st.label}</span><span>${esc(st.txt)}${st.cls === 'bad' ? ' ⚠' : ''}</span></div>`).join('') : ''}
+    ${secLine(s)}
     <div class="meta"><span class="os" title="${esc(s.os || '')}">${esc(shortOs(s.os))}</span><span class="uptm">가동 ${fmtUptime(s.uptime)}</span><span class="age">${s.online ? `${s.age}초 전` : `오프라인 (${fmtUptime(s.age)} 전)`}</span></div>
   </div>`;
 }
@@ -593,6 +624,7 @@ async function loadDetail() {
     const bb = document.getElementById('bBkAlert'); if (bb && !typing) bb.onclick = async () => { const off = !(sb.host_rules && sb.host_rules.backup === false); await fetch('api/mute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: selected, rules: { backup: !off } }) }); await refresh(); loadDetail(); };
     drawChart(document.getElementById('chart'), j.history);
   } catch (e) {}
+  loadSecDetail(selected);
 }
 function openDetail(host) {
   selected = host;
@@ -611,9 +643,107 @@ $overlay.addEventListener('click', (e) => { if (e.target === $overlay) closeDeta
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) closeDetail(); });
 window.addEventListener('resize', () => { if (selected) loadDetail(); });
 
+// ---------- 보안 감시 ----------
+const $soverlay = document.getElementById('soverlay');
+const SEV_KO = { crit: '위험', warn: '주의', info: '기록' };
+const CONV_KO = { 0: '사용 안 함', 1: '암호화됨', 2: '암호화 중', 3: '해독 중', 4: '암호화 멈춤', 5: '해독 멈춤' };
+let secShowAll = false;
+function secLine(s) {                                  // 카드 안 한 줄
+  const c = s.sec; if (!c) return '';
+  const st = c.status || {};
+  if (c.level === 'crit') return `<div class="bk bad" title="눌러서 상세 → 보안"><span>🛡 보안 위험 ${c.crit}건</span><span>확인 필요 ⚠</span></div>`;
+  if (c.level === 'warn') return `<div class="bk warn" title="${esc(c.top ? c.top.msg : '')}"><span>🛡 보안 주의 ${c.warn}건</span><span>확인 필요</span></div>`;
+  const issue = st.logs === false ? '보안 로그 못 읽음' : st.audit === false ? '감사 설정 확인' : st.canary && !st.canary.files ? '미끼 없음' : '';
+  return `<div class="bk ${issue ? 'warn' : ''}"><span>🛡 보안</span><span>${issue || '정상'}</span></div>`;
+}
+function renderSecBtn() {
+  const list = servers.filter(s => s.sec), crit = list.reduce((n, s) => n + s.sec.crit, 0), warn = list.reduce((n, s) => n + s.sec.warn, 0);
+  const b = document.getElementById('secBtn'), c = document.getElementById('seccnt');
+  b.classList.toggle('crit', crit > 0); c.hidden = !(crit + warn); c.textContent = crit + warn;
+  b.title = list.length ? `보안 감시 ${list.length}대 · 위험 ${crit} · 주의 ${warn} (확인 안 한 것)` : '보안 감시: 에이전트 1.8.0 이상을 설치하면 나타납니다';
+}
+function blTxt(b) {
+  if (!b) return '-';
+  if (!b.avail) return '<span class="dim">기능 없음</span>';
+  const on = (b.vols || []).filter(v => v.conv > 0);
+  if (!on.length) return '<span class="dim">사용 안 함</span>';
+  return on.map(v => `<span class="${v.conv === 2 || v.conv === 4 ? 'bad' : ''}">${esc(v.m)} ${CONV_KO[v.conv] || v.conv}${v.conv === 2 || v.conv === 3 ? ' ' + v.pct + '%' : ''}</span>`).join(', ');
+}
+function defTxt(d) {
+  if (!d) return '-';
+  if (!d.on) return '<span class="dim" title="V3 같은 다른 백신을 쓰면 정상입니다">꺼짐 (다른 백신?)</span>';
+  return d.rt ? `켜짐${d.sig >= 0 ? ` · 업데이트 ${d.sig}일 전` : ''}` : '<span class="bad">실시간 보호 꺼짐</span>';
+}
+function secStatusCells(h) {
+  const st = h.status || {}, c = st.canary;
+  return {
+    state: h.level === 'crit' ? `<span class="bad">위험 ${h.crit}</span>` : h.level === 'warn' ? `<span class="warn">주의 ${h.warn}</span>` : '<span class="ok">정상</span>',
+    canary: c ? `<span class="${c.ok ? '' : 'bad'}" title="${esc((c.dirs || []).join('\n'))}">${c.ok ? '정상' : '바뀜'} · ${c.files}개 (${(c.dirs || []).length}곳)</span>` : '<span class="dim">안 함</span>',
+    fs: st.fs && st.fs.roots && st.fs.roots.length ? `<span title="${esc(st.fs.roots.join('\n'))}">${esc(st.fs.roots.join(', '))}</span>` : '<span class="dim">안 함</span>',
+    bl: blTxt(st.bitlocker),
+    vss: st.vss == null ? '-' : st.vss + '개',
+    audit: st.logs === false ? '<span class="bad">보안 로그 못 읽음</span>' : st.audit === true ? '적용됨' : st.audit === false ? '<span class="warn" title="도메인 그룹 정책이 막고 있을 수 있습니다">실패</span>' : '-',
+    def: defTxt(st.defender),
+  };
+}
+function secEvRows(list, withHost) {
+  const rows = list.map(e => `<tr class="${e.ack ? 'acked' : ''}"><td class="t">${fmtTime(e.t)}</td><td><span class="sev ${e.sev}">${SEV_KO[e.sev] || e.sev}</span></td>${withHost ? `<td><b>${esc(hostLabel(e.host))}</b></td>` : ''}<td>${esc(e.msg)}${e.ack ? ` <span class="dim">(확인 ${esc(e.ackBy || '')} ${fmtTime(e.ackAt)})</span>` : ''}</td><td>${!e.ack && e.sev !== 'info' ? `<button class="sbtn" data-ack="${esc(e.host)}" data-id="${esc(e.id)}">확인</button>` : ''}</td></tr>`).join('');
+  return rows ? `<table class="ev">${rows}</table>` : '<div class="note">확인할 보안 이벤트가 없습니다.</div>';
+}
+const secFilter = (e) => secShowAll || (!e.ack && e.sev !== 'info');
+async function loadSec() {
+  try {
+    const j = await (await fetch('api/security')).json();
+    const hosts = j.hosts || [];
+    const none = servers.filter(s => !s.sec).map(s => s.name || s.host);
+    let h = `<h3>서버별 상태</h3>`;
+    h += hosts.length ? `<table class="bktbl"><thead><tr><th>서버</th><th>상태</th><th>미끼 파일</th><th>파일 대량 변경 감시</th><th>BitLocker</th><th>섀도 복사본</th><th>감사 설정</th><th>Defender</th><th>마지막 수신</th></tr></thead><tbody>${hosts.map(x => {
+      const c = secStatusCells(x);
+      return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}</td><td>${c.state}</td><td>${c.canary}</td><td>${c.fs}</td><td>${c.bl}</td><td>${c.vss}</td><td>${c.audit}</td><td>${c.def}</td><td>${agoTxt(x.ts)}${agoTxt(x.ts) === '방금' ? '' : ' 전'}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.8.0 을 다시 설치하세요.</div>';
+    if (none.length) h += `<div class="note">보안 감시 안 됨 (에이전트 1.8.0 미만 또는 리눅스·NAS): ${esc(none.join(', '))}</div>`;
+    const evs = hosts.flatMap(x => (x.events || []).map(e => ({ ...e, host: x.host }))).filter(secFilter).sort((a, b) => b.t - a.t).slice(0, 200);
+    const open = hosts.reduce((n, x) => n + x.crit + x.warn, 0);
+    h += `<h3>보안 이벤트 <label class="schk"><input type="checkbox" id="sAll" ${secShowAll ? 'checked' : ''}> 확인한 것·기록(원격 접속 등)도 보기</label>${open ? `<button class="sbtn" id="sAckAll">모두 확인 (${open}건)</button>` : ''}</h3>` + secEvRows(evs, true);
+    h += `<div class="note">위험 = 랜섬웨어·BitLocker·로그 삭제·관리자 추가처럼 바로 봐야 하는 일 (방해 금지 시간에도 텔레그램), 주의 = 새 계정·새 서비스·로그인 실패 폭주 등. 확인을 누르면 카드와 경고 띠에서 빠집니다.</div>`;
+    document.getElementById('sbody').innerHTML = h;
+  } catch (e) { document.getElementById('sbody').innerHTML = `<div class="note">불러오기 실패: ${esc(e.message)}</div>`; }
+}
+async function loadSecDetail(host) {
+  const box = document.getElementById('sectable'); if (!box) return;
+  const s = servers.find(x => x.host === host);
+  if (!s || !s.sec) { box.innerHTML = ''; return; }
+  try {
+    const j = await (await fetch('api/security?host=' + encodeURIComponent(host))).json();
+    const x = (j.hosts || [])[0]; if (!x || selected !== host) return;
+    const c = secStatusCells(x), open = x.crit + x.warn;
+    const evs = (x.events || []).map(e => ({ ...e, host })).filter(secFilter).slice(0, 30);
+    box.innerHTML = `<h3>🛡 보안 ${c.state}${open ? `<button class="sbtn" data-ackall="${esc(host)}">모두 확인 (${open}건)</button>` : ''}<label class="schk"><input type="checkbox" class="sAllD" ${secShowAll ? 'checked' : ''}> 확인한 것·기록도 보기</label></h3>
+      <div class="sstat"><span>미끼 파일 <b>${c.canary}</b></span><span>파일 감시 <b>${c.fs}</b></span><span>BitLocker <b>${c.bl}</b></span><span>섀도 복사본 <b>${c.vss}</b></span><span>감사 설정 <b>${c.audit}</b></span><span>Defender <b>${c.def}</b></span></div>` + secEvRows(evs, false);
+  } catch (e) {}
+}
+async function secAck(host, ids) {
+  try { await fetch('api/security/ack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host, ids }) }); } catch (e) {}
+  await refresh();
+  if (!$soverlay.hidden) loadSec();
+}
+function onSecClick(e) {
+  const b = e.target.closest('[data-ack]'); if (b) { b.disabled = true; secAck(b.dataset.ack, [b.dataset.id]); return; }
+  const a = e.target.closest('[data-ackall]'); if (a) { if (confirm('이 서버의 보안 이벤트를 모두 확인 처리할까요?')) secAck(a.dataset.ackall, 'all'); return; }
+  if (e.target.id === 'sAckAll') { if (confirm('모든 서버의 보안 이벤트를 확인 처리할까요?')) secAck('', 'all'); return; }
+  if (e.target.id === 'sAll' || e.target.classList.contains('sAllD')) { secShowAll = e.target.checked; if (!$soverlay.hidden) loadSec(); if (selected) loadSecDetail(selected); }
+}
+document.getElementById('spanel').addEventListener('click', onSecClick);
+document.getElementById('sectable').addEventListener('click', onSecClick);
+function openSec() { $soverlay.hidden = false; loadSec(); }
+document.getElementById('secBtn').onclick = openSec;
+document.getElementById('sclose').onclick = () => { $soverlay.hidden = true; };
+$soverlay.addEventListener('click', (e) => { if (e.target === $soverlay) $soverlay.hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$soverlay.hidden) $soverlay.hidden = true; });
+
 // ---------- 알림 ----------
 const $aoverlay = document.getElementById('aoverlay');
-const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인', backup: '백업', device: '장비 응답 없음' };
+const RULE_KO = { cpu: 'CPU', mem: '메모리', disk: '디스크', full: '디스크 소진 예상', offline: '오프라인', backup: '백업', device: '장비 응답 없음', security: '보안' };
 // Veeam 백업 요약/표
 const BK_RES = { Success: ['성공', 'ok'], Warning: ['경고', 'warn'], Failed: ['실패', 'bad'], Running: ['실행 중', 'run'], None: ['기록 없음', ''] };
 const ageTxt = (t) => { if (!t) return '없음'; const h = (Date.now() - t) / 3600000; return h < 1 ? '방금' : h < 48 ? Math.round(h) + '시간 전' : Math.round(h / 24) + '일 전'; };
@@ -683,9 +813,11 @@ function hostLabel(h) { const s = servers.find(x => x.host === h); return s && s
 function renderBanner() {
   const $b = document.getElementById('banner'), $c = document.getElementById('bellcnt');
   $c.hidden = !activeAlerts.length; $c.textContent = activeAlerts.length;
-  if (!activeAlerts.length) { $b.hidden = true; return; }
+  const secs = servers.filter(s => s.sec && s.sec.level === 'crit');     // 확인 안 한 보안 위험은 경고 띠에도
+  if (!activeAlerts.length && !secs.length) { $b.hidden = true; return; }
   $b.hidden = false;
-  $b.innerHTML = activeAlerts.map(a => `<span><b>⚠ ${esc(a.name ? `${a.name} (${a.host})` : hostLabel(a.host))}</b> ${esc(a.msg || RULE_KO[a.rule] || a.rule)}</span>`).join('');
+  $b.innerHTML = secs.map(s => `<span data-sec="1"><b>🚨 ${esc(hostLabel(s.host))}</b> 보안 위험 ${s.sec.crit}건${s.sec.top ? ': ' + esc(s.sec.top.msg) : ''}</span>`).join('') +
+    activeAlerts.map(a => `<span><b>⚠ ${esc(a.name ? `${a.name} (${a.host})` : hostLabel(a.host))}</b> ${esc(a.msg || RULE_KO[a.rule] || a.rule)}</span>`).join('');
 }
 
 async function loadAlerts() {
@@ -739,7 +871,7 @@ async function loadSettings() {
   F('aEnabled').checked = c.enabled !== false; F('rCpuOn').checked = c.rules.cpu_on !== false; F('rMemOn').checked = c.rules.mem_on !== false; F('rDiskOn').checked = c.rules.disk_on !== false;
   document.getElementById('bell').classList.toggle('off', c.enabled === false);
   document.getElementById('bell').title = c.enabled === false ? '전체 알림이 꺼져 있습니다' : '알림 설정과 이력';
-  F('rEnvOn').checked = c.rules.env_on !== false; F('rDevOn').checked = c.rules.device_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 28 : c.rules.temp_high;
+  F('rEnvOn').checked = c.rules.env_on !== false; F('rDevOn').checked = c.rules.device_on !== false; F('rSecOn').checked = c.rules.security_on !== false; F('rTempHi').value = c.rules.temp_high == null ? 28 : c.rules.temp_high;
   F('rTempLo').value = c.rules.temp_low == null ? 15 : c.rules.temp_low; F('rHumHi').value = c.rules.hum_high == null ? 80 : c.rules.hum_high;
   F('rHumLo').value = c.rules.hum_low == null ? 20 : c.rules.hum_low; F('rEnvMin').value = c.rules.env_minutes == null ? 3 : c.rules.env_minutes;
   F('qEnabled').checked = !!c.quiet.enabled; F('qFrom').value = c.quiet.from; F('qTo').value = c.quiet.to;
@@ -753,7 +885,7 @@ function collectSettings() {
     enabled: F('aEnabled').checked,
     rules: { cpu: num('rCpu', 80), cpu_minutes: num('rCpuMin', 1), mem: num('rMem', 90), mem_minutes: num('rMemMin', 1), disk: num('rDisk', 90), days_left: num('rDays', 30), offline: F('rOffline').checked, offline_grace: num('rOffGrace', 0), backup_on: F('rBackupOn').checked, backup_max_hours: num('rBackupHours', 26), backup_check_time: F('rBackupTime').value || '', usb_max_hours: num('rUsbHours', 30), usb_window: (F('rUsbFrom').value && F('rUsbTo').value) ? F('rUsbFrom').value + '-' + F('rUsbTo').value : '', backup_skip_weekend: F('rSkipWeekend').checked, backup_hide: F('rBackupHide').value.trim(),
              cpu_on: F('rCpuOn').checked, mem_on: F('rMemOn').checked, disk_on: F('rDiskOn').checked, disk_check_time: F('rDiskTime').value || '',
-             env_on: F('rEnvOn').checked, device_on: F('rDevOn').checked, temp_high: num('rTempHi', 28), temp_low: num('rTempLo', 15), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
+             env_on: F('rEnvOn').checked, device_on: F('rDevOn').checked, security_on: F('rSecOn').checked, temp_high: num('rTempHi', 28), temp_low: num('rTempLo', 15), hum_high: num('rHumHi', 80), hum_low: num('rHumLo', 20), env_minutes: num('rEnvMin', 3) },
     remind_min: num('rRemind', 60), recovery: F('rRecovery').checked,
     quiet: { enabled: F('qEnabled').checked, from: F('qFrom').value || '23:00', to: F('qTo').value || '07:00' },
   };
@@ -809,7 +941,7 @@ document.getElementById('bLogDown').onclick = () => { location.href = 'api/alert
 function openAlerts() { $aoverlay.hidden = false; loadSettings().catch(() => {}); loadAlerts(); }
 function closeAlerts() { $aoverlay.hidden = true; }
 document.getElementById('bell').onclick = openAlerts;
-document.getElementById('banner').onclick = openAlerts;
+document.getElementById('banner').onclick = (e) => { if (e.target.closest('[data-sec]')) openSec(); else openAlerts(); };
 document.getElementById('aclose').onclick = closeAlerts;
 $aoverlay.addEventListener('click', (e) => { if (e.target === $aoverlay) closeAlerts(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$aoverlay.hidden) closeAlerts(); });
@@ -907,7 +1039,8 @@ async function refresh() {
       $vm.hidden = false;
       $vm.textContent = `⚠ 수집기 프로그램이 ${j.version ? 'v' + j.version : '구버전'} 이고 화면 파일은 v${UI_VERSION} 입니다. 예전 수집기 프로세스가 남아 있는 상태입니다. IMS 서버에서 deploy\\setup-collector.cmd 를 다시 실행하세요 (안 되면 작업 관리자에서 node.exe 종료 후 재실행).`;
     } else $vm.hidden = true;
-    render(); renderDevs();
+    render(); renderDevs(); renderSecBtn(); renderBanner();
+    if (!$soverlay.hidden) loadSec();
     if (selected) { loadDetail(); updateActionButtons(); }
   } catch (e) {
     $sum.textContent = '수집 서버에 연결할 수 없습니다: ' + e.message;

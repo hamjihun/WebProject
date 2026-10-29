@@ -152,7 +152,7 @@ async function refresh() {
     const g = {}; for (const s of servers) g[s.host] = grade(s, active);
     const cnt = { ok: 0, warn: 0, bad: 0, off: 0 }; for (const s of servers) cnt[g[s.host]]++;
     document.body.classList.toggle('alarm', cnt.off > 0 || cnt.bad > 0);
-    document.getElementById('chips').innerHTML = `<span class="chip">전체<b>${servers.length}</b></span><span class="chip ok">정상<b>${cnt.ok}</b></span><span class="chip warn">주의<b>${cnt.warn}</b></span><span class="chip bad">위험<b>${cnt.bad}</b></span><span class="chip bad">오프라인<b>${cnt.off}</b></span>` + devChip() + envChips();
+    document.getElementById('chips').innerHTML = `<span class="chip">전체<b>${servers.length}</b></span><span class="chip ok">정상<b>${cnt.ok}</b></span><span class="chip warn">주의<b>${cnt.warn}</b></span><span class="chip bad">위험<b>${cnt.bad}</b></span><span class="chip bad">오프라인<b>${cnt.off}</b></span>` + devChip() + secChip() + envChips();
 
     // 서버실 온습도 (센서 달린 서버만)
     // 에이전트 없는 장비 (Ping·포트): 등록돼 있으면 한 칸, 응답 없는 장비가 있으면 빨갛게
@@ -160,6 +160,12 @@ async function refresh() {
       if (!devs.length) return '';
       const down = devs.filter(d => d.up === false);
       return `<span class="chip ${down.length ? 'bad' : 'ok'}" title="${down.length ? '응답 없음: ' + esc(down.map(d => d.name).join(', ')) : '네트워크 장비 모두 응답'}">장비<b>${devs.filter(d => d.up === true).length}/${devs.length}</b>${down.length ? ` · 응답 없음 ${down.length}` : ''}</span>`;
+    }
+    function secChip() {                           // 보안 감시 (에이전트 1.8.0 이상인 서버만)
+      const list = servers.filter(s => s.sec); if (!list.length) return '';
+      const crit = list.reduce((n, s) => n + s.sec.crit, 0), warn = list.reduce((n, s) => n + s.sec.warn, 0);
+      const bad = list.filter(s => s.sec.level !== 'ok').map(s => s.name || s.host);
+      return `<span class="chip ${crit ? 'bad' : warn ? 'warn' : 'ok'}" title="${bad.length ? '확인 필요: ' + esc(bad.join(', ')) : '보안 이벤트 없음'}">🛡 보안<b>${crit ? '위험 ' + crit : warn ? '주의 ' + warn : '정상'}</b></span>`;
     }
     function envChips() {
       const r = (settings && settings.rules) || {};
