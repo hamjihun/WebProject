@@ -36,7 +36,7 @@ function create({ file, log = console.log }) {
       audit: s.audit === true ? true : s.audit === false ? false : null,
       logs: s.logs !== false,
       canary: c ? { dirs: (Array.isArray(c.dirs) ? c.dirs : []).slice(0, 20).map((x) => str(x, 200)), files: Number(c.files) || 0, ok: c.ok !== false } : null,
-      bitlocker: b ? { avail: !!b.avail, vols: (Array.isArray(b.vols) ? b.vols : []).slice(0, 26).map((v) => ({ m: str(v.m, 4), conv: Number(v.conv), pct: Number(v.pct) || 0, prot: Number(v.prot) || 0, keys: Number(v.keys) || 0 })) } : null,
+      bitlocker: b ? { avail: !!b.avail, guard: b.guard !== false, vols: (Array.isArray(b.vols) ? b.vols : []).slice(0, 26).map((v) => ({ m: str(v.m, 4), conv: Number(v.conv), pct: Number(v.pct) || 0, prot: Number(v.prot) || 0, keys: Number(v.keys) || 0, guarded: !!v.guarded })) } : null,
       vss: s.vss == null ? null : Number(s.vss),
       defender: d ? { on: !!d.on, rt: !!d.rt, sig: Number(d.sig) } : null,
       rdp_known: Number(s.rdp_known) || 0,
@@ -66,6 +66,22 @@ function create({ file, log = console.log }) {
     return fresh;
   }
 
+  // BitLocker 자동 차단이 넣은 복구키 (에이전트의 bl-escrow.json). 같은 번호는 한 번만
+  function ingestKeys(host, list) {
+    if (!Array.isArray(list) || !list.length) return [];
+    const h = db[host] || (db[host] = { ts: Date.now(), status: null, events: [] });
+    if (!Array.isArray(h.keys)) h.keys = [];
+    const have = new Set(h.keys.map((k) => k.pw)), fresh = [];
+    for (const k of list.slice(0, 20)) {
+      const pw = str(k && k.pw, 60);
+      if (!/^\d{6}(-\d{6}){7}$/.test(pw) || have.has(pw)) continue;
+      const item = { m: str(k.m, 4), id: str(k.id, 40), pw, t: Date.parse(k.t) || Date.now(), why: str(k.why, 160), got: Date.now() };
+      have.add(pw); h.keys.unshift(item); fresh.push(item);
+    }
+    if (fresh.length) { h.keys = h.keys.slice(0, 50); save(); }
+    return fresh;
+  }
+  function keys(host) { const h = db[host]; return h && Array.isArray(h.keys) ? h.keys : []; }
   function summary(host) {
     const h = db[host]; if (!h) return null;
     let crit = 0, warn = 0;
@@ -82,7 +98,7 @@ function create({ file, log = console.log }) {
     return n;
   }
   function forget(host) { if (db[host]) { delete db[host]; save(); } }
-  return { ingest, summary, events, ack, forget, hosts: () => Object.keys(db) };
+  return { ingest, ingestKeys, keys, summary, events, ack, forget, hosts: () => Object.keys(db) };
 }
 
 module.exports = { create };

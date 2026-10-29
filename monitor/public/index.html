@@ -139,6 +139,7 @@
   #spanel h2 { margin:0; font-size:18px; } #spanel .sub { color:var(--muted); font-size:12.5px; }
   #spanel h3, #sectable h3 { margin:18px 0 8px; font-size:13px; color:var(--muted); font-weight:600; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   #spanel h3 { border-top:1px solid var(--line); padding-top:14px; }
+  code.bkey { font-size:14px; letter-spacing:.5px; color:var(--text); background:var(--barbg); padding:2px 6px; border-radius:4px; user-select:all; }
   .sev { display:inline-block; border-radius:4px; padding:0 6px; font-size:11px; font-weight:700; white-space:nowrap; }
   .sev.crit { background:var(--bad); color:#fff; } .sev.warn { background:var(--warn); color:#111; } .sev.info { background:var(--barbg); color:var(--muted); font-weight:400; }
   table.ev tr.acked td { opacity:.55; }
@@ -225,7 +226,7 @@
 <div id="devmask" hidden><div id="devbox"></div></div>
 <div id="soverlay" hidden>
   <div id="spanel">
-    <div class="dtop"><h2>🛡 보안 감시</h2><span class="sub">랜섬웨어 · BitLocker · 해킹 의심을 서버마다 1분마다 확인합니다 (에이전트 1.8.0 이상)</span><button class="close" id="sclose">닫기 ✕</button></div>
+    <div class="dtop"><h2>🛡 보안 감시</h2><span class="sub">랜섬웨어 · BitLocker · 해킹 의심을 서버마다 1분마다 확인합니다 (에이전트 1.8.1 이상)</span><button class="close" id="sclose">닫기 ✕</button></div>
     <div id="sbody"></div>
   </div>
 </div>
@@ -359,7 +360,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.42.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.43.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -667,7 +668,7 @@ function blTxt(b) {
   if (!b.avail) return '<span class="dim">기능 없음</span>';
   const on = (b.vols || []).filter(v => v.conv > 0);
   if (!on.length) return '<span class="dim">사용 안 함</span>';
-  return on.map(v => `<span class="${v.conv === 2 || v.conv === 4 ? 'bad' : ''}">${esc(v.m)} ${CONV_KO[v.conv] || v.conv}${v.conv === 2 || v.conv === 3 ? ' ' + v.pct + '%' : ''}</span>`).join(', ');
+  return on.map(v => `<span class="${v.conv === 2 || v.conv === 4 || v.guarded ? 'bad' : ''}">${esc(v.m)} ${CONV_KO[v.conv] || v.conv}${v.conv >= 2 ? ' ' + v.pct + '%' : ''}${v.guarded ? ' · 🔒자동 차단함' : ''}</span>`).join(', ');
 }
 function defTxt(d) {
   if (!d) return '-';
@@ -697,15 +698,17 @@ async function loadSec() {
     const hosts = j.hosts || [];
     const none = servers.filter(s => !s.sec).map(s => s.name || s.host);
     let h = `<h3>서버별 상태</h3>`;
-    h += hosts.length ? `<table class="bktbl"><thead><tr><th>서버</th><th>상태</th><th>미끼 파일</th><th>파일 대량 변경 감시</th><th>BitLocker</th><th>섀도 복사본</th><th>감사 설정</th><th>Defender</th><th>마지막 수신</th></tr></thead><tbody>${hosts.map(x => {
+    h += hosts.length ? `<table class="bktbl"><thead><tr><th>서버</th><th>상태</th><th>미끼 파일</th><th>파일 대량 변경 감시</th><th>BitLocker</th><th title="암호화가 시작되면 바로 멈추고 복구키를 추가해 보관합니다">BitLocker 자동 차단</th><th>섀도 복사본</th><th>감사 설정</th><th>Defender</th><th>마지막 수신</th></tr></thead><tbody>${hosts.map(x => {
       const c = secStatusCells(x);
-      return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}</td><td>${c.state}</td><td>${c.canary}</td><td>${c.fs}</td><td>${c.bl}</td><td>${c.vss}</td><td>${c.audit}</td><td>${c.def}</td><td>${agoTxt(x.ts)}${agoTxt(x.ts) === '방금' ? '' : ' 전'}</td></tr>`;
-    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.8.0 을 다시 설치하세요.</div>';
+      return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}</td><td>${c.state}</td><td>${c.canary}</td><td>${c.fs}</td><td>${c.bl}</td><td><button class="sbtn" data-guard="${esc(x.host)}" data-v="${x.bl_guard ? '0' : '1'}" title="${x.bl_guard ? '누르면 끔 — 이 서버에서 직접 BitLocker 를 켤 때만 끄세요' : '누르면 켬'}">${x.bl_guard ? '<span class="ok">● 켜짐</span>' : '<span class="dim">○ 꺼짐</span>'}</button></td><td>${c.vss}</td><td>${c.audit}</td><td>${c.def}</td><td>${agoTxt(x.ts)}${agoTxt(x.ts) === '방금' ? '' : ' 전'}</td></tr>`;
+    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.8.1 을 다시 설치하세요.</div>';
+    const keys = hosts.flatMap(x => (x.keys || []).map(k => ({ ...k, host: x.host })));
+    if (keys.length) h += `<h3>🔑 BitLocker 복구키 보관함 <span class="dim" style="font-weight:400">자동 차단이 넣은 키입니다. 드라이브가 잠기면 이 번호(48자리)로 엽니다 — 종이에 적거나 다른 곳에도 보관하세요</span></h3><table class="ev">${keys.map(k => `<tr><td class="t">${fmtTime(k.t)}</td><td><b>${esc(hostLabel(k.host))}</b> ${esc(k.m)}</td><td>${k.pw ? `<code class="bkey" hidden>${esc(k.pw)}</code><button class="sbtn" data-showkey="1">번호 보기</button>` : '<span class="dim">번호는 관리자만 볼 수 있습니다</span>'} <span class="dim">키 ID ${esc(k.id || '-')}</span></td><td class="dim">${esc(k.why || '')}</td></tr>`).join('')}</table>`;
     if (none.length) h += `<div class="note">보안 감시 안 됨 (에이전트 1.8.0 미만 또는 리눅스·NAS): ${esc(none.join(', '))}</div>`;
     const evs = hosts.flatMap(x => (x.events || []).map(e => ({ ...e, host: x.host }))).filter(secFilter).sort((a, b) => b.t - a.t).slice(0, 200);
     const open = hosts.reduce((n, x) => n + x.crit + x.warn, 0);
     h += `<h3>보안 이벤트 <label class="schk"><input type="checkbox" id="sAll" ${secShowAll ? 'checked' : ''}> 확인한 것·기록(원격 접속 등)도 보기</label>${open ? `<button class="sbtn" id="sAckAll">모두 확인 (${open}건)</button>` : ''}</h3>` + secEvRows(evs, true);
-    h += `<div class="note">위험 = 랜섬웨어·BitLocker·로그 삭제·관리자 추가처럼 바로 봐야 하는 일 (방해 금지 시간에도 텔레그램), 주의 = 새 계정·새 서비스·로그인 실패 폭주 등. 확인을 누르면 카드와 경고 띠에서 빠집니다.</div>`;
+    h += `<div class="note">BitLocker 자동 차단: 암호화가 시작되면 1분 안에 멈추고(-pause) 복구키를 추가해 여기와 텔레그램에 보관하며, 걸려 있는 재부팅 예약을 취소합니다. 그래도 <b>서버를 끄거나 재부팅하지 말고</b> 바로 확인하세요.</div><div class="note">위험 = 랜섬웨어·BitLocker·로그 삭제·관리자 추가처럼 바로 봐야 하는 일 (방해 금지 시간에도 텔레그램), 주의 = 새 계정·새 서비스·로그인 실패 폭주 등. 확인을 누르면 카드와 경고 띠에서 빠집니다.</div>`;
     document.getElementById('sbody').innerHTML = h;
   } catch (e) { document.getElementById('sbody').innerHTML = `<div class="note">불러오기 실패: ${esc(e.message)}</div>`; }
 }
@@ -730,6 +733,15 @@ async function secAck(host, ids) {
 function onSecClick(e) {
   const b = e.target.closest('[data-ack]'); if (b) { b.disabled = true; secAck(b.dataset.ack, [b.dataset.id]); return; }
   const a = e.target.closest('[data-ackall]'); if (a) { if (confirm('이 서버의 보안 이벤트를 모두 확인 처리할까요?')) secAck(a.dataset.ackall, 'all'); return; }
+  const sk = e.target.closest('[data-showkey]'); if (sk) { const c = sk.parentElement.querySelector('.bkey'); c.hidden = !c.hidden; sk.textContent = c.hidden ? '번호 보기' : '숨기기'; return; }
+  const g = e.target.closest('[data-guard]');
+  if (g) {
+    const on = g.dataset.v === '1';
+    if (!on && !confirm('이 서버의 BitLocker 자동 차단을 끌까요?\n직접 BitLocker 를 켜려는 경우에만 끄고, 다 끝나면 다시 켜세요.')) return;
+    g.disabled = true;
+    fetch('api/hostconf', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: g.dataset.guard, bl_guard: on }) }).then(() => loadSec()).catch(() => loadSec());
+    return;
+  }
   if (e.target.id === 'sAckAll') { if (confirm('모든 서버의 보안 이벤트를 확인 처리할까요?')) secAck('', 'all'); return; }
   if (e.target.id === 'sAll' || e.target.classList.contains('sAllD')) { secShowAll = e.target.checked; if (!$soverlay.hidden) loadSec(); if (selected) loadSecDetail(selected); }
 }

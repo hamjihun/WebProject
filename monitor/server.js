@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.42.0';
+const VERSION = '1.43.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -414,6 +414,8 @@ function ingest(raw, remoteIp) {
       for (const e of fresh) if (e.sev !== 'info') console.log(`[${new Date().toLocaleTimeString()}] [보안] ${m.name || m.host}: ${e.sev === 'crit' ? '위험' : '주의'} ${e.msg}`);
       alerter.securityEvents(m.host, m.name, fresh.filter((e) => Date.now() - e.t < 30 * 60000));
     }
+    const nk = secmon.ingestKeys(m.host, raw.security.escrow);       // BitLocker 자동 차단이 넣은 복구키
+    if (nk.length) { console.log(`[${new Date().toLocaleTimeString()}] [보안] ${m.name || m.host}: BitLocker 복구키 보관 ${nk.map((k) => k.m).join(', ')}`); alerter.securityKeys(m.host, m.name, nk); }
   }
   return m;
 }
@@ -760,7 +762,7 @@ const server = http.createServer(async (req, res) => {
       }
       const m = ingest(raw, remoteIp);
       console.log(`[${new Date().toLocaleTimeString()}] ${m.host} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}%`);
-      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || '') } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
+      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || ''), bl_guard: alerter.blGuard(m.host) ? '1' : '0' } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
     } catch (e) {
       return json(res, 400, { ok: false, error: String(e.message || e) });
     }
@@ -786,7 +788,7 @@ const server = http.createServer(async (req, res) => {
       const raw = JSON.parse((await readBody(req)) || '{}');
       const host = String(raw.host || '').trim();
       if (!host || !store.has(host)) return json(res, 404, { ok: false, error: 'unknown host' });
-      const conf = alerter.setHostConf(host, { usb_paths: raw.usb_paths });
+      const conf = alerter.setHostConf(host, { usb_paths: raw.usb_paths, bl_guard: raw.bl_guard });
       console.log(`[${new Date().toLocaleTimeString()}] 서버별 설정: ${host} ${JSON.stringify(conf)}`);
       return json(res, 200, { ok: true, host, conf });
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
@@ -925,7 +927,8 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET') {
         const one = url.searchParams.get('host');
         const hosts = serversView().filter((s) => s.sec && (!one || s.host === one))
-          .map((s) => ({ host: s.host, name: s.name || '', online: s.online, ...s.sec, events: secmon.events(s.host, one ? 200 : 60) }));
+          .map((s) => ({ host: s.host, name: s.name || '', online: s.online, ...s.sec, events: secmon.events(s.host, one ? 200 : 60), bl_guard: alerter.blGuard(s.host),
+            keys: secmon.keys(s.host).map((k) => (me && me.admin ? k : { m: k.m, id: k.id, t: k.t, why: k.why })) }));   // 복구키 번호는 관리자에게만
         return json(res, 200, { ok: true, hosts });
       }
       if (req.method === 'POST' && url.pathname === '/api/security/ack') {

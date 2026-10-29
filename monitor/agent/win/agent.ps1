@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.8.0"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.8.1"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -279,6 +279,13 @@ while ($true) {
           if (((Get-Date) - $wt).TotalMinutes -lt 15) { $security = $secCache }
         }
       } catch {}
+      try {                                         # BitLocker 자동 차단 때 넣은 복구키 (수집기에 보관)
+        $escF = Join-Path $DataDir "bl-escrow.json"
+        if ($security -and (Test-Path $escF)) {
+          $esc = @((Get-Content $escF -Raw -Encoding UTF8 | ConvertFrom-Json).items | Where-Object { $_ })
+          if ($esc.Count) { $sec3 = New-Object PSObject; foreach ($pp in $security.PSObject.Properties) { $sec3 | Add-Member NoteProperty $pp.Name $pp.Value }; $sec3 | Add-Member NoteProperty escrow $esc -Force; $security = $sec3 }
+        }
+      } catch {}
       try {
         if (Get-Command Step-FsWatch -ErrorAction SilentlyContinue) {
           Step-FsWatch
@@ -309,7 +316,7 @@ while ($true) {
 
     $resp = Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
       -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5
-    try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)`r`nUSB_PATHS=$($resp.agent.usb_paths)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
+    try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)`r`nUSB_PATHS=$($resp.agent.usb_paths)`r`nBL_GUARD=$($resp.agent.bl_guard)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
     $sendSec = $sw.Elapsed.TotalSeconds - $collectSec
     if ($collectSec -ge 30 -or $sendSec -ge 3) {
       # 수집이 오래 걸리면 서버가 그 시간에 매우 느렸다는 뜻 (백업/메모리 부족). 어느 단계가 느렸는지 남긴다

@@ -30,6 +30,7 @@ const DEFAULTS = {
     env_minutes: 3,                             // 이 시간 이상 지속되면 알림 (순간 튀는 값 무시)
     device_on: true,                            // 에이전트 없는 장비(Ping·포트) 응답 없음 알림
     security_on: true,                          // 보안 이벤트 알림 (랜섬웨어·BitLocker·해킹 의심). 위험은 조용한 시간에도 보냄
+    bl_guard: true,                             // BitLocker 자동 차단 기본값 (암호화 멈춤 + 복구키 보관). 서버별로 hostConf.bl_guard=false 로 끔
   },
   muted: {},                       // 서버별 알림 전체 끄기 { 호스트명: true }
   hostRules: {},                   // 서버별 규칙 끄기 { 호스트명: { cpu:false, mem:false, disk:false, offline:false } }
@@ -67,7 +68,7 @@ function create({ settingsFile, logDir, log = console.log }) {
     const d = new Date(ev.time);
     const label = ev.name ? `${ev.name} (${ev.host})` : ev.host;
     const deliv = DELIV_KO[ev.delivery] !== undefined ? DELIV_KO[ev.delivery] : ev.delivery;
-    const line = `[${fmtTs(d)}] ${KIND_KO[ev.kind] || ev.kind}\t${label}\t${ev.msg}\t${deliv}${ev.error ? ': ' + ev.error : ''}\r\n`;
+    const line = `[${fmtTs(d)}] ${KIND_KO[ev.kind] || ev.kind}\t${label}\t${String(ev.msg).replace(/\r?\n/g, " / ")}\t${deliv}${ev.error ? ': ' + ev.error : ''}\r\n`;
     try {
       fs.mkdirSync(logDir, { recursive: true });
       const file = logFileFor(monthKey(d));
@@ -403,10 +404,21 @@ function create({ settingsFile, logDir, log = console.log }) {
     }
   }
 
+  // BitLocker 자동 차단이 넣은 복구키: 수집기 서버까지 잠기는 경우를 대비해 텔레그램에도 남긴다 (보안 알림을 꺼도 보냄)
+  function securityKeys(host, name, keys) {
+    for (const k of keys || []) {
+      // 화면 알림 이력에는 번호를 빼고(관리자만 🛡 보안 창에서 봄), 텔레그램과 알림 로그 파일(data/)에만 번호를 남긴다
+      const ev = push({ kind: 'alert', host, name, rule: 'security', sev: 'crit', msg: `🔑 BitLocker 복구키 보관 (${k.m}) — 번호는 텔레그램과 🛡 보안 창(관리자)에서 확인` });
+      const full = { ...ev, msg: `🔑 BitLocker 복구키 보관 (${k.m}) — 잠기면 이 번호로 엽니다\n${k.pw}\n키 ID ${k.id || '-'}` };
+      deliver(full, true).then(() => { ev.delivery = full.delivery; ev.error = full.error; });
+    }
+  }
+
   return {
     evaluate,
     evaluateDevices,
     securityEvents,
+    securityKeys,
     forget(host) {
       for (const key of [...states.keys()]) if (key.split('|')[0] === host) states.delete(key);
       let changed = false;
@@ -420,6 +432,7 @@ function create({ settingsFile, logDir, log = console.log }) {
     isMuted(host) { return !!(settings.muted && settings.muted[host]); },
     getHostRules(host) { return (settings.hostRules && settings.hostRules[host]) || {}; },
     getHostConf(host) { return (settings.hostConf && settings.hostConf[host]) || {}; },
+    blGuard(host) { const c = (settings.hostConf && settings.hostConf[host]) || {}; return typeof c.bl_guard === 'boolean' ? c.bl_guard : settings.rules.bl_guard !== false; },
     // 서버별로 화면·알림에서 뺄 디스크 (예: 가상화 호스트에 보이는 백업용 데이터스토어)
     // 드라이브 증가량 초기화 (자료를 크게 옮긴 뒤 "1일 후 가득" 같은 잘못된 예상을 지우고 새로 지켜보기)
     getGrowthBase(host) { return (settings.growthBase && settings.growthBase[host]) || {}; },
@@ -450,6 +463,7 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (!settings.hostConf) settings.hostConf = {};
       const cur = { ...(settings.hostConf[host] || {}) };
       if (conf && typeof conf.usb_paths === 'string') { const v = conf.usb_paths.trim().slice(0, 500); if (v) cur.usb_paths = v; else delete cur.usb_paths; }
+      if (conf && typeof conf.bl_guard === 'boolean') cur.bl_guard = conf.bl_guard;
       if (Object.keys(cur).length) settings.hostConf[host] = cur; else delete settings.hostConf[host];
       for (const key of [...states.keys()]) if (key.startsWith(`${host}|backup|usb`)) states.delete(key);   // 경로가 바뀌면 이전 USB 알림 상태는 버림
       saveSettings();

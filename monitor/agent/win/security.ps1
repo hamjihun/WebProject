@@ -6,7 +6,7 @@
 # agent.conf: SEC_CANARY=D:\공유;E:\자료 (미끼 폴더를 만들 곳, 0 = 안 만듦) · SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.8.0'
+$Ver = '1.8.1'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'
@@ -26,9 +26,10 @@ try { if (Test-Path $StFile) { $st = Get-Content $StFile -Raw -Encoding UTF8 | C
 function P($o, $k) { if ($o -and ($o.PSObject.Properties.Name -contains $k)) { return $o.$k }; return $null }
 $first = -not $st
 $S = @{ ids = @(P $st 'ids'); rdp = @(P $st 'rdp' | Where-Object { $_ }); events = @(P $st 'events' | Where-Object { $_ }); fails = @(P $st 'fails' | Where-Object { $_ })
-        auditDay = [string](P $st 'auditDay'); auditOk = (P $st 'auditOk'); blAvail = (P $st 'blAvail'); vss = (P $st 'vss'); failAt = [string](P $st 'failAt'); canary = @{}; bl = @{} }
+        auditDay = [string](P $st 'auditDay'); auditOk = (P $st 'auditOk'); blAvail = (P $st 'blAvail'); vss = (P $st 'vss'); failAt = [string](P $st 'failAt'); guardAt = [string](P $st 'guardAt'); canary = @{}; bl = @{}; guard = @{} }
 $c = P $st 'canary'; if ($c) { foreach ($p in $c.PSObject.Properties) { $S.canary[$p.Name] = [string]$p.Value } }
 $c = P $st 'bl'; if ($c) { foreach ($p in $c.PSObject.Properties) { $S.bl[$p.Name] = [string]$p.Value } }
+$c = P $st 'guard'; if ($c) { foreach ($p in $c.PSObject.Properties) { $S.guard[$p.Name] = [string]$p.Value } }
 
 $now = Get-Date
 $lastExact = $now.AddMinutes(-3)                       # 처음이면 3분 전부터
@@ -152,12 +153,14 @@ $Bad = @(
   @('net1?(\.exe)?"?\s+localgroup\s+"?administrators"?\s+.*/add', 'crit', 'account', '관리자 그룹 추가 명령'),
   @('net1?(\.exe)?"?\s+user\s+\S+\s+\S+.*/add', 'warn', 'account', '계정 만들기 명령')
 )
+$blCmd = $false; $guardT = $null; try { $guardT = [datetime]::Parse($S.guardAt) } catch {}
 foreach ($e in @(Q 'Security' @(4688) 8000 | Where-Object { $_.TimeCreated -gt $lastExact })) {
-  $img = ''; $cmd = ''; $who = ''
-  try { $who = [string]$e.Properties[1].Value; $img = [string]$e.Properties[5].Value; $cmd = [string]$e.Properties[8].Value } catch {}
+  $img = ''; $cmd = ''; $who = ''; $sid = ''
+  try { $sid = [string]$e.Properties[0].Value; $who = [string]$e.Properties[1].Value; $img = [string]$e.Properties[5].Value; $cmd = [string]$e.Properties[8].Value } catch {}
+  if ($guardT -and $sid -eq 'S-1-5-18' -and $img -match '\\manage-bde\.exe$' -and [math]::Abs(($e.TimeCreated - $guardT).TotalMinutes) -lt 3) { continue }   # 자동 차단이 실행한 명령
   if ($img -notmatch '\\(vssadmin|wmic|wbadmin|bcdedit|manage-bde|cipher|wevtutil|powershell|pwsh|cmd|net1?|dism)\.exe$') { continue }
   $txt = "$cmd"; if (-not $txt) { continue }
-  foreach ($b in $Bad) { if ($txt -match $b[0]) { Add-Ev "S:$($e.RecordId)" $b[1] $b[2] "$($b[3]): $(Cut $txt 220) (계정 $who)" $e.TimeCreated; break } }
+  foreach ($b in $Bad) { if ($txt -match $b[0]) { Add-Ev "S:$($e.RecordId)" $b[1] $b[2] "$($b[3]): $(Cut $txt 220) (계정 $who)" $e.TimeCreated; if ($b[2] -eq 'bitlocker') { $blCmd = $true }; break } }
 }
 
 # ---- 시스템 로그: 새 서비스, 로그 지우기 ----
@@ -232,25 +235,79 @@ foreach ($dir in $roots) {
 foreach ($k in @($S.canary.Keys)) { $keep = $false; foreach ($dir in $roots) { if ($k.StartsWith($dir + '\', [StringComparison]::OrdinalIgnoreCase)) { $keep = $true } }; if (-not $keep) { $S.canary.Remove($k) } }
 
 # ---- BitLocker ----
-# 평소 안 쓰는 서버에서 암호화가 시작되거나 키(암호)가 추가되면 BitLocker 랜섬웨어 의심
+# 평소 안 쓰는 서버에서 암호화가 시작되거나 키(암호)가 추가되면 BitLocker 랜섬웨어 의심.
+# 자동 차단(기본 켬, 서버 현황 → 🛡 보안 에서 서버별로 끔 · agent.conf SEC_BL_GUARD=0/1 이 우선):
+#   암호화를 멈추고(manage-bde -pause) 우리 복구키를 추가해 bl-escrow.json(SYSTEM·관리자만 읽기) → 수집기에 보관,
+#   공격자가 걸어 둔 재부팅 예약은 취소(shutdown /a). 이후에도 1분마다 다시 시작되거나 우리 키가 지워지면 또 막는다.
+$rc = @{}; $rcPath = Join-Path $DataDir 'remote.conf'
+if (Test-Path $rcPath) { foreach ($line in Get-Content $rcPath) { if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$') { $rc[$matches[1].ToUpper()] = $matches[2] } } }
+$Guard = $rc['BL_GUARD'] -ne '0'
+if ($conf['SEC_BL_GUARD'] -eq '0') { $Guard = $false } elseif ($conf['SEC_BL_GUARD'] -eq '1') { $Guard = $true }
+$EscFile = Join-Path $DataDir 'bl-escrow.json'
+function RecIds([string]$m) {
+  try { $o = (& manage-bde.exe -protectors -get $m -Type RecoveryPassword 2>&1 | Out-String); return @([regex]::Matches($o, '\{[0-9A-Fa-f-]{36}\}') | ForEach-Object { $_.Value.ToUpper() } | Select-Object -Unique) } catch { return @() }
+}
+function Save-Escrow($item) {
+  $list = @(); try { if (Test-Path $EscFile) { $list = @((Get-Content $EscFile -Raw -Encoding UTF8 | ConvertFrom-Json).items | Where-Object { $_ }) } } catch {}
+  $list = @(, $item) + @($list | Select-Object -First 19)
+  try { @{ items = $list } | ConvertTo-Json -Depth 4 -Compress | Set-Content -Path $EscFile -Encoding UTF8 } catch {}
+  try { & icacls.exe $EscFile /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' 2>&1 | Out-Null } catch {}
+}
+function Guard-Volume([string]$m, [int]$conv, [string]$why) {
+  $done = @(); $script:S.guardAt = Iso (Get-Date)
+  if ($conv -eq 2) { & manage-bde.exe -pause $m 2>&1 | Out-Null; $done += $(if ($LASTEXITCODE -eq 0) { '암호화 멈춤' } else { '멈추기 실패' }) }
+  $have = @(RecIds $m); $mine = [string]$S.guard[$m]
+  if (-not $mine -or $have -notcontains $mine) {
+    $o = (& manage-bde.exe -protectors -add $m -RecoveryPassword 2>&1 | Out-String)
+    $pw = [regex]::Match($o, '\d{6}(-\d{6}){7}').Value
+    $new = [string](@(RecIds $m | Where-Object { $have -notcontains $_ }) | Select-Object -First 1)
+    if ($pw) { $S.guard[$m] = $new; Save-Escrow ([ordered]@{ m = $m; id = $new; pw = $pw; t = (Iso (Get-Date)); why = (Cut $why 120) }); $done += '복구키 추가·보관' }
+    else { $done += "복구키 추가 실패 ($(Cut $o 100))" }
+  }
+  & shutdown.exe /a 2>&1 | Out-Null                    # 재부팅 예약 취소 (예약이 없으면 아무 일 없음)
+  Log "BitLocker 자동 차단 $m : $($done -join ', ') ($why)"
+  return ($done -join ', ')
+}
 $blAvail = $false; $vols = @()
 try { $vols = @(Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -ErrorAction Stop); $blAvail = $true } catch {}
 if ($blAvail -and $S.blAvail -eq $false) { Add-Ev "B:avail:$($now.ToString('yyyyMMddHHmm'))" 'warn' 'bitlocker' 'BitLocker 기능이 새로 생겼습니다 — 설치한 적이 없다면 확인하세요' }
+function Read-Vol($v) {
+  $r = @{ conv = -1; pct = 0; keys = 0; prot = 0 }
+  try { $v2 = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -Filter "DeviceID='$($v.DeviceID -replace '\\', '\\')'" -ErrorAction Stop; if ($v2) { $v = $v2 } } catch {}
+  $r.prot = [int]$v.ProtectionStatus
+  try { $cs = Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop; $r.conv = [int]$cs.ConversionStatus; $r.pct = [int]$cs.EncryptionPercentage } catch {}
+  try { $kp = Invoke-CimMethod -InputObject $v -MethodName GetKeyProtectors -Arguments @{ KeyProtectorType = [uint32]0 } -ErrorAction Stop; $r.keys = @($kp.VolumeKeyProtectorID | Where-Object { $_ }).Count } catch {}
+  return $r
+}
 $bl = @()
 foreach ($v in $vols) {
   $m = [string]$v.DriveLetter; if (-not $m) { continue }
-  $conv = -1; $pct = 0; $keys = 0; $prot = [int]$v.ProtectionStatus
-  try { $cs = Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop; $conv = [int]$cs.ConversionStatus; $pct = [int]$cs.EncryptionPercentage } catch {}
-  try { $kp = Invoke-CimMethod -InputObject $v -MethodName GetKeyProtectors -Arguments @{ KeyProtectorType = [uint32]0 } -ErrorAction Stop; $keys = @($kp.VolumeKeyProtectorID | Where-Object { $_ }).Count } catch {}
-  $bl += [ordered]@{ m = $m; conv = $conv; pct = $pct; prot = $prot; keys = $keys }
+  $x = Read-Vol $v
   $prev = $S.bl[$m]
+  if (-not $prev -and $S.blAvail -eq $false) { $prev = '0|0|0' }          # 기능이 막 생긴 서버: 예전엔 암호화 안 된 것으로 본다
+  if (-not $prev -and $blCmd -and @(1, 2, 4) -contains $x.conv) { $prev = '0|0|0' }   # 이번에 BitLocker 명령을 봤는데 처음 보는 볼륨이 암호화 중
   if ($prev) {
     $pv = $prev -split '\|'; $pc = [int]$pv[0]; $pk = [int]$pv[1]; $pp = [int]$pv[2]
-    if ($pc -eq 0 -and @(1, 2, 4) -contains $conv) { Add-Ev "B:$($m):enc:$($now.ToString('yyyyMMddHHmm'))" 'crit' 'bitlocker' "BitLocker 암호화가 시작됐습니다: $m ($pct%) — 직접 켠 게 아니면 BitLocker 랜섬웨어 의심, 즉시 확인" }
-    elseif ($keys -gt $pk) { Add-Ev "B:$($m):key:$($now.ToString('yyyyMMddHHmm'))" 'crit' 'bitlocker' "BitLocker 키(암호)가 추가됐습니다: $m ($pk → $keys개)" }
-    elseif ($pp -eq 0 -and $prot -eq 1) { Add-Ev "B:$($m):prot:$($now.ToString('yyyyMMddHHmm'))" 'warn' 'bitlocker' "BitLocker 보호가 켜졌습니다: $m" }
+    $mine = [string]$S.guard[$m]
+    $started = $pc -eq 0 -and @(1, 2, 4) -contains $x.conv
+    $resumed = $Guard -and $mine -and $x.conv -eq 2
+    $lost = $Guard -and $mine -and $x.conv -ne 0 -and (@(RecIds $m) -notcontains $mine)
+    $keyAdd = $x.keys -gt $pk -and $x.conv -ne 0
+    if ($started -or $resumed -or $lost -or $keyAdd) {
+      $what = $(if ($started) { "BitLocker 암호화가 시작됐습니다: $m ($($x.pct)%)" } elseif ($lost) { "자동으로 넣어 둔 복구키가 지워졌습니다: $m — 공격이 계속되는 중일 수 있음" } elseif ($resumed) { "멈춘 BitLocker 암호화가 다시 시작됐습니다: $m ($($x.pct)%)" } else { "BitLocker 키(암호)가 추가됐습니다: $m ($pk → $($x.keys)개)" })
+      $evid = "B:$($m):$(if ($started) { 'enc' } elseif ($lost) { 'lost' } elseif ($resumed) { 'resume' } else { 'key' }):$($now.ToString('yyyyMMddHHmmss'))"
+      if ($Guard) {
+        $res = Guard-Volume $m $x.conv $what
+        Add-Ev $evid 'crit' 'bitlocker' "$what → 자동 차단: $res. 서버를 끄거나 재부팅하지 말고 바로 확인하세요 (복구키는 🛡 보안 창에 보관)"
+        $x = Read-Vol $v                                                       # 우리가 넣은 키 때문에 다음에 "키 추가" 알림이 나지 않게 다시 읽는다
+      } else {
+        Add-Ev $evid 'crit' 'bitlocker' "$what — 직접 켠 게 아니면 BitLocker 랜섬웨어 의심, 즉시 확인 (이 서버는 자동 차단 꺼짐)"
+      }
+    } elseif ($pp -eq 0 -and $x.prot -eq 1) { Add-Ev "B:$($m):prot:$($now.ToString('yyyyMMddHHmm'))" 'warn' 'bitlocker' "BitLocker 보호가 켜졌습니다: $m" }
   }
-  $S.bl[$m] = "$conv|$keys|$prot"
+  if ($x.conv -eq 0 -and $S.guard.ContainsKey($m)) { $S.guard.Remove($m) }    # 해독이 끝나면 잊는다
+  $bl += [ordered]@{ m = $m; conv = $x.conv; pct = $x.pct; prot = $x.prot; keys = $x.keys; guarded = [bool]$S.guard[$m] }
+  $S.bl[$m] = "$($x.conv)|$($x.keys)|$($x.prot)"
 }
 $S.blAvail = $blAvail
 
@@ -267,12 +324,12 @@ $all = @(@($New) + @($S.events) | Where-Object { $_ -and $_.t } | Where-Object {
 foreach ($e in $New) { Log "$($e.sev) $($e.msg)" }
 $ids = @(@($New | ForEach-Object { $_.id }) + @($S.ids | Where-Object { $_ }) | Select-Object -First 600)
 $state = [ordered]@{ last = $now.ToString('o'); ids = $ids; rdp = @($S.rdp); events = $all; fails = @($S.fails); failAt = $S.failAt
-  auditDay = $S.auditDay; auditOk = $S.auditOk; blAvail = $S.blAvail; vss = $S.vss; canary = $S.canary; bl = $S.bl }
+  auditDay = $S.auditDay; auditOk = $S.auditOk; blAvail = $S.blAvail; vss = $S.vss; canary = $S.canary; bl = $S.bl; guard = $S.guard; guardAt = $S.guardAt }
 try { $state | ConvertTo-Json -Depth 5 -Compress | Set-Content -Path $StFile -Encoding UTF8 } catch {}
 $o = [ordered]@{
   time = (Iso $now); ver = $Ver
   status = [ordered]@{ audit = $S.auditOk; logs = $secReadable; canary = [ordered]@{ dirs = @($roots); files = $canaryN; ok = $canaryOk }
-    bitlocker = [ordered]@{ avail = $blAvail; vols = @($bl) }; vss = $vss; defender = $def; rdp_known = @($S.rdp).Count }
+    bitlocker = [ordered]@{ avail = $blAvail; guard = $Guard; vols = @($bl) }; vss = $vss; defender = $def; rdp_known = @($S.rdp).Count }
   events = $all
 }
 try { $o | ConvertTo-Json -Depth 6 -Compress | Set-Content -Path $Out -Encoding UTF8 } catch {}
