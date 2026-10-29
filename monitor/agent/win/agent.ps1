@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.8.1"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.8.2"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -207,6 +207,20 @@ if ($HasSec) {
   Log "보안 감시 시작: 이벤트 로그·미끼 파일·BitLocker 를 1분마다 확인합니다"
   try { . (Join-Path $Dir "fswatch.ps1"); Start-FsWatch $BackupPaths } catch { Log "파일 감시 불러오기 실패: $($_.Exception.Message)" }
 }
+# 스스로 지키기: 에이전트·감시자 작업을 기억해 두고, 누가 끄거나 지우면 1분 안에 되살리며 보안 경고를 보낸다
+$TaskXml = @{}; $guardChk = Get-Date
+foreach ($tn in @('IMSMonitoringAgent', 'IMSMonitoringAgentWatchdog')) { try { $TaskXml[$tn] = [string](Export-ScheduledTask -TaskName $tn -ErrorAction Stop) } catch {} }
+function Protect-Tasks {
+  foreach ($tn in @($TaskXml.Keys)) {
+    try {
+      $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+      if (-not $t) { Register-ScheduledTask -TaskName $tn -Xml $TaskXml[$tn] -Force -ErrorAction Stop | Out-Null; $m = "모니터링 작업 '$tn' 이 지워져 다시 만들었습니다 — 누군가 에이전트를 끄려 한 것일 수 있음" }
+      elseif ($t.State -eq 'Disabled') { Enable-ScheduledTask -TaskName $tn -ErrorAction Stop | Out-Null; $m = "모니터링 작업 '$tn' 이 꺼져 있어 다시 켰습니다 — 누군가 에이전트를 끄려 한 것일 수 있음" }
+      else { continue }
+      Log $m; if (Get-Command Add-FsEv -ErrorAction SilentlyContinue) { Add-FsEv 'crit' $m 'tamper' }
+    } catch { Log "작업 확인 실패 ($tn): $($_.Exception.Message)" }
+  }
+}
 Get-CpuPercent | Out-Null   # 첫 샘플
 
 while ($true) {
@@ -267,6 +281,7 @@ while ($true) {
       } catch {}
     }
     $security = $null
+    if ($HasSec -and ((Get-Date) - $guardChk).TotalSeconds -ge 60) { $guardChk = Get-Date; Protect-Tasks; $remoteCache = '' }   # remote.conf 도 1분마다 다시 씀 (누가 고쳐도 되돌림)
     if ($HasSec) {
       if ((-not $secProc -or $secProc.HasExited) -and ((Get-Date) - $secLast).TotalSeconds -ge 60) {
         $secLast = Get-Date

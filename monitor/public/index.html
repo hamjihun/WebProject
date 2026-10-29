@@ -226,7 +226,7 @@
 <div id="devmask" hidden><div id="devbox"></div></div>
 <div id="soverlay" hidden>
   <div id="spanel">
-    <div class="dtop"><h2>🛡 보안 감시</h2><span class="sub">랜섬웨어 · BitLocker · 해킹 의심을 서버마다 1분마다 확인합니다 (에이전트 1.8.1 이상)</span><button class="close" id="sclose">닫기 ✕</button></div>
+    <div class="dtop"><h2>🛡 보안 감시</h2><span class="sub">랜섬웨어 · BitLocker · 해킹 의심을 서버마다 1분마다 확인합니다 (에이전트 1.8.2 이상)</span><button class="close" id="sclose">닫기 ✕</button></div>
     <div id="sbody"></div>
   </div>
 </div>
@@ -360,7 +360,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.43.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.44.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -701,7 +701,7 @@ async function loadSec() {
     h += hosts.length ? `<table class="bktbl"><thead><tr><th>서버</th><th>상태</th><th>미끼 파일</th><th>파일 대량 변경 감시</th><th>BitLocker</th><th title="암호화가 시작되면 바로 멈추고 복구키를 추가해 보관합니다">BitLocker 자동 차단</th><th>섀도 복사본</th><th>감사 설정</th><th>Defender</th><th>마지막 수신</th></tr></thead><tbody>${hosts.map(x => {
       const c = secStatusCells(x);
       return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}</td><td>${c.state}</td><td>${c.canary}</td><td>${c.fs}</td><td>${c.bl}</td><td><button class="sbtn" data-guard="${esc(x.host)}" data-v="${x.bl_guard ? '0' : '1'}" title="${x.bl_guard ? '누르면 끔 — 이 서버에서 직접 BitLocker 를 켤 때만 끄세요' : '누르면 켬'}">${x.bl_guard ? '<span class="ok">● 켜짐</span>' : '<span class="dim">○ 꺼짐</span>'}</button></td><td>${c.vss}</td><td>${c.audit}</td><td>${c.def}</td><td>${agoTxt(x.ts)}${agoTxt(x.ts) === '방금' ? '' : ' 전'}</td></tr>`;
-    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.8.1 을 다시 설치하세요.</div>';
+    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.8.2 를 다시 설치하세요.</div>';
     const keys = hosts.flatMap(x => (x.keys || []).map(k => ({ ...k, host: x.host })));
     if (keys.length) h += `<h3>🔑 BitLocker 복구키 보관함 <span class="dim" style="font-weight:400">자동 차단이 넣은 키입니다. 드라이브가 잠기면 이 번호(48자리)로 엽니다 — 종이에 적거나 다른 곳에도 보관하세요</span></h3><table class="ev">${keys.map(k => `<tr><td class="t">${fmtTime(k.t)}</td><td><b>${esc(hostLabel(k.host))}</b> ${esc(k.m)}</td><td>${k.pw ? `<code class="bkey" hidden>${esc(k.pw)}</code><button class="sbtn" data-showkey="1">번호 보기</button>` : '<span class="dim">번호는 관리자만 볼 수 있습니다</span>'} <span class="dim">키 ID ${esc(k.id || '-')}</span></td><td class="dim">${esc(k.why || '')}</td></tr>`).join('')}</table>`;
     if (none.length) h += `<div class="note">보안 감시 안 됨 (에이전트 1.8.0 미만 또는 리눅스·NAS): ${esc(none.join(', '))}</div>`;

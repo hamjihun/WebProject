@@ -122,9 +122,9 @@ function Start-FsWatch([string[]]$skipPaths) {
   } catch { Log "파일 감시 시작 실패: $($_.Exception.Message)" }
 }
 
-function Add-FsEv([string]$sev, [string]$msg) {
+function Add-FsEv([string]$sev, [string]$msg, [string]$kind = 'ransom') {
   $now = Get-Date
-  [void]$script:fsEvents.Insert(0, [ordered]@{ id = "W:$($now.ToString('yyyyMMddHHmmss'))"; t = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); sev = $sev; kind = 'ransom'; msg = $msg })
+  [void]$script:fsEvents.Insert(0, [ordered]@{ id = "W:$($now.ToString('yyyyMMddHHmmss'))"; t = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); sev = $sev; kind = $kind; msg = $msg })
   while ($script:fsEvents.Count -gt 20) { $script:fsEvents.RemoveAt($script:fsEvents.Count - 1) }
   Log "$sev $msg"
 }

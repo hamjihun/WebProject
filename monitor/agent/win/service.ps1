@@ -33,6 +33,7 @@ if ($Uninstall) {
     }
   } catch { Write-Host "수집기 알림 실패 (무시): $($_.Exception.Message)" }
 
+  try { Set-Content -Path (Join-Path $DataDir "install.marker") -Value (Get-Date).ToString('o') -Encoding UTF8 } catch {}
   foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) {
     try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}
     Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
@@ -45,8 +46,14 @@ if ($Uninstall) {
 
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-  # 트레이(일반 사용자)가 표시 이름을 저장할 수 있도록 Users 그룹에 수정 권한 (S-1-5-32-545 = Users)
-  try { & icacls.exe "$DataDir" /grant "*S-1-5-32-545:(OI)(CI)M" /Q | Out-Null } catch {}
+  # 데이터 폴더는 SYSTEM·관리자만 고칠 수 있게 잠근다 (일반 사용자가 remote.conf·보안 상태를 바꿔 감시를 끄지 못하게).
+  # 일반 사용자는 읽기만 (트레이가 상태를 읽음), 표시 이름 파일(display.conf)만 고칠 수 있다. S-1-5-18 SYSTEM, -32-544 Administrators, -32-545 Users
+  try {
+    & icacls.exe "$DataDir" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /T /C /Q | Out-Null
+    $disp = Join-Path $DataDir "display.conf"; if (-not (Test-Path $disp)) { Set-Content -Path $disp -Value "" -Encoding UTF8 }
+    & icacls.exe "$disp" /grant "*S-1-5-32-545:M" /Q | Out-Null
+  } catch {}
+  try { Set-Content -Path (Join-Path $DataDir "install.marker") -Value (Get-Date).ToString('o') -Encoding UTF8 } catch {}   # 설치 중 작업을 지웠다 만드는 것은 보안 경고에서 뺀다
   # 이전 이름/수동 설치로 등록된 것이 있으면 정리
   foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   foreach ($n in $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }
