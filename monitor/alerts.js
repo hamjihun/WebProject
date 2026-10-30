@@ -395,6 +395,7 @@ function create({ settingsFile, logDir, log = console.log }) {
   // 보안 이벤트: 상태가 아니라 한 번 생기는 일이라 바로 보낸다. 위험(crit)은 조용한 시간에도, 한 번에 많이 오면 3건 + 나머지 요약
   function securityEvents(host, name, evs) {
     if (!settings.enabled || settings.rules.security_on === false || (settings.muted && settings.muted[host])) return;
+    if (settings.hostRules && settings.hostRules[host] && settings.hostRules[host].security === false) return;   // 이 서버만 보안 알림 끔 (기록은 그대로)
     const list = (evs || []).filter((e) => e.sev === 'crit' || e.sev === 'warn').sort((a, b) => (a.sev === 'crit' ? 0 : 1) - (b.sev === 'crit' ? 0 : 1));
     if (!list.length) return;
     for (const e of list.slice(0, 3)) deliver(push({ kind: 'alert', host, name, rule: 'security', sev: e.sev, msg: `${e.sev === 'crit' ? '🚨 보안 위험' : '⚠ 보안 주의'}: ${e.msg}` }), e.sev === 'crit');
@@ -472,7 +473,7 @@ function create({ settingsFile, logDir, log = console.log }) {
     setHostRules(host, rules) {
       if (!settings.hostRules) settings.hostRules = {};
       const cur = { ...(settings.hostRules[host] || {}) };
-      for (const k of ['cpu', 'mem', 'disk', 'offline', 'backup']) if (rules && typeof rules[k] === 'boolean') { if (rules[k]) delete cur[k]; else cur[k] = false; }
+      for (const k of ['cpu', 'mem', 'disk', 'offline', 'backup', 'security']) if (rules && typeof rules[k] === 'boolean') { if (rules[k]) delete cur[k]; else cur[k] = false; }
       if (Object.keys(cur).length) settings.hostRules[host] = cur; else delete settings.hostRules[host];
       for (const k of Object.keys(cur)) { clearRule(host, k); if (k === 'disk') clearRule(host, 'full'); }
       saveSettings();

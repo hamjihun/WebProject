@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>보안 현황</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --warn:#fab219; --bad:#ef4444; --accent:#38bdf8; --barbg:#0b1220; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; font-size:13px; }
+  .wrap { padding:16px 20px 40px; max-width:1600px; margin:0 auto; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:14px; }
+  .bar h1 { font-size:18px; margin:0 10px 0 0; }
+  .bar button, .bar select, .bar input { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; }
+  .bar button.on { background:var(--accent); color:#0f172a; font-weight:700; border-color:var(--accent); }
+  .bar .upd { margin-left:auto; color:var(--muted); font-size:12px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:14px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .kpi .l { color:var(--muted); font-size:12px; } .kpi .v { font-size:26px; font-weight:700; margin-top:4px; } .kpi .v small { font-size:13px; color:var(--muted); font-weight:400; margin-left:4px; }
+  .kpi .s { font-size:12px; color:var(--muted); margin-top:4px; }
+  .kpi.ok .v { color:var(--ok); } .kpi.warn .v { color:var(--warn); } .kpi.bad .v { color:var(--bad); }
+  .kpi.bad { border-color:var(--bad); animation:blink 1.4s infinite; } @keyframes blink { 50% { background:rgba(239,68,68,.14); } }
+  .p { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  .p h2 { font-size:15px; margin:0 0 10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; } .p h2 small { color:var(--muted); font-weight:400; font-size:12px; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; } .row2 .p { margin-bottom:14px; }
+  @media (max-width:1000px) { .row2 { grid-template-columns:1fr; } }
+  .tw { overflow-x:auto; }
+  table.t { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .t th { text-align:left; color:var(--muted); font-weight:400; font-size:11.5px; padding:4px 8px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .t td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .t tr:last-child td { border-bottom:0; }
+  .t td.n { text-align:right; white-space:nowrap; } .t td.nw { white-space:nowrap; }
+  .t tr.acked td { opacity:.5; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); font-weight:700; } .warn { color:var(--warn); } .dim { color:var(--muted); }
+  .sev { display:inline-block; border-radius:4px; padding:0 6px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .sev.crit { background:var(--bad); color:#fff; } .sev.warn { background:var(--warn); color:#111; } .sev.info { background:var(--barbg); color:var(--muted); font-weight:400; }
+  .btn { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:2px 9px; cursor:pointer; font:inherit; font-size:12px; white-space:nowrap; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .hb { display:block; height:8px; border-radius:4px; margin-top:4px; flex:none; }
+  .chart svg { width:100%; height:200px; display:block; }
+  .chart text { fill:var(--muted); font-size:10px; }
+  .legend { display:flex; gap:14px; color:var(--muted); font-size:12px; } .legend i { display:inline-block; width:11px; height:11px; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+  .flt { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-weight:400; font-size:12.5px; }
+  .flt select, .flt input[type=text] { background:var(--barbg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 8px; font:inherit; font-size:12.5px; }
+  .flt label { display:inline-flex; gap:4px; align-items:center; cursor:pointer; color:var(--muted); }
+  code.k { font-size:14px; letter-spacing:.5px; background:var(--barbg); padding:2px 6px; border-radius:4px; user-select:all; }
+  .empty { color:var(--muted); padding:16px; text-align:center; }
+  .note { color:var(--muted); font-size:12px; margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="bar">
+    <h1>🛡 보안 현황</h1>
+    <button data-d="7">7일</button><button data-d="30" class="on">30일</button><button data-d="90">90일</button>
+    <select id="fHost"><option value="">전체 서버</option></select>
+    <span class="upd" id="upd"></span>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="p chart"><h2>일별 보안 이벤트 <span class="legend"><span><i style="background:var(--bad)"></i>위험</span><span><i style="background:var(--warn)"></i>주의</span><span><i style="background:#475569"></i>기록(원격 접속 등)</span></span></h2><div id="chart"></div></div>
+  <div class="row2">
+    <div class="p"><h2>종류별 <small>선택한 기간</small></h2><div id="kinds"></div></div>
+    <div class="p"><h2>서버별 <small>선택한 기간 · 확인 안 한 건수는 지금 기준</small></h2><div id="byhost"></div></div>
+  </div>
+  <div class="p"><h2>서버별 감시 상태 <small>보안 알림 · BitLocker 자동 차단은 여기서 서버마다 켜고 끕니다</small></h2><div class="tw" id="status"></div></div>
+  <div class="p" id="keysP" hidden><h2>🔑 BitLocker 복구키 보관함 <small>자동 차단이 넣은 키입니다. 드라이브가 잠기면 이 48자리 번호로 엽니다</small></h2><div id="keys"></div></div>
+  <div class="p"><h2>보안 이벤트
+    <span class="flt">
+      <select id="fSev"><option value="">위험·주의</option><option value="crit">위험만</option><option value="warn">주의만</option><option value="info">기록만</option><option value="all">전부</option></select>
+      <select id="fKind"><option value="">모든 종류</option></select>
+      <input type="text" id="fText" placeholder="찾기 (예: vssadmin, 192.168)">
+      <label><input type="checkbox" id="fAck"> 확인한 것도 보기</label>
+    </span>
+    <button class="btn" id="ackAll" hidden></button>
+  </h2><div class="tw" id="events"></div>
+  <div class="note">위험 = 랜섬웨어 · BitLocker · 로그 삭제 · 관리자 추가처럼 바로 봐야 하는 일 (방해 금지 시간에도 텔레그램) · 주의 = 새 계정 · 새 서비스 · 로그인 실패 폭주 등 · 기록 = 원격 접속 같은 참고용.<br>확인을 누르면 카드 · 경고 띠 · 건수에서 빠지고, 기록은 90일 동안 남습니다.</div></div>
+</main>
+<script src="common.js"></script>
+<script>
+MON.renderNav('security.html'); MON.pollNav(); setInterval(MON.pollNav, 30000);
+const $ = (s) => document.querySelector(s), esc = MON.esc;
+const SEV_KO = { crit: '위험', warn: '주의', info: '기록' };
+const KIND_KO = { ransom: '랜섬웨어', bitlocker: 'BitLocker', login: '로그인 · 원격 접속', account: '계정 · 권한', persist: '서비스 · 예약 작업', tamper: '로그 삭제 · 방어 끄기', malware: '악성코드' };
+const CONV_KO = { 0: '사용 안 함', 1: '암호화됨', 2: '암호화 중', 3: '해독 중', 4: '암호화 멈춤', 5: '해독 멈춤' };
+let days = 30, data = { hosts: [] }, servers = [];
+const kindKo = (k) => KIND_KO[k] || '기타';
+const p2 = (n) => String(n).padStart(2, '0');
+const fmtT = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+const ago = (t) => { if (!t) return '-'; const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 2880 ? Math.floor(m / 60) + '시간 전' : Math.floor(m / 1440) + '일 전'; };
+const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
+const label = (h) => { const x = data.hosts.find((y) => y.host === h) || servers.find((y) => y.host === h); return x && x.name ? x.name : h; };
+
+async function load() {
+  try {
+    const [s, j] = await Promise.all([fetch('api/servers').then((r) => r.json()), fetch('api/security?days=' + days).then((r) => r.json())]);
+    servers = s.servers || []; data = j; MON.setVersion(s.version);
+    const sel = $('#fHost'), cur = sel.value;
+    sel.innerHTML = '<option value="">전체 서버</option>' + data.hosts.map((h) => `<option value="${esc(h.host)}">${esc(h.name || h.host)}</option>`).join('');
+    sel.value = data.hosts.some((h) => h.host === cur) ? cur : '';
+    render();
+    $('#upd').textContent = '갱신 ' + new Date().toLocaleTimeString('ko-KR');
+  } catch (e) { $('#upd').textContent = '불러오기 실패: ' + e.message; }
+}
+const pick = () => { const h = $('#fHost').value; return h ? data.hosts.filter((x) => x.host === h) : data.hosts; };
+const allEvents = () => pick().flatMap((h) => (h.events || []).map((e) => ({ ...e, host: h.host })));
+
+function render() {
+  const hosts = pick(), evs = allEvents(), cnt = (sev) => evs.filter((e) => e.sev === sev).length;
+  const openC = hosts.reduce((n, h) => n + h.crit, 0), openW = hosts.reduce((n, h) => n + h.warn, 0);
+  const off = hosts.filter((h) => !h.online).length, none = servers.filter((s) => !s.sec).map((s) => s.name || s.host);
+  // KPI
+  $('#kpis').innerHTML = [
+    ['감시 중 서버', `${hosts.length}<small>/ ${$('#fHost').value ? 1 : servers.length}대</small>`, off ? 'warn' : 'ok', off ? `오프라인 ${off}대` : none.length && !$('#fHost').value ? `안 됨: ${none.join(', ')}` : '모두 정상 수신'],
+    ['확인 필요 · 위험', openC, openC ? 'bad' : 'ok', openC ? '아래 목록에서 확인' : '없음'],
+    ['확인 필요 · 주의', openW, openW ? 'warn' : 'ok', openW ? '아래 목록에서 확인' : '없음'],
+    [`${days}일 위험`, cnt('crit'), cnt('crit') ? 'warn' : '', '확인한 것 포함'],
+    [`${days}일 주의`, cnt('warn'), '', '확인한 것 포함'],
+    [`${days}일 원격 접속 등 기록`, cnt('info'), '', '원격 데스크톱 접속 · 악성코드 조치'],
+  ].map(([l, v, c, s]) => `<div class="kpi ${c}"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join('');
+  renderChart(evs); renderKinds(evs); renderByHost(hosts, evs); renderStatus(hosts); renderKeys(hosts); renderEvents();
+}
+
+function renderChart(evs) {
+  const n = days, now = new Date(); now.setHours(0, 0, 0, 0);
+  const keys = []; for (let i = n - 1; i >= 0; i--) keys.push(dayKey(now.getTime() - i * 86400000));
+  const by = {}; for (const k of keys) by[k] = { crit: 0, warn: 0, info: 0 };
+  for (const e of evs) { const k = dayKey(e.t); if (by[k]) by[k][e.sev]++; }
+  const max = Math.ceil(Math.max(4, ...keys.map((k) => by[k].crit + by[k].warn + by[k].info)) / 4) * 4;   // 눈금이 정수로 떨어지게
+  const W = 1000, H = 200, L = 30, B = 22, bw = (W - L) / n;
+  let g = '';
+  for (let i = 0; i <= 4; i++) { const y = H - B - (H - B - 8) * i / 4; g += `<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="#334155" stroke-width="0.5"/><text x="${L - 4}" y="${y + 3}" text-anchor="end">${Math.round(max * i / 4)}</text>`; }
+  keys.forEach((k, i) => {
+    const x = L + i * bw + bw * 0.15, w = bw * 0.7; let y = H - B;
+    for (const [sev, col] of [['crit', '#ef4444'], ['warn', '#fab219'], ['info', '#475569']]) {
+      const v = by[k][sev]; if (!v) continue; const h = (H - B - 8) * v / max; y -= h;
+      g += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${col}" rx="1.5"><title>${k} ${SEV_KO[sev]} ${v}건</title></rect>`;
+    }
+    const step = n <= 7 ? 1 : n <= 30 ? 3 : 10;
+    if (i % step === 0 || i === n - 1) g += `<text x="${L + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${Number(k.slice(5, 7))}/${Number(k.slice(8))}</text>`;
+  });
+  $('#chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>`;
+}
+
+function renderKinds(evs) {
+  const rows = {};
+  for (const e of evs) { const k = KIND_KO[e.kind] ? e.kind : 'other'; (rows[k] = rows[k] || { crit: 0, warn: 0, info: 0 })[e.sev]++; }
+  const list = Object.entries(rows).sort((a, b) => (b[1].crit * 1000 + b[1].warn * 10 + b[1].info) - (a[1].crit * 1000 + a[1].warn * 10 + a[1].info));
+  const max = Math.max(1, ...list.map(([, r]) => r.crit + r.warn + r.info));
+  $('#kinds').innerHTML = list.length ? `<table class="t"><thead><tr><th>종류</th><th style="width:40%"></th><th class="n">위험</th><th class="n">주의</th><th class="n">기록</th></tr></thead><tbody>${list.map(([k, r]) => {
+    const w = (v) => Math.round(v / max * 100);
+    return `<tr><td class="nw"><a href="#" data-kind="${k}" style="color:inherit">${esc(kindKo(k))}</a></td><td><div style="display:flex;gap:2px">${r.crit ? `<span class="hb" style="width:${w(r.crit)}%;background:var(--bad)"></span>` : ''}${r.warn ? `<span class="hb" style="width:${w(r.warn)}%;background:var(--warn)"></span>` : ''}${r.info ? `<span class="hb" style="width:${w(r.info)}%;background:#475569"></span>` : ''}</div></td><td class="n ${r.crit ? 'bad' : 'dim'}">${r.crit}</td><td class="n ${r.warn ? 'warn' : 'dim'}">${r.warn}</td><td class="n dim">${r.info}</td></tr>`;
+  }).join('')}</tbody></table>` : '<div class="empty">이 기간에 보안 이벤트가 없습니다</div>';
+}
+
+function renderByHost(hosts, evs) {
+  $('#byhost').innerHTML = hosts.length ? `<table class="t"><thead><tr><th>서버</th><th>지금</th><th class="n">위험</th><th class="n">주의</th><th class="n">기록</th><th>마지막 이벤트</th></tr></thead><tbody>${hosts.map((h) => {
+    const mine = evs.filter((e) => e.host === h.host), c = (s) => mine.filter((e) => e.sev === s).length, last = mine.filter((e) => e.sev !== 'info')[0];
+    const now = h.level === 'crit' ? `<span class="bad">위험 ${h.crit}</span>` : h.level === 'warn' ? `<span class="warn">주의 ${h.warn}</span>` : '<span class="ok">정상</span>';
+    return `<tr><td class="nw"><a href="#" data-host="${esc(h.host)}" style="color:inherit"><b>${esc(h.name || h.host)}</b></a>${h.online ? '' : ' <span class="bad">오프라인</span>'}</td><td class="nw">${now}</td><td class="n ${c('crit') ? 'bad' : 'dim'}">${c('crit')}</td><td class="n ${c('warn') ? 'warn' : 'dim'}">${c('warn')}</td><td class="n dim">${c('info')}</td><td class="dim">${last ? fmtT(last.t) + ' ' + esc(last.msg.slice(0, 50)) + (last.msg.length > 50 ? '…' : '') : '-'}</td></tr>`;
+  }).join('')}</tbody></table>` : '<div class="empty">보안 감시 중인 서버가 없습니다 (에이전트 1.8.1 이상 필요)</div>';
+}
+
+function blTxt(b) {
+  if (!b) return '-';
+  if (!b.avail) return '<span class="dim">기능 없음</span>';
+  const on = (b.vols || []).filter((v) => v.conv > 0);
+  if (!on.length) return '<span class="dim">사용 안 함</span>';
+  return on.map((v) => `<span class="${v.conv === 2 || v.conv === 4 || v.guarded ? 'bad' : ''}">${esc(v.m)} ${CONV_KO[v.conv] || v.conv}${v.conv >= 2 ? ' ' + v.pct + '%' : ''}${v.guarded ? ' · 🔒자동 차단함' : ''}</span>`).join(', ');
+}
+function renderStatus(hosts) {
+  const tg = (h, kind, on, tip) => `<button class="btn" data-tg="${kind}" data-host="${esc(h.host)}" data-v="${on ? '0' : '1'}" title="${tip}">${on ? '<span class="ok">● 켜짐</span>' : '<span class="dim">○ 꺼짐</span>'}</button>`;
+  $('#status').innerHTML = hosts.length ? `<table class="t"><thead><tr><th>서버</th><th>보안 알림</th><th>BitLocker 자동 차단</th><th>미끼 파일</th><th>파일 대량 변경 감시</th><th>BitLocker</th><th>섀도 복사본</th><th>감사 설정</th><th>Defender</th><th>마지막 수신</th></tr></thead><tbody>${hosts.map((h) => {
+    const st = h.status || {}, c = st.canary, d = st.defender;
+    const alert = h.muted ? '<span class="dim" title="서버 현황에서 이 서버 알림 전체를 껐습니다">🔕 서버 알림 꺼짐</span>' : tg(h, 'alert', h.alert_on, h.alert_on ? '누르면 이 서버의 보안 텔레그램 알림을 끕니다 (기록은 계속 남음)' : '누르면 켭니다');
+    return `<tr><td class="nw"><b>${esc(h.name || h.host)}</b>${h.online ? '' : ' <span class="bad">오프라인</span>'}<div class="dim">${esc(h.host)}</div></td>
+      <td>${alert}</td><td>${tg(h, 'guard', h.bl_guard, h.bl_guard ? '누르면 끔 — 이 서버에서 직접 BitLocker 를 켤 때만 끄세요' : '누르면 켬')}</td>
+      <td>${c ? `<span class="${c.ok ? '' : 'bad'}" title="${esc((c.dirs || []).join('\n'))}">${c.ok ? '정상' : '바뀜'} · ${c.files}개 (${(c.dirs || []).length}곳)</span>` : '<span class="dim">안 함</span>'}</td>
+      <td>${st.fs && st.fs.roots && st.fs.roots.length ? esc(st.fs.roots.join(', ')) : '<span class="dim">안 함</span>'}</td>
+      <td>${blTxt(st.bitlocker)}</td><td>${st.vss == null ? '-' : st.vss + '개'}</td>
+      <td>${st.logs === false ? '<span class="bad">보안 로그 못 읽음</span>' : st.audit === true ? '적용됨' : st.audit === false ? '<span class="warn" title="도메인 그룹 정책이 막고 있을 수 있습니다">실패</span>' : '-'}</td>
+      <td>${!d ? '-' : !d.on ? '<span class="dim" title="V3 같은 다른 백신을 쓰면 정상입니다">꺼짐 (다른 백신?)</span>' : d.rt ? `켜짐${d.sig >= 0 ? ` · 업데이트 ${d.sig}일 전` : ''}` : '<span class="bad">실시간 보호 꺼짐</span>'}</td>
+      <td class="nw">${ago(h.ts)}</td></tr>`;
+  }).join('')}</tbody></table>` : '<div class="empty">보안 감시 중인 서버가 없습니다</div>';
+}
+
+function renderKeys(hosts) {
+  const keys = hosts.flatMap((h) => (h.keys || []).map((k) => ({ ...k, host: h.host })));
+  $('#keysP').hidden = !keys.length;
+  $('#keys').innerHTML = `<table class="t"><thead><tr><th>시각</th><th>서버 · 드라이브</th><th>복구키 번호</th><th>키 ID</th><th>이유</th></tr></thead><tbody>${keys.map((k) => `<tr><td class="nw">${fmtT(k.t)}</td><td class="nw"><b>${esc(label(k.host))}</b> ${esc(k.m)}</td><td class="nw">${k.pw ? `<code class="k" hidden>${esc(k.pw)}</code> <button class="btn" data-showkey="1">번호 보기</button>` : '<span class="dim">관리자만 볼 수 있습니다</span>'}</td><td class="dim">${esc(k.id || '-')}</td><td class="dim">${esc(k.why || '')}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderEvents() {
+  const sev = $('#fSev').value, kind = $('#fKind').value, q = $('#fText').value.trim().toLowerCase(), showAck = $('#fAck').checked;
+  const all = allEvents();
+  const kinds = [...new Set(all.map((e) => KIND_KO[e.kind] ? e.kind : 'other'))];
+  const ks = $('#fKind'), kc = ks.value;
+  ks.innerHTML = '<option value="">모든 종류</option>' + kinds.map((k) => `<option value="${k}">${esc(kindKo(k))}</option>`).join('');
+  ks.value = kinds.includes(kc) ? kc : '';
+  const list = all.filter((e) => (sev === 'all' || (sev ? e.sev === sev : e.sev !== 'info')) && (!kind || (KIND_KO[e.kind] ? e.kind : 'other') === kind)
+    && (showAck || !e.ack || sev === 'info') && (!q || (e.msg + ' ' + label(e.host)).toLowerCase().includes(q))).sort((a, b) => b.t - a.t).slice(0, 500);
+  const open = all.filter((e) => !e.ack && e.sev !== 'info').length;
+  const b = $('#ackAll'); b.hidden = !open; b.textContent = `모두 확인 (${open}건)`;
+  $('#events').innerHTML = list.length ? `<table class="t"><thead><tr><th>시각</th><th>단계</th><th>종류</th><th>서버</th><th>내용</th><th></th></tr></thead><tbody>${list.map((e) => `<tr class="${e.ack ? 'acked' : ''}"><td class="nw">${fmtT(e.t)}</td><td><span class="sev ${e.sev}">${SEV_KO[e.sev]}</span></td><td class="nw dim">${esc(kindKo(e.kind))}</td><td class="nw"><b>${esc(label(e.host))}</b></td><td>${esc(e.msg)}${e.ack ? ` <span class="dim">(확인 ${esc(e.ackBy || '')} ${fmtT(e.ackAt)})</span>` : ''}</td><td>${!e.ack && e.sev !== 'info' ? `<button class="btn" data-ack="${esc(e.host)}" data-id="${esc(e.id)}">확인</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">조건에 맞는 이벤트가 없습니다</div>';
+}
+
+async function post(url, body) { await fetch(url, { method: url.includes('hostconf') ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {}); await load(); }
+document.addEventListener('click', (e) => {
+  const d = e.target.closest('[data-d]'); if (d) { days = Number(d.dataset.d); for (const x of document.querySelectorAll('[data-d]')) x.classList.toggle('on', x === d); load(); return; }
+  const a = e.target.closest('[data-ack]'); if (a) { a.disabled = true; post('api/security/ack', { host: a.dataset.ack, ids: [a.dataset.id] }); return; }
+  const sk = e.target.closest('[data-showkey]'); if (sk) { const c = sk.parentElement.querySelector('code'); c.hidden = !c.hidden; sk.textContent = c.hidden ? '번호 보기' : '숨기기'; return; }
+  const t = e.target.closest('[data-tg]');
+  if (t) {
+    const on = t.dataset.v === '1', host = t.dataset.host;
+    if (t.dataset.tg === 'guard') {
+      if (!on && !confirm('이 서버의 BitLocker 자동 차단을 끌까요?\n직접 BitLocker 를 켜려는 경우에만 끄고, 다 끝나면 다시 켜세요.')) return;
+      t.disabled = true; post('api/hostconf', { host, bl_guard: on });
+    } else { t.disabled = true; post('api/mute', { host, rules: { security: on } }); }
+    return;
+  }
+  const k = e.target.closest('[data-kind]'); if (k) { e.preventDefault(); $('#fKind').value = k.dataset.kind; $('#fSev').value = 'all'; renderEvents(); $('#events').scrollIntoView({ behavior: 'smooth' }); return; }
+  const h = e.target.closest('#byhost [data-host]'); if (h) { e.preventDefault(); $('#fHost').value = h.dataset.host; render(); return; }
+});
+$('#ackAll').onclick = () => { const h = $('#fHost').value; if (confirm(h ? `${label(h)} 의 보안 이벤트를 모두 확인 처리할까요?` : '모든 서버의 보안 이벤트를 확인 처리할까요?')) post('api/security/ack', h ? { host: h, ids: 'all' } : { ids: 'all' }); };
+$('#fHost').onchange = render;
+for (const id of ['#fSev', '#fKind', '#fAck']) $(id).onchange = renderEvents;
+$('#fText').oninput = renderEvents;
+load();
+setInterval(() => { if (document.activeElement !== $('#fText')) load(); }, 15000);
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.43.0';
+const VERSION = '1.44.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -925,9 +925,11 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/security' || url.pathname === '/api/security/ack') {
     try {
       if (req.method === 'GET') {
-        const one = url.searchParams.get('host');
+        const one = url.searchParams.get('host'), days = Number(url.searchParams.get('days')) || 0;   // days 를 주면 그 기간 이벤트 전부 (보안 화면 통계용)
+        const cut = days ? Date.now() - Math.min(90, days) * 86400000 : 0;
         const hosts = serversView().filter((s) => s.sec && (!one || s.host === one))
-          .map((s) => ({ host: s.host, name: s.name || '', online: s.online, ...s.sec, events: secmon.events(s.host, one ? 200 : 60), bl_guard: alerter.blGuard(s.host),
+          .map((s) => ({ host: s.host, name: s.name || '', online: s.online, ...s.sec, events: days ? secmon.events(s.host, 400).filter((e) => e.t >= cut) : secmon.events(s.host, one ? 200 : 60), bl_guard: alerter.blGuard(s.host),
+            alert_on: alerter.getHostRules(s.host).security !== false && !alerter.isMuted(s.host), muted: alerter.isMuted(s.host),
             keys: secmon.keys(s.host).map((k) => (me && me.admin ? k : { m: k.m, id: k.id, t: k.t, why: k.why })) }));   // 복구키 번호는 관리자에게만
         return json(res, 200, { ok: true, hosts });
       }

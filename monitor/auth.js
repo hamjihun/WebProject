@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const APPS = [
   {
     key: 'monitor', name: '서버 모니터링', desc: '서버 상태 · 백업 · 통계', icon: '🖥️', ready: true, home: 'dashboard.html',
-    pages: [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['stats.html', '통계 · 리포트']],
+    pages: [['dashboard.html', '대시보드'], ['topology.html', '구성도'], ['index.html', '서버 현황'], ['backup.html', '백업'], ['security.html', '보안'], ['stats.html', '통계 · 리포트']],
   },
   {
     key: 'schedule', name: '메모 · 일정', desc: '메모 보드 · 부서 업무 일정', icon: '📝', ready: true, home: 'memo.html',
