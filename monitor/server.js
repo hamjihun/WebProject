@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.45.0';
+const VERSION = '1.45.1';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -955,6 +955,12 @@ const server = http.createServer(async (req, res) => {
       }
       if (!me || !me.admin) return json(res, 403, { ok: false, error: '에이전트 버전 관리는 관리자만 할 수 있습니다' });
       const who = me.name || me.id, t = new Date().toLocaleTimeString();
+      if (req.method === 'POST' && url.pathname === '/api/agent-versions/rescan') {   // dist · dist/old 다시 찾기 (수집기 재시작 없이)
+        const before = agentupd.info().versions.length; agentupd.scanDist();
+        const added = agentupd.info().versions.length - before;
+        const od = path.join(__dirname, 'dist', 'old');
+        return json(res, 200, { ok: true, added, old_dir: od, old_files: fs.existsSync(od) ? fs.readdirSync(od).filter((f) => /\.exe$/i.test(f)).length : -1 });
+      }
       if (req.method === 'POST' && url.pathname === '/api/agent-versions') {          // 설치 파일 올리기 { ver, note, data(base64) }
         const raw = JSON.parse((await readBody(req, 40)) || '{}');
         const v = agentupd.add(String(raw.ver || '').trim(), Buffer.from(String(raw.data || ''), 'base64'), raw.note, who);

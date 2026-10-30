@@ -51,6 +51,7 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
   // 수집기 시작 때: 배포 폴더의 설치 파일을 목록에 넣는다
   function scanDist() {
     try {
+      (() => {                                                // 지금 버전 (dist) — 이미 있으면 건너뛰고 아래 예전 버전은 계속 찾는다
       if (!fs.existsSync(distExe) || !fs.existsSync(nsiFile)) return;
       const m = /!define\s+VERSION\s+"([^"]+)"/.exec(fs.readFileSync(nsiFile, 'utf8'));
       if (!m || !okVer(m[1])) return;
@@ -59,6 +60,7 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
       if (db.versions.some((x) => x.sha256 === sha)) return;
       let ver = m[1]; if (find(ver)) ver = `${ver}.${db.versions.filter((x) => x.ver.startsWith(m[1] + '.')).length + 1}`;   // 같은 번호인데 내용이 다르면 1.9.0.1 처럼
       add(ver, buf, '배포 폴더(dist)에서 자동 등록', '수집기');
+      })();
     } catch (e) { log('[에이전트] 배포 폴더 설치 파일 등록 실패: ' + e.message); }
     try {                                                     // 예전 버전 (dist/old)
       const od = path.join(path.dirname(distExe), 'old');

@@ -383,7 +383,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.45.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.45.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -697,7 +697,7 @@ function renderUpd() {
     return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}<div class="dim">${esc(shortOs(x.os))}</div></td><td>${esc(x.ver || '-')}</td><td>${sel}</td><td><span class="ust ${x.state}">${esc(x.text)}</span></td><td style="white-space:normal">${rs}</td></tr>`;
   }).join('')}</tbody></table>
   <div class="note">${esc(upd.min_self)} 미만 에이전트는 이 기능이 없어 <b>한 번은 직접 설치</b>해야 합니다 (그 뒤부터 자동). 리눅스 · NAS · ESXi 에이전트는 해당 없음.</div>`;
-  h += `<h3>보관된 설치 파일 <span class="dim" style="font-weight:400">IMS 서버 data\\agent-versions 에 보관 · 수집기를 다시 설치하면 dist 의 새 설치 파일이 자동으로 추가됩니다</span></h3><table class="bktbl"><thead><tr><th>버전</th><th>등록</th><th>크기</th><th>쓰는 서버</th><th>메모</th><th></th></tr></thead><tbody>${vs.map(v => `<tr><td><b>${esc(v.ver)}</b>${tg && tg.ver === v.ver ? ' <span class="ok">● 배포 중</span>' : ''}${verCmp(v.ver, upd.min_self) < 0 ? ' <span class="dim" title="이 버전으로 되돌리면 자동 업데이트 기능이 없어져, 다음 업데이트는 직접 설치해야 합니다">(자동 업데이트 없음)</span>' : ''}</td><td>${fmtTime(v.added)} <span class="dim">${esc(v.by || '')}</span></td><td>${Math.round(v.size / 1024)} KB</td><td>${used(v.ver)}대</td><td class="dim" style="white-space:normal">${esc(v.note || '')}</td><td style="white-space:nowrap"><a class="sbtn" style="text-decoration:none" href="api/agent-versions/file?ver=${encodeURIComponent(v.ver)}" title="이 버전 설치 파일을 PC 로 받기 (서버에 직접 설치할 때)">⬇ 내려받기</a> ${a && !(tg && tg.ver === v.ver) ? `<button class="sbtn" data-delver="${esc(v.ver)}">지우기</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="dim">보관된 설치 파일이 없습니다</td></tr>'}</tbody></table>
+  h += `<h3>보관된 설치 파일 ${a ? '<button class="sbtn" id="uScan" title="C:\\ims\\monitor\\dist 와 dist\\old 폴더의 설치 파일을 다시 찾아 넣습니다">🔄 설치 파일 다시 찾기</button>' : ''} <span class="dim" style="font-weight:400">IMS 서버 data\\agent-versions 에 보관 · 수집기를 다시 설치하면 dist 의 새 설치 파일이 자동으로 추가됩니다</span></h3><table class="bktbl"><thead><tr><th>버전</th><th>등록</th><th>크기</th><th>쓰는 서버</th><th>메모</th><th></th></tr></thead><tbody>${vs.map(v => `<tr><td><b>${esc(v.ver)}</b>${tg && tg.ver === v.ver ? ' <span class="ok">● 배포 중</span>' : ''}${verCmp(v.ver, upd.min_self) < 0 ? ' <span class="dim" title="이 버전으로 되돌리면 자동 업데이트 기능이 없어져, 다음 업데이트는 직접 설치해야 합니다">(자동 업데이트 없음)</span>' : ''}</td><td>${fmtTime(v.added)} <span class="dim">${esc(v.by || '')}</span></td><td>${Math.round(v.size / 1024)} KB</td><td>${used(v.ver)}대</td><td class="dim" style="white-space:normal">${esc(v.note || '')}</td><td style="white-space:nowrap"><a class="sbtn" style="text-decoration:none" href="api/agent-versions/file?ver=${encodeURIComponent(v.ver)}" title="이 버전 설치 파일을 PC 로 받기 (서버에 직접 설치할 때)">⬇ 내려받기</a> ${a && !(tg && tg.ver === v.ver) ? `<button class="sbtn" data-delver="${esc(v.ver)}">지우기</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="dim">보관된 설치 파일이 없습니다</td></tr>'}</tbody></table>
   ${a ? `<div class="utgt" style="margin-top:10px"><b style="font-size:12.5px">설치 파일 올리기</b><input type="file" id="uFile" accept=".exe"><input type="text" id="uVer" placeholder="버전 (비우면 파일에서 읽음)" style="width:170px"><input type="text" id="uNote" placeholder="메모 (예: 온습도 수정)" style="width:220px"><button class="sbtn" id="uUp">올리기</button></div>
   <div class="note">예전 버전(1.7.1 · 1.8.0 · 1.8.1 · 1.8.2)은 수집기 설치 때 <b>dist\\old</b> 폴더에서 자동으로 들어옵니다. 목록에 없는 다른 버전은 그 IMS-Monitoring-Agent-Setup.exe 를 여기서 올리면 됩니다.</div>` : ''}<div id="uMsg"></div>`;
   document.getElementById('ubody').innerHTML = h;
@@ -718,6 +718,10 @@ document.getElementById('upanel').addEventListener('click', async (e) => {
   else if (t.id === 'uBack') { if (confirm(`배포 버전을 ${tg.prev} 로 되돌릴까요?\n이미 ${tg.ver} 이 깔린 서버도 ${tg.prev} 로 다시 설치됩니다.`)) updApi('PUT', 'api/agent-versions/target', { ver: tg.prev }); }
   else if (t.id === 'uStop') { if (confirm('배포를 멈출까요? (이미 설치된 버전은 그대로 둡니다)')) updApi('PUT', 'api/agent-versions/target', { ver: '' }); }
   else if (t.id === 'uRetry') updApi('PUT', 'api/agent-versions/target', { ver: tg.ver });
+  else if (t.id === 'uScan') {
+    const j = await updApi('POST', 'api/agent-versions/rescan', {}); const m = document.getElementById('uMsg');
+    if (j && m) { m.className = j.old_files > 0 || j.added ? 'ok' : 'err'; m.textContent = j.old_files < 0 ? `예전 버전 폴더가 없습니다: ${j.old_dir} — GitHub 에서 ZIP 을 새로 받아 monitor 폴더를 덮어쓰세요` : `새로 넣은 설치 파일 ${j.added}개 (dist\\old 에 ${j.old_files}개 있음)`; }
+  }
   else if (t.dataset.delver) { if (confirm(`설치 파일 ${t.dataset.delver} 을 지울까요?`)) updApi('DELETE', 'api/agent-versions?ver=' + encodeURIComponent(t.dataset.delver)); }
   else if (t.id === 'uUp') {
     const f = document.getElementById('uFile').files[0], m = document.getElementById('uMsg');
