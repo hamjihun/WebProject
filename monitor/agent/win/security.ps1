@@ -6,7 +6,7 @@
 # agent.conf: SEC_CANARY=D:\공유;E:\자료 (미끼 폴더를 만들 곳, 0 = 안 만듦) · SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.8.2'
+$Ver = '1.9.0'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'

@@ -124,7 +124,19 @@
   #devAdd { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; font-size:12.5px; }
   #envbar:empty + #devAdd { margin-left:auto; }
   #devAdd:hover { border-color:var(--accent); color:var(--accent); }
-  body.embed #devAdd { display:none; }
+  body.embed #devAdd, body.embed #updBtn { display:none; }
+  /* 에이전트 버전 관리 */
+  #updBtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; font-size:13px; }
+  #updBtn:hover { border-color:var(--accent); } #updBtn b { background:var(--accent); color:#0f172a; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; } #updBtn b.bad { background:var(--bad); color:#fff; }
+  #uoverlay[hidden] { display:none; }
+  #uoverlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:11; }
+  #upanel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(1100px,100%); max-height:92vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+  #upanel h2 { margin:0; font-size:18px; white-space:nowrap; } #upanel .sub { color:var(--muted); font-size:12.5px; }
+  #upanel h3 { margin:18px 0 8px; font-size:13px; color:var(--muted); font-weight:600; border-top:1px solid var(--line); padding-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  #upanel select, #upanel input[type=text] { background:var(--barbg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 8px; font:inherit; font-size:12.5px; }
+  .utgt { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:13px; } .utgt .big { font-size:20px; font-weight:700; color:var(--accent); }
+  .ust { font-weight:700; } .ust.ok { color:var(--ok); } .ust.wait, .ust.run { color:var(--accent); } .ust.bad { color:var(--bad); } .ust.manual { color:var(--warn); } .ust.na, .ust.skip, .ust.idle, .ust.old { color:var(--muted); font-weight:400; }
+  #uMsg { font-size:12.5px; min-height:16px; } #uMsg.err { color:var(--bad); } #uMsg.ok { color:var(--ok); }
   /* 보안 감시 */
   #secBtn { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; font-size:13px; }
   #secBtn:hover { border-color:var(--accent); }
@@ -215,6 +227,7 @@
   <div id="envbar"></div>
   <button id="devAdd" title="스위치·방화벽·프린터·CCTV·UPS 처럼 에이전트를 깔 수 없는 장비를 Ping·포트로 감시">＋ 장비 추가</button>
   <div class="ver" id="ver"></div>
+  <button id="updBtn" title="에이전트 버전 관리 — 일괄 업데이트 · 되돌리기">⬆ 에이전트<b id="updcnt" hidden></b></button>
   <button id="secBtn" title="보안 감시: 랜섬웨어 · BitLocker · 해킹 의심">🛡 보안<b id="seccnt" hidden>0</b></button>
   <button class="bell" id="bell" title="알림 설정과 이력">🔔 알림<b id="bellcnt" hidden>0</b></button>
 </header>
@@ -227,6 +240,12 @@
 </section>
 </div>
 <div id="devmask" hidden><div id="devbox"></div></div>
+<div id="uoverlay" hidden>
+  <div id="upanel">
+    <div class="dtop"><h2>⬆ 에이전트 버전 관리</h2><span class="sub">배포 버전을 정하면 각 서버 에이전트가 IMS 서버에서 받아 스스로 설치합니다. 새 버전이 4분 안에 정상 전송하지 않으면 그 서버는 자동으로 이전 버전으로 돌아갑니다</span><button class="close" id="uclose">닫기 ✕</button></div>
+    <div id="ubody"></div>
+  </div>
+</div>
 <div id="soverlay" hidden>
   <div id="spanel">
     <div class="dtop"><h2>🛡 보안 감시</h2><span class="sub">랜섬웨어 · BitLocker · 해킹 의심을 서버마다 1분마다 확인합니다 (에이전트 1.8.1 이상)</span><a class="sbtn" href="security.html" style="margin-left:auto;text-decoration:none">📊 보안 화면에서 통계 보기</a><button class="close" id="sclose" style="margin-left:8px">닫기 ✕</button></div>
@@ -364,7 +383,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.44.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.45.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -646,6 +665,79 @@ document.getElementById('dclose').onclick = closeDetail;
 $overlay.addEventListener('click', (e) => { if (e.target === $overlay) closeDetail(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) closeDetail(); });
 window.addEventListener('resize', () => { if (selected) loadDetail(); });
+
+// ---------- 에이전트 버전 관리 ----------
+const $uoverlay = document.getElementById('uoverlay');
+let upd = null;
+const verCmp = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+async function loadUpd(render) {
+  try { upd = await (await fetch('api/agent-versions')).json(); } catch (e) { return; }
+  const need = (upd.hosts || []).filter(h => ['wait', 'run', 'manual'].includes(h.state)).length, bad = (upd.hosts || []).filter(h => h.state === 'bad').length;
+  const c = document.getElementById('updcnt'); c.hidden = !(need + bad); c.textContent = bad ? `실패 ${bad}` : need; c.className = bad ? 'bad' : '';
+  if (render !== false && !$uoverlay.hidden && !updBusy()) renderUpd();
+}
+function updBusy() {                                   // 고르는 중·적는 중이면 자동 갱신 때 다시 그리지 않음
+  const f = document.getElementById('uFile'), ae = document.activeElement;
+  return !!((f && f.files.length) || (ae && $uoverlay.contains(ae) && ['INPUT', 'SELECT'].includes(ae.tagName)));
+}
+function renderUpd() {
+  if (!upd) return;
+  const a = upd.admin, dis = a ? '' : 'disabled', vs = upd.versions || [], tg = upd.target, hosts = upd.hosts || [];
+  const used = (v) => hosts.filter(h => h.ver === v).length;
+  const opt = (sel, extra) => extra + vs.map(v => `<option value="${esc(v.ver)}" ${sel === v.ver ? 'selected' : ''}>${esc(v.ver)}</option>`).join('');
+  let h = !a ? '<div class="note" style="color:var(--warn)">관리자만 배포 · 되돌리기 · 설치 파일 올리기를 할 수 있습니다 (지금은 보기만)</div>' : '';
+  h += `<h3>배포 버전 (전체 서버)</h3><div class="utgt">${tg ? `<span class="big">${esc(tg.ver)}</span><span class="dim">${fmtTime(tg.at)} · ${esc(tg.by || '')}</span>` : '<span class="dim">정하지 않음 — 업데이트하지 않습니다</span>'}
+    <span style="margin-left:auto"></span><select id="uTgt" ${dis}>${opt(tg ? tg.ver : '', '')}</select><button class="sbtn" id="uDeploy" ${dis}>이 버전으로 배포</button>
+    ${tg && tg.prev && vs.some(v => v.ver === tg.prev) ? `<button class="sbtn" id="uBack" ${dis} title="배포 버전을 이전 버전으로 바꿉니다. 이미 새 버전이 깔린 서버도 이전 버전으로 다시 설치됩니다">↩ ${esc(tg.prev)} 로 되돌리기</button>` : ''}
+    ${tg ? `<button class="sbtn" id="uStop" ${dis} title="배포를 멈춥니다 (이미 설치된 버전은 그대로)">배포 멈춤</button><button class="sbtn" id="uRetry" ${dis} title="실패한 서버도 다시 시도합니다">다시 시도</button>` : ''}</div>
+    <div class="note">먼저 서버 한 대만 아래 표에서 새 버전으로 바꿔 시험해 보고, 괜찮으면 전체 배포하는 것을 권합니다. 되돌리기는 위 단추로 전체를, 아래 표에서 서버별로 할 수 있습니다.</div>`;
+  h += `<h3>서버별 <span class="dim" style="font-weight:400">받을 버전을 서버마다 따로 정할 수 있습니다 (전체 따름 / 특정 버전 고정 / 업데이트 안 함)</span></h3><table class="bktbl"><thead><tr><th>서버</th><th>지금 버전</th><th>받을 버전</th><th>상태</th><th>마지막 업데이트 결과</th></tr></thead><tbody>${hosts.map(x => {
+    const r = x.result, rs = r ? `${r.state === 'ok' ? '✅' : r.state === 'running' ? '⏳' : r.state === 'rolledback' ? '↩' : '❌'} ${esc(r.from)} → ${esc(r.to)} ${r.at ? fmtTime(r.at) : ''}${r.msg ? '<br><span class="dim">' + esc(r.msg) + '</span>' : ''}` : '<span class="dim">-</span>';
+    const sel = x.state === 'na' ? '<span class="dim">-</span>' : `<select data-pin="${esc(x.host)}" ${dis}><option value="" ${!x.pin ? 'selected' : ''}>전체 따름${tg ? ' (' + esc(tg.ver) + ')' : ''}</option>${vs.map(v => `<option value="${esc(v.ver)}" ${x.pin === v.ver ? 'selected' : ''}>${esc(v.ver)} 고정</option>`).join('')}<option value="none" ${x.pin === 'none' ? 'selected' : ''}>업데이트 안 함</option></select>`;
+    return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}<div class="dim">${esc(shortOs(x.os))}</div></td><td>${esc(x.ver || '-')}</td><td>${sel}</td><td><span class="ust ${x.state}">${esc(x.text)}</span></td><td style="white-space:normal">${rs}</td></tr>`;
+  }).join('')}</tbody></table>
+  <div class="note">${esc(upd.min_self)} 미만 에이전트는 이 기능이 없어 <b>한 번은 직접 설치</b>해야 합니다 (그 뒤부터 자동). 리눅스 · NAS · ESXi 에이전트는 해당 없음.</div>`;
+  h += `<h3>보관된 설치 파일 <span class="dim" style="font-weight:400">IMS 서버 data\\agent-versions 에 보관 · 수집기를 다시 설치하면 dist 의 새 설치 파일이 자동으로 추가됩니다</span></h3><table class="bktbl"><thead><tr><th>버전</th><th>등록</th><th>크기</th><th>쓰는 서버</th><th>메모</th><th></th></tr></thead><tbody>${vs.map(v => `<tr><td><b>${esc(v.ver)}</b>${tg && tg.ver === v.ver ? ' <span class="ok">● 배포 중</span>' : ''}</td><td>${fmtTime(v.added)} <span class="dim">${esc(v.by || '')}</span></td><td>${Math.round(v.size / 1024)} KB</td><td>${used(v.ver)}대</td><td class="dim" style="white-space:normal">${esc(v.note || '')}</td><td>${a && !(tg && tg.ver === v.ver) ? `<button class="sbtn" data-delver="${esc(v.ver)}">지우기</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="dim">보관된 설치 파일이 없습니다</td></tr>'}</tbody></table>
+  ${a ? `<div class="utgt" style="margin-top:10px"><b style="font-size:12.5px">설치 파일 올리기</b><input type="file" id="uFile" accept=".exe"><input type="text" id="uVer" placeholder="버전 (비우면 파일에서 읽음)" style="width:170px"><input type="text" id="uNote" placeholder="메모 (예: 온습도 수정)" style="width:220px"><button class="sbtn" id="uUp">올리기</button></div>
+  <div class="note">예전 버전으로 되돌리고 싶은데 목록에 없으면, 그 버전의 IMS-Monitoring-Agent-Setup.exe 를 여기서 올리면 됩니다.</div>` : ''}<div id="uMsg"></div>`;
+  document.getElementById('ubody').innerHTML = h;
+}
+async function updApi(method, url, body) {
+  const m = document.getElementById('uMsg');
+  try {
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const j = await r.json(); if (!j.ok) throw new Error(j.error || 'HTTP ' + r.status);
+    await loadUpd(false); renderUpd(); const m2 = document.getElementById('uMsg');
+    if (m2) { m2.className = 'ok'; m2.textContent = j.version ? (j.version.existed ? `같은 파일이 이미 ${j.version.ver} 버전으로 보관되어 있습니다` : `${j.version.ver} 버전을 보관했습니다. 위에서 배포하면 됩니다`) : '저장했습니다. 각 서버는 다음 전송(5초 안)에 지시를 받아 1~3분 안에 설치합니다.'; }
+    return j;
+  } catch (e) { if (m) { m.className = 'err'; m.textContent = '실패: ' + e.message; } }
+}
+document.getElementById('upanel').addEventListener('click', async (e) => {
+  const t = e.target, tg = upd && upd.target;
+  if (t.id === 'uDeploy') { const v = document.getElementById('uTgt').value; if (v && confirm(`모든 서버(따로 정한 서버 제외)에 에이전트 ${v} 을 배포할까요?`)) updApi('PUT', 'api/agent-versions/target', { ver: v }); }
+  else if (t.id === 'uBack') { if (confirm(`배포 버전을 ${tg.prev} 로 되돌릴까요?\n이미 ${tg.ver} 이 깔린 서버도 ${tg.prev} 로 다시 설치됩니다.`)) updApi('PUT', 'api/agent-versions/target', { ver: tg.prev }); }
+  else if (t.id === 'uStop') { if (confirm('배포를 멈출까요? (이미 설치된 버전은 그대로 둡니다)')) updApi('PUT', 'api/agent-versions/target', { ver: '' }); }
+  else if (t.id === 'uRetry') updApi('PUT', 'api/agent-versions/target', { ver: tg.ver });
+  else if (t.dataset.delver) { if (confirm(`설치 파일 ${t.dataset.delver} 을 지울까요?`)) updApi('DELETE', 'api/agent-versions?ver=' + encodeURIComponent(t.dataset.delver)); }
+  else if (t.id === 'uUp') {
+    const f = document.getElementById('uFile').files[0], m = document.getElementById('uMsg');
+    if (!f) { m.className = 'err'; m.textContent = '설치 파일(.exe)을 고르세요'; return; }
+    t.disabled = true; m.className = ''; m.textContent = '올리는 중…';
+    const data = await new Promise((ok) => { const rd = new FileReader(); rd.onload = () => ok(String(rd.result).split(',')[1] || ''); rd.readAsDataURL(f); });
+    await updApi('POST', 'api/agent-versions', { ver: document.getElementById('uVer').value.trim(), note: document.getElementById('uNote').value.trim() || f.name, data });
+  }
+});
+document.getElementById('upanel').addEventListener('change', (e) => {
+  const s = e.target.closest('[data-pin]'); if (!s) return;
+  const v = s.value, name = s.closest('tr').querySelector('b').textContent;
+  if (!confirm(v === 'none' ? `${name} 은 업데이트하지 않게 할까요?` : v ? `${name} 에 ${v} 을 설치할까요? (지금 버전과 다르면 바로 설치 · 되돌리기)` : `${name} 을 전체 배포 버전을 따르게 할까요?`)) { renderUpd(); return; }
+  updApi('PUT', 'api/agent-versions/pin', { host: s.dataset.pin, ver: v });
+});
+document.getElementById('updBtn').onclick = () => { $uoverlay.hidden = false; renderUpd(); loadUpd(); };
+document.getElementById('uclose').onclick = () => { $uoverlay.hidden = true; };
+$uoverlay.addEventListener('click', (e) => { if (e.target === $uoverlay) $uoverlay.hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$uoverlay.hidden) $uoverlay.hidden = true; });
+loadUpd(); setInterval(() => loadUpd(), 15000);
 
 // ---------- 보안 감시 ----------
 const $soverlay = document.getElementById('soverlay');

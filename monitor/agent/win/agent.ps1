@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.8.2"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.9.0"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -207,6 +207,9 @@ if ($HasSec) {
   Log "보안 감시 시작: 이벤트 로그·미끼 파일·BitLocker 를 1분마다 확인합니다"
   try { . (Join-Path $Dir "fswatch.ps1"); Start-FsWatch $BackupPaths } catch { Log "파일 감시 불러오기 실패: $($_.Exception.Message)" }
 }
+# 스스로 업데이트 (수집기 화면에서 배포 버전을 정하면 받아 설치, 문제가 있으면 자동 되돌림)
+$HasSelfUpd = $false
+try { if (Test-Path (Join-Path $Dir "selfupdate.ps1")) { . (Join-Path $Dir "selfupdate.ps1"); Initialize-SelfUpdate; $HasSelfUpd = $true } } catch { Log "업데이트 기능 불러오기 실패: $($_.Exception.Message)" }
 Get-CpuPercent | Out-Null   # 첫 샘플
 
 while ($true) {
@@ -306,10 +309,11 @@ while ($true) {
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
-      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; security = [bool]$HasSec; paths = @($BackupPaths) }
+      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; security = [bool]$HasSec; paths = @($BackupPaths); caps = @($(if ($HasSelfUpd) { 'update' })) }
     }
     if ($backups) { $payload.backups = $backups }
     if ($security) { $payload.security = $security }
+    if ($HasSelfUpd) { $ur = Get-UpdateResult; if ($ur) { $payload.agent.update = $ur } }
     $envNow = Get-EnvReading
     if ($envNow) { $payload.env = $envNow }
     $body = $payload | ConvertTo-Json -Depth 8 -Compress
@@ -317,6 +321,7 @@ while ($true) {
     $resp = Invoke-RestMethod -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' `
       -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5
     try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)`r`nUSB_PATHS=$($resp.agent.usb_paths)`r`nBL_GUARD=$($resp.agent.bl_guard)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
+    if ($HasSelfUpd) { try { if ($resp -and $resp.agent -and $resp.agent.update) { Start-AgentUpdate $resp.agent.update } } catch { Log "업데이트 처리 오류: $($_.Exception.Message)" } }
     $sendSec = $sw.Elapsed.TotalSeconds - $collectSec
     if ($collectSec -ge 30 -or $sendSec -ge 3) {
       # 수집이 오래 걸리면 서버가 그 시간에 매우 느렸다는 뜻 (백업/메모리 부족). 어느 단계가 느렸는지 남긴다

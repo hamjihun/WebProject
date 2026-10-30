@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.44.0';
+const VERSION = '1.45.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +31,8 @@ const DEVICES_FILE = process.env.DEVICES_FILE || path.join(__dirname, 'data', 'd
 const devices = require('./devices').create({ file: DEVICES_FILE, log: console.log });
 const SECURITY_FILE = process.env.SECURITY_FILE || path.join(__dirname, 'data', 'security.json'); // 보안 이벤트 (랜섬웨어·BitLocker·해킹 의심)
 const secmon = require('./security').create({ file: SECURITY_FILE, log: console.log });
+const AGENTVER_DIR = process.env.AGENTVER_DIR || path.join(__dirname, 'data', 'agent-versions');   // 에이전트 설치 파일 버전 보관 (일괄 업데이트·되돌리기)
+const agentupd = require('./agentupd').create({ dir: AGENTVER_DIR, distExe: path.join(__dirname, 'dist', 'IMS-Monitoring-Agent-Setup.exe'), nsiFile: path.join(__dirname, 'agent', 'win', 'installer.nsi'), log: console.log });
 const memo = require('./memo').create({ file: MEMO_FILE, log: console.log });     // 디스크 일별 스냅샷 보관 일수 (전일/주/월 증가량 계산용)
 
 // { host: { latest: {...}, history: [ {...}, ... ], daily: {...} } }
@@ -310,7 +312,9 @@ function normalize(raw, remoteIp) {
     disks,
     backups: normalizeBackups(raw.backups),               // Veeam 백업 서버만 보냄 (없으면 undefined → JSON 에서 빠짐)
     env: normalizeEnv(raw.env),                           // 서버실 온습도 (센서 꽂힌 서버만)
-    agent: raw.agent && typeof raw.agent === 'object' ? { version: String(raw.agent.version || '').slice(0, 20), veeam: !!raw.agent.veeam, backup: !!raw.agent.backup, env: !!raw.agent.env, paths: (Array.isArray(raw.agent.paths) ? raw.agent.paths : []).slice(0, 10).map((p) => String(p).slice(0, 200)) } : undefined,   // 에이전트 자기 정보 (1.5.4+)
+    agent: raw.agent && typeof raw.agent === 'object' ? { version: String(raw.agent.version || '').slice(0, 20), veeam: !!raw.agent.veeam, backup: !!raw.agent.backup, env: !!raw.agent.env, paths: (Array.isArray(raw.agent.paths) ? raw.agent.paths : []).slice(0, 10).map((p) => String(p).slice(0, 200)),
+      caps: (Array.isArray(raw.agent.caps) ? raw.agent.caps : []).slice(0, 10).map((c) => String(c).slice(0, 20)),
+      update: raw.agent.update && typeof raw.agent.update === 'object' ? { state: String(raw.agent.update.state || '').slice(0, 12), from: String(raw.agent.update.from || '').slice(0, 20), to: String(raw.agent.update.to || '').slice(0, 20), at: Date.parse(raw.agent.update.at) || null, msg: String(raw.agent.update.msg || '').slice(0, 300) } : undefined } : undefined,   // 에이전트 자기 정보 (1.5.4+)
   };
 }
 // Veeam 에이전트가 보낸 백업 작업/저장소 상태
@@ -539,7 +543,7 @@ const server = http.createServer(async (req, res) => {
 
   // ---- 로그인 확인 ----
   // 에이전트가 쓰는 주소(/api/metrics, /api/unregister)는 토큰으로만 확인하므로 로그인과 무관하다.
-  const AGENT_PATHS = url.pathname === '/api/metrics' || url.pathname === '/api/unregister';
+  const AGENT_PATHS = url.pathname === '/api/metrics' || url.pathname === '/api/unregister' || url.pathname === '/api/agent/setup';
   const me = AGENT_PATHS ? null : auth.fromCookie(req.headers.cookie);
 
   if (req.method === 'POST' && url.pathname === '/api/login') {
@@ -751,6 +755,17 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
+  // ---- 에이전트 설치 파일 내려받기 (에이전트가 토큰으로) ----
+  if (req.method === 'GET' && url.pathname === '/api/agent/setup') {
+    const token = req.headers['x-token'] || '';
+    if (TOKEN && token !== TOKEN) return json(res, 401, { ok: false, error: 'bad token' });
+    const f = agentupd.filePath(String(url.searchParams.get('ver') || ''));
+    if (!f || !fs.existsSync(f)) return json(res, 404, { ok: false, error: 'no such version' });
+    console.log(`[${new Date().toLocaleTimeString()}] [에이전트] 설치 파일 내려받기 ${url.searchParams.get('ver')} (${remoteIp})`);
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': fs.statSync(f).size, 'Cache-Control': 'no-store' });
+    return fs.createReadStream(f).pipe(res);
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/metrics') {
     try {
       const text = await readBody(req);
@@ -762,7 +777,8 @@ const server = http.createServer(async (req, res) => {
       }
       const m = ingest(raw, remoteIp);
       console.log(`[${new Date().toLocaleTimeString()}] ${m.host} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}%`);
-      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || ''), bl_guard: alerter.blGuard(m.host) ? '1' : '0' } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
+      const upd = agentupd.orderFor(m.host, m.agent);      // 배포 버전과 다르면 업데이트(또는 되돌리기) 지시
+      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || ''), bl_guard: alerter.blGuard(m.host) ? '1' : '0', ...(upd ? { update: upd } : {}) } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
     } catch (e) {
       return json(res, 400, { ok: false, error: String(e.message || e) });
     }
@@ -918,6 +934,41 @@ const server = http.createServer(async (req, res) => {
         const d = await devices.checkNow(String(raw.id || ''));
         alerter.evaluateDevices(devices.list());
         return json(res, 200, { ok: true, device: d, devices: devices.list() });
+      }
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+  // ---- 에이전트 버전 관리 (일괄 업데이트·되돌리기) ----
+  if (url.pathname.startsWith('/api/agent-versions')) {
+    try {
+      if (req.method === 'GET') {
+        const hosts = serversView().map((s) => {
+          const isWin = /windows/i.test(String(s.os || ''));
+          return { host: s.host, name: s.name || '', os: s.os || '', online: s.online, ver: (s.agent && s.agent.version) || '', ...agentupd.stateFor(s.host, s.agent, isWin, s.online) };
+        });
+        return json(res, 200, { ok: true, ...agentupd.info(), hosts, admin: !!(me && me.admin) });
+      }
+      if (!me || !me.admin) return json(res, 403, { ok: false, error: '에이전트 버전 관리는 관리자만 할 수 있습니다' });
+      const who = me.name || me.id, t = new Date().toLocaleTimeString();
+      if (req.method === 'POST' && url.pathname === '/api/agent-versions') {          // 설치 파일 올리기 { ver, note, data(base64) }
+        const raw = JSON.parse((await readBody(req, 40)) || '{}');
+        const v = agentupd.add(String(raw.ver || '').trim(), Buffer.from(String(raw.data || ''), 'base64'), raw.note, who);
+        return json(res, 200, { ok: true, version: v });
+      }
+      if (req.method === 'PUT' && url.pathname === '/api/agent-versions/target') {   // { ver } — 전체 배포 버전 ('' = 멈춤)
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const tg = agentupd.setTarget(String(raw.ver || ''), who);
+        console.log(`[${t}] [에이전트] 배포 버전 ${tg ? tg.ver + ' 로 정함' : '멈춤'} (${who})`);
+        return json(res, 200, { ok: true, target: tg });
+      }
+      if (req.method === 'PUT' && url.pathname === '/api/agent-versions/pin') {      // { host, ver } — 서버별 ('' 전체 따름, 'none' 제외)
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const host = String(raw.host || ''); if (!store.has(host)) return json(res, 404, { ok: false, error: 'unknown host' });
+        const p = agentupd.setPin(host, String(raw.ver || ''));
+        console.log(`[${t}] [에이전트] ${host} 버전 ${p ? (p.ver === 'none' ? '업데이트 안 함' : p.ver + ' 고정') : '전체 배포 버전 따름'} (${who})`);
+        return json(res, 200, { ok: true, pin: p });
+      }
+      if (req.method === 'DELETE' && url.pathname === '/api/agent-versions') {
+        return json(res, 200, { ok: agentupd.remove(String(url.searchParams.get('ver') || '')) });
       }
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }

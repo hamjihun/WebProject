@@ -7,7 +7,7 @@ Unicode true
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.8.2"
+!define VERSION "1.9.0"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
@@ -170,6 +170,7 @@ Section "Install"
   File "veeam.ps1"
   File "security.ps1"
   File "fswatch.ps1"
+  File "selfupdate.ps1"
   File "backup.ps1"
   File "usb-done.ps1"
   File "app.ico"
@@ -243,7 +244,8 @@ Section "Install"
   CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "wscript.exe" '"$INSTDIR\start.vbs"' "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME} 제거.lnk" "$INSTDIR\Uninstall.exe"
 
-  ; 현재 사용자에게 트레이 아이콘 바로 표시
+  ; 현재 사용자에게 트레이 아이콘 바로 표시 (자동 업데이트 등 조용한 설치(/S)는 SYSTEM 이 돌리므로 띄우지 않음 — 다음 로그온 때 뜸)
+  IfSilent +2
   Exec 'wscript.exe "$INSTDIR\tray.vbs"'
 SectionEnd
 
@@ -258,6 +260,7 @@ Section "Uninstall"
   Delete "$INSTDIR\veeam.ps1"
   Delete "$INSTDIR\security.ps1"
   Delete "$INSTDIR\fswatch.ps1"
+  Delete "$INSTDIR\selfupdate.ps1"
   Delete "$INSTDIR\backup.ps1"
   Delete "$INSTDIR\usb-done.ps1"
   Delete "$INSTDIR\agent.conf"
