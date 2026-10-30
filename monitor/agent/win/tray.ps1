@@ -139,12 +139,17 @@ $mStart = $menu.Items.Add("에이전트 시작")
 $mStart.add_Click({ Invoke-TaskCommand '/Run' })
 $mRestart = $menu.Items.Add("에이전트 재시작")
 $mRestart.add_Click({ Invoke-TaskCommand '/End'; Start-Sleep -Seconds 2; Invoke-TaskCommand '/Run' })
-# "에이전트 종료" 메뉴는 없앴다 (보안 감시가 멈추면 안 됨). 꺼도 감시자가 5분 안에 다시 켠다.
+$mStop = $menu.Items.Add("에이전트 종료 (전송 중지)")
+$mStop.add_Click({
+  $r = [System.Windows.Forms.MessageBox]::Show("에이전트를 종료하면 이 서버의 정보가 모니터링 화면에 오프라인으로 표시됩니다.`n종료할까요?", "IMS Monitoring Agent", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+  if ($r -eq [System.Windows.Forms.DialogResult]::Yes) { Invoke-TaskCommand '/End' }
+})
 $menu.Items.Add("-") | Out-Null
 $mHide = $menu.Items.Add("트레이 아이콘 닫기 (에이전트는 계속 실행)")
 $mHide.add_Click({ $ni.Visible = $false; [System.Windows.Forms.Application]::Exit() })
 $menu.add_Opening({
   $mStart.Enabled = ($script:taskState -eq 'stopped')
+  $mStop.Enabled = ($script:taskState -eq 'running')
   $mRestart.Enabled = ($script:taskState -ne 'missing')
 })
 $ni.ContextMenuStrip = $menu

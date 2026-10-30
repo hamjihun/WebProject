@@ -6,7 +6,7 @@
 # agent.conf: SEC_CANARY=D:\공유;E:\자료 (미끼 폴더를 만들 곳, 0 = 안 만듦) · SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.8.2'
+$Ver = '1.8.1'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'
@@ -77,19 +77,13 @@ if ($conf['SEC_AUDIT'] -ne '0' -and $S.auditDay -ne $today) {
 # ---- 보안 로그 ----
 $secReadable = $true
 try { Get-WinEvent -LogName Security -MaxEvents 1 -ErrorAction Stop | Out-Null } catch { $secReadable = $false }
-$instT = $null; try { $instT = [datetime]::Parse((Get-Content (Join-Path $DataDir 'install.marker') -Raw -ErrorAction Stop).Trim()) } catch {}
-foreach ($e in @(Q 'Security' @(1102, 4720, 4728, 4732, 4756, 4698, 4699, 4701) 500)) {
+foreach ($e in @(Q 'Security' @(1102, 4720, 4728, 4732, 4756, 4698) 500)) {
   $id = "S:$($e.RecordId)"; $t = $e.TimeCreated; $d = EvData $e
   if ($e.Id -eq 1102) {
     $u = ''; try { $u = ([xml]$e.ToXml()).Event.UserData.LogFileCleared.SubjectUserName } catch {}
     Add-Ev $id 'crit' 'tamper' "보안 로그가 지워졌습니다 (계정 $u) — 흔적 지우기 의심" $t
   } elseif ($e.Id -eq 4720) {
     Add-Ev $id 'warn' 'account' "새 계정 생성: $($d.TargetUserName) (만든 계정 $($d.SubjectUserName))" $t
-  } elseif ($e.Id -eq 4699 -or $e.Id -eq 4701) {         # 예약 작업 삭제·끄기: 모니터링 작업이면 위험 (설치·제거 중 15분은 뺌)
-    $tn = [string]$d.TaskName
-    if ($tn -match 'IMSMonitoring|ServerMonitor' -and -not ($instT -and [math]::Abs(($t - $instT).TotalMinutes) -lt 15)) {
-      Add-Ev $id 'crit' 'tamper' "모니터링 작업이 $(if ($e.Id -eq 4699) { '삭제' } else { '중지(사용 안 함)' })됐습니다: $tn (계정 $($d.SubjectUserName)) — 에이전트를 끄려는 시도일 수 있음" $t
-    }
   } elseif ($e.Id -eq 4698) {
     $tn = [string]$d.TaskName
     if ($tn -notmatch '^\\Microsoft\\' -and $tn -notmatch 'IMSMonitoring|ServerMonitor') {

@@ -276,7 +276,7 @@ function create({ settingsFile, logDir, log = console.log }) {
       if (!bkOn) clearRule(H, 'backup');
       // 오프라인
       if (offOn) check(`${H}|offline`, H, N, !s.online,
-        () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)${s.sec ? ' — 보안 감시도 멈춤. 점검 중이 아니면 에이전트를 끈 것일 수 있으니 확인' : ''}`, { rule: 'offline', critical: true, grace: Math.max(0, Number(r.offline_grace) || 0) * 60000, recoverMsg: () => '서버 응답 복구' });
+        () => `서버 응답 없음 (마지막 수신 ${Math.round(s.age / 60)}분 전)`, { rule: 'offline', critical: true, grace: Math.max(0, Number(r.offline_grace) || 0) * 60000, recoverMsg: () => '서버 응답 복구' });
       if (!s.online) {   // 오프라인이면 다른 규칙은 판단 보류 (값이 오래된 것)
         for (const k of ['cpu', 'mem']) { const st = states.get(`${H}|${k}`); if (st) st.since = null; }
         continue;

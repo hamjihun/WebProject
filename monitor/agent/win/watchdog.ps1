@@ -7,7 +7,6 @@ $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
 function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [감시자] {1}" -f (Get-Date), $m) } catch {} }
 
-try { $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop; if ($t.State -eq 'Disabled') { Enable-ScheduledTask -TaskName $TaskName -ErrorAction Stop | Out-Null; Log "에이전트 작업이 꺼져 있어 다시 켬" } } catch {}
 $procs = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\agent\.ps1' })
 $reason = $null
 if ($procs.Count -eq 0) { $reason = "에이전트 프로세스 없음" }

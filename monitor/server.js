@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.44.0';
+const VERSION = '1.43.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -774,11 +774,8 @@ const server = http.createServer(async (req, res) => {
       const raw = JSON.parse((await readBody(req)) || '{}');
       const host = String(raw.host || '').trim();
       if (!host) return json(res, 400, { ok: false, error: 'host required' });
-      const ent = store.get(host), hadSec = !!secmon.summary(host), nm = ent && ent.latest ? ent.latest.name : '';
       const removed = removeHost(host);
       console.log(`[${new Date().toLocaleTimeString()}] 목록에서 제거: ${host} (${remoteIp})${removed ? '' : ' - 없던 호스트'}`);
-      // 에이전트 제거도 알린다: 공격자가 감시를 끄려고 지운 것일 수 있다 (보안 감시 중이던 서버는 위험)
-      if (removed) alerter.securityEvents(host, nm, [{ sev: hadSec ? 'crit' : 'warn', msg: `에이전트가 제거되었습니다 — 이 서버는 더 이상 감시되지 않습니다${hadSec ? ' (보안 감시 포함)' : ''}. 직접 지운 게 아니면 바로 확인 (요청 IP ${remoteIp})` }]);
       saveState(false);
       return json(res, 200, { ok: true, removed });
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
