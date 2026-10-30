@@ -7,7 +7,7 @@ Unicode true
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.8.1"
+!define VERSION "1.8.2"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
@@ -76,6 +76,11 @@ Function .onInit
         StrCpy $Token $1 "" 6
         Call TrimNL2
       ${EndIf}
+      StrCpy $2 $1 9
+      ${If} $2 == "INTERVAL="
+        StrCpy $Interval $1 "" 9
+        Call TrimNL3
+      ${EndIf}
       Goto loop
     close:
     FileClose $0
@@ -91,6 +96,11 @@ Function TrimNL2
   Push $Token
   Call Trim
   Pop $Token
+FunctionEnd
+Function TrimNL3
+  Push $Interval
+  Call Trim
+  Pop $Interval
 FunctionEnd
 ; 문자열 끝의 CR/LF 제거
 Function Trim
@@ -166,12 +176,43 @@ Section "Install"
   File "start.ps1"
   File "start.vbs"
 
-  ; 설정 파일
+  ; 설정 파일: URL·TOKEN·INTERVAL 은 새로 쓰고, 그 밖의 줄(ENV_PORT, BACKUP_PATH, SKIPCERT, SEC_... 등)은 그대로 살린다
+  ; (예전에는 4줄만 새로 써서 재설치하면 온습도 센서 포트 같은 설정이 지워졌다)
+  Delete "$INSTDIR\agent.conf.old"
+  IfFileExists "$INSTDIR\agent.conf" 0 conf_new
+    Rename "$INSTDIR\agent.conf" "$INSTDIR\agent.conf.old"
+  conf_new:
   FileOpen $0 "$INSTDIR\agent.conf" w
   FileWrite $0 "URL=$Url$\r$\n"
   FileWrite $0 "TOKEN=$Token$\r$\n"
   FileWrite $0 "INTERVAL=$Interval$\r$\n"
-  FileWrite $0 "SKIPCERT=0$\r$\n"
+  IfFileExists "$INSTDIR\agent.conf.old" conf_keep 0
+    FileWrite $0 "SKIPCERT=0$\r$\n"
+    Goto conf_done
+  conf_keep:
+    FileOpen $1 "$INSTDIR\agent.conf.old" r
+    conf_loop:
+      ClearErrors
+      FileRead $1 $2
+      IfErrors conf_close
+      StrCpy $3 $2 4
+      StrCmp $3 "URL=" conf_loop
+      StrCpy $3 $2 6
+      StrCmp $3 "TOKEN=" conf_loop
+      StrCpy $3 $2 9
+      StrCmp $3 "INTERVAL=" conf_loop
+      StrCmp $2 "$\r$\n" conf_loop
+      StrCmp $2 "$\n" conf_loop
+      StrCmp $2 "" conf_loop
+      FileWrite $0 $2
+      StrCpy $3 $2 1 -1
+      StrCmp $3 "$\n" conf_loop
+      FileWrite $0 "$\r$\n"
+      Goto conf_loop
+    conf_close:
+    FileClose $1
+    Delete "$INSTDIR\agent.conf.old"
+  conf_done:
   FileClose $0
 
   ; 자동 실행 등록 + 시작
@@ -179,7 +220,7 @@ Section "Install"
   nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\service.ps1" -Install'
   Pop $0
   ${If} $0 != 0
-    MessageBox MB_ICONEXCLAMATION|MB_OK "자동 실행 등록에 실패했습니다 (코드 $0). 설치 로그를 확인하세요."
+    MessageBox MB_ICONEXCLAMATION|MB_OK "자동 실행 등록에 실패했습니다 (코드 $0). 설치 로그를 확인하세요." /SD IDOK
   ${EndIf}
 
   ; 프로그램 추가/제거 등록
