@@ -3,6 +3,7 @@
 // data/agent-versions/index.json = { versions:[{ver,sha256,size,added,note,file}], target:{ver,n,at,by,prev}, pins:{호스트:{ver,n}} }
 //   pins[host].ver: 특정 버전에 고정, 'none' = 이 서버는 업데이트 안 함. n = 배포할 때마다 늘어나는 번호(같은 시도를 되풀이하지 않게)
 // 새 설치 파일은 수집기가 시작할 때 dist/IMS-Monitoring-Agent-Setup.exe 를 보고 (버전은 agent/win/installer.nsi) 자동으로 목록에 넣는다.
+// dist/old/*.exe 에 둔 예전 설치 파일도 (exe 안의 버전으로) 넣는다. 화면에서 지운 것은 removed 에 기억해 다시 넣지 않는다.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -22,8 +23,8 @@ function exeVer(buf) {
 
 function create({ dir, distExe, nsiFile, log = console.log }) {
   const IDX = path.join(dir, 'index.json');
-  let db = { versions: [], target: null, pins: {} };
-  try { const v = JSON.parse(fs.readFileSync(IDX, 'utf8')); if (v && Array.isArray(v.versions)) db = { versions: v.versions, target: v.target || null, pins: v.pins || {} }; }
+  let db = { versions: [], target: null, pins: {}, removed: [] };
+  try { const v = JSON.parse(fs.readFileSync(IDX, 'utf8')); if (v && Array.isArray(v.versions)) db = { versions: v.versions, target: v.target || null, pins: v.pins || {}, removed: Array.isArray(v.removed) ? v.removed : [] }; }
   catch (e) { if (e.code !== 'ENOENT') log('에이전트 버전 목록 읽기 실패: ' + e.message); }
   function save() {
     try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(IDX + '.tmp', JSON.stringify(db, null, 1)); fs.renameSync(IDX + '.tmp', IDX); }
@@ -59,13 +60,22 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
       let ver = m[1]; if (find(ver)) ver = `${ver}.${db.versions.filter((x) => x.ver.startsWith(m[1] + '.')).length + 1}`;   // 같은 번호인데 내용이 다르면 1.9.0.1 처럼
       add(ver, buf, '배포 폴더(dist)에서 자동 등록', '수집기');
     } catch (e) { log('[에이전트] 배포 폴더 설치 파일 등록 실패: ' + e.message); }
+    try {                                                     // 예전 버전 (dist/old)
+      const od = path.join(path.dirname(distExe), 'old');
+      for (const f of fs.existsSync(od) ? fs.readdirSync(od).filter((x) => /\.exe$/i.test(x)) : []) {
+        const buf = fs.readFileSync(path.join(od, f)), sha = crypto.createHash('sha256').update(buf).digest('hex');
+        if (db.versions.some((x) => x.sha256 === sha) || db.removed.includes(sha)) continue;
+        const ver = exeVer(buf); if (!okVer(ver) || find(ver)) continue;
+        add(ver, buf, '예전 버전 (dist/old)', '수집기');
+      }
+    } catch (e) { log('[에이전트] 예전 설치 파일 등록 실패: ' + e.message); }
   }
   function remove(ver) {
     const v = find(ver); if (!v) return false;
     if (db.target && db.target.ver === ver) throw new Error('지금 배포 중인 버전은 지울 수 없습니다');
     if (Object.values(db.pins).some((p) => p.ver === ver)) throw new Error('이 버전에 고정한 서버가 있어 지울 수 없습니다');
     try { fs.unlinkSync(path.join(dir, v.file)); } catch (e) {}
-    db.versions = db.versions.filter((x) => x !== v); save();
+    db.versions = db.versions.filter((x) => x !== v); if (!db.removed.includes(v.sha256)) db.removed.push(v.sha256); save();
     return true;
   }
   function setTarget(ver, by) {             // ver = '' 이면 배포 멈춤

@@ -940,12 +940,18 @@ const server = http.createServer(async (req, res) => {
   // ---- 에이전트 버전 관리 (일괄 업데이트·되돌리기) ----
   if (url.pathname.startsWith('/api/agent-versions')) {
     try {
-      if (req.method === 'GET') {
+      if (req.method === 'GET' && url.pathname === '/api/agent-versions') {
         const hosts = serversView().map((s) => {
           const isWin = /windows/i.test(String(s.os || ''));
           return { host: s.host, name: s.name || '', os: s.os || '', online: s.online, ver: (s.agent && s.agent.version) || '', ...agentupd.stateFor(s.host, s.agent, isWin, s.online) };
         });
         return json(res, 200, { ok: true, ...agentupd.info(), hosts, admin: !!(me && me.admin) });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/agent-versions/file') {      // 설치 파일 내려받기 (로그인한 사람)
+        const ver = String(url.searchParams.get('ver') || ''), f = agentupd.filePath(ver);
+        if (!f || !fs.existsSync(f)) return json(res, 404, { ok: false, error: '없는 버전입니다' });
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': fs.statSync(f).size, 'Content-Disposition': `attachment; filename="IMS-Monitoring-Agent-Setup-${ver}.exe"`, 'Cache-Control': 'no-store' });
+        return fs.createReadStream(f).pipe(res);
       }
       if (!me || !me.admin) return json(res, 403, { ok: false, error: '에이전트 버전 관리는 관리자만 할 수 있습니다' });
       const who = me.name || me.id, t = new Date().toLocaleTimeString();
