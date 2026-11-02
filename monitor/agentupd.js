@@ -83,7 +83,9 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
   function setTarget(ver, by) {             // ver = '' 이면 배포 멈춤
     if (ver && !find(ver)) throw new Error('없는 버전입니다');
     const prev = db.target && db.target.ver;
-    db.target = ver ? { ver, n: ((db.target && db.target.n) || 0) + 1, at: Date.now(), by: String(by || '').slice(0, 40), prev: prev && prev !== ver ? prev : (db.target && db.target.prev) || '' } : null;
+    // down: 직전 배포 버전보다 낮은 버전을 고르면(=되돌리기) 그보다 새 버전이 깔린 서버도 내린다. 그 밖에는 새 버전이 깔린 서버는 건드리지 않음
+    // (2026-11-02: 배포 버전이 1.10.1 인 채로 1.10.7 을 직접 깔자 곧바로 1.10.1 로 내려가 버린 일이 있었음)
+    db.target = ver ? { ver, n: ((db.target && db.target.n) || 0) + 1, at: Date.now(), by: String(by || '').slice(0, 40), prev: prev && prev !== ver ? prev : (db.target && db.target.prev) || '', down: !!(prev && cmpVer(ver, prev) < 0) } : null;
     save(); return db.target;
   }
   function setPin(host, ver) {               // '' = 전체 배포 버전 따름, 'none' = 업데이트 안 함, 그 밖 = 그 버전 고정
@@ -94,14 +96,15 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
   // 이 서버가 받아야 할 버전 (없으면 null)
   function wantFor(host) {
     const p = db.pins[host];
-    if (p) return p.ver === 'none' ? null : { ver: p.ver, n: 'p' + p.n };
-    return db.target ? { ver: db.target.ver, n: 't' + db.target.n } : null;
+    if (p) return p.ver === 'none' ? null : { ver: p.ver, n: 'p' + p.n, down: true };           // 서버별 고정은 낮은 버전이어도 그대로
+    return db.target ? { ver: db.target.ver, n: 't' + db.target.n, down: !!db.target.down } : null;
   }
   const canSelf = (agent) => !!(agent && Array.isArray(agent.caps) && agent.caps.includes('update'));
   // /api/metrics 응답에 실어 보낼 업데이트 지시
   function orderFor(host, agent) {
     if (!agent || !canSelf(agent)) return null;
     const w = wantFor(host); if (!w || w.ver === agent.version) return null;
+    if (!w.down && cmpVer(w.ver, agent.version) < 0) return null;                              // 더 새 버전이 깔려 있으면 내리지 않음
     const v = find(w.ver); if (!v) return null;
     const cur = find(agent.version);
     return { ver: v.ver, sha: v.sha256, size: v.size, n: w.n, prev: cur ? { ver: cur.ver, sha: cur.sha256 } : null };
@@ -115,6 +118,7 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
     if (p && p.ver === 'none') return { ...base, state: 'skip', text: '업데이트 안 함 (이 서버 제외)' };
     if (!w) return { ...base, state: 'idle', text: '배포 버전 없음' };
     if (w.ver === agent.version) return { ...base, state: 'ok', text: r && r.state === 'ok' && r.to === w.ver ? '최신 (업데이트 완료)' : '최신' };
+    if (!w.down && cmpVer(w.ver, agent.version) < 0) return { ...base, state: 'ok', text: `배포 버전(${w.ver})보다 새 버전 — 그대로 둠` };
     if (!canSelf(agent)) return { ...base, state: 'manual', text: `직접 설치 필요 (${MIN_SELF_UPDATE} 이상부터 자동)` };
     if (r && r.to === w.ver && r.state === 'running') return { ...base, state: 'run', text: '설치 중' };
     if (r && r.to === w.ver && r.state === 'rolledback') return { ...base, state: 'bad', text: `실패 → ${r.from} 로 자동 되돌림 (오른쪽 결과 참고, '다시 시도' 로 재시도)` };

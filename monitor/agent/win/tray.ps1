@@ -3,7 +3,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$mutex = New-Object System.Threading.Mutex($false, "Global\IMSMonitoringAgentTray_" + $env:USERNAME)
+$mutex = New-Object System.Threading.Mutex($false, ("Global\IMSMonitoringAgentTray_" + $env:USERNAME))   # 괄호 필수: 없으면 인수가 3개로 쪼개져 만들기 실패(예전부터 중복 실행 막기가 안 됐음)
 if (-not $mutex.WaitOne(0, $false)) { exit 0 }   # 이미 떠 있으면 종료
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
