@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.45.1';
+const VERSION = '1.46.0';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -314,6 +314,7 @@ function normalize(raw, remoteIp) {
     env: normalizeEnv(raw.env),                           // 서버실 온습도 (센서 꽂힌 서버만)
     agent: raw.agent && typeof raw.agent === 'object' ? { version: String(raw.agent.version || '').slice(0, 20), veeam: !!raw.agent.veeam, backup: !!raw.agent.backup, env: !!raw.agent.env, paths: (Array.isArray(raw.agent.paths) ? raw.agent.paths : []).slice(0, 10).map((p) => String(p).slice(0, 200)),
       caps: (Array.isArray(raw.agent.caps) ? raw.agent.caps : []).slice(0, 10).map((c) => String(c).slice(0, 20)),
+      unlock_v: Number(raw.agent.unlock_v) || 0,
       update: raw.agent.update && typeof raw.agent.update === 'object' ? { state: String(raw.agent.update.state || '').slice(0, 12), from: String(raw.agent.update.from || '').slice(0, 20), to: String(raw.agent.update.to || '').slice(0, 20), at: Date.parse(raw.agent.update.at) || null, msg: String(raw.agent.update.msg || '').slice(0, 300) } : undefined } : undefined,   // 에이전트 자기 정보 (1.5.4+)
   };
 }
@@ -398,8 +399,10 @@ function diskGrowth(entry, host) {
   return out;
 }
 
+const agentStops = new Map();      // 관리자가 종료 비밀번호로 끈 서버 { host: {at, by} } — 다음 전송이 오면 지움
 function ingest(raw, remoteIp) {
   const m = normalize(raw, remoteIp);
+  agentStops.delete(m.host);
   let entry = store.get(m.host);
   if (!entry) { entry = { latest: null, history: [], daily: {} }; store.set(m.host, entry); }
   entry.latest = m;
@@ -417,6 +420,8 @@ function ingest(raw, remoteIp) {
     if (fresh.length) {
       for (const e of fresh) if (e.sev !== 'info') console.log(`[${new Date().toLocaleTimeString()}] [보안] ${m.name || m.host}: ${e.sev === 'crit' ? '위험' : '주의'} ${e.msg}`);
       alerter.securityEvents(m.host, m.name, fresh.filter((e) => Date.now() - e.t < 30 * 60000));
+      const late = fresh.filter((e) => Date.now() - e.t >= 30 * 60000 && e.sev !== 'info');   // 수집기·네트워크가 끊긴 동안 쌓인 것 — 한 건으로 묶어 알림
+      if (late.length) { const c = late.filter((e) => e.sev === 'crit').length; alerter.securityEvents(m.host, m.name, [{ sev: c ? 'crit' : 'warn', msg: `수집기 연결이 끊긴 동안 생긴 보안 이벤트 ${late.length}건${c ? ` (위험 ${c})` : ''} — 가장 최근: ${late[0].msg.slice(0, 120)} · 🛡 보안 화면에서 확인` }]); }
     }
     const nk = secmon.ingestKeys(m.host, raw.security.escrow);       // BitLocker 자동 차단이 넣은 복구키
     if (nk.length) { console.log(`[${new Date().toLocaleTimeString()}] [보안] ${m.name || m.host}: BitLocker 복구키 보관 ${nk.map((k) => k.m).join(', ')}`); alerter.securityKeys(m.host, m.name, nk); }
@@ -445,7 +450,7 @@ function serversView() {
     const all = Array.isArray(e.latest.disks) ? e.latest.disks : [];
     const disks = hide.size ? all.filter((d) => !hide.has(String(d.mount || '').toLowerCase())) : all;
     const growth = diskGrowth(e, host).filter((g) => !hide.has(String(g.mount || '').toLowerCase()));
-    list.push({ ...e.latest, disks, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth, days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host), all_disks: all.map((d) => d.mount), hide_disks: hideList, sec: secmon.summary(host) });
+    list.push({ ...e.latest, disks, backups: visibleBackups(e.latest.backups), online: now - e.latest.ts < OFFLINE_AFTER, age: Math.round((now - e.latest.ts) / 1000), growth, days_tracked: Object.keys(e.daily || {}).length, muted: alerter.isMuted(host), host_rules: alerter.getHostRules(host), host_conf: alerter.getHostConf(host), all_disks: all.map((d) => d.mount), hide_disks: hideList, sec: secmon.summary(host), stopped: agentStops.get(host) || null });
   }
   // 저장된 순서 우선, 나머지는 이름순으로 뒤에
   const idx = new Map(order.map((h, i) => [h, i]));
@@ -543,7 +548,7 @@ const server = http.createServer(async (req, res) => {
 
   // ---- 로그인 확인 ----
   // 에이전트가 쓰는 주소(/api/metrics, /api/unregister)는 토큰으로만 확인하므로 로그인과 무관하다.
-  const AGENT_PATHS = url.pathname === '/api/metrics' || url.pathname === '/api/unregister' || url.pathname === '/api/agent/setup';
+  const AGENT_PATHS = url.pathname === '/api/metrics' || url.pathname === '/api/unregister' || url.pathname === '/api/agent/setup' || url.pathname === '/api/agent/event';
   const me = AGENT_PATHS ? null : auth.fromCookie(req.headers.cookie);
 
   if (req.method === 'POST' && url.pathname === '/api/login') {
@@ -755,6 +760,25 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
   }
 
+  // ---- 에이전트 알림: 관리자가 종료 비밀번호로 끔 (service.ps1 -Stop) ----
+  if (req.method === 'POST' && url.pathname === '/api/agent/event') {
+    try {
+      const raw = JSON.parse((await readBody(req)) || '{}');
+      const token = req.headers['x-token'] || raw.token || '';
+      if (TOKEN && token !== TOKEN) return json(res, 401, { ok: false, error: 'bad token' });
+      const host = String(raw.host || '').trim(), by = String(raw.by || '').slice(0, 60);
+      if (!host || !store.has(host)) return json(res, 404, { ok: false, error: 'unknown host' });
+      if (raw.kind === 'stop') {
+        agentStops.set(host, { at: Date.now(), by });          // 다음 전송이 올 때까지 오프라인 알림 대신 '관리자 종료'로 표시
+        const nm = (store.get(host).latest || {}).name || '';
+        console.log(`[${new Date().toLocaleTimeString()}] [에이전트] ${nm || host}: 관리자가 종료 비밀번호로 종료 (${by})`);
+        const fresh = secmon.ingest(host, { events: [{ id: 'X:stop:' + Date.now(), t: new Date().toISOString(), sev: 'warn', kind: 'tamper', msg: `관리자가 종료 비밀번호로 에이전트를 종료했습니다 (${by}) — 다시 켤 때까지 모니터링·보안 감시가 멈춤` }] });
+        alerter.securityEvents(host, nm, fresh);
+      }
+      return json(res, 200, { ok: true });
+    } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
+  }
+
   // ---- 에이전트 설치 파일 내려받기 (에이전트가 토큰으로) ----
   if (req.method === 'GET' && url.pathname === '/api/agent/setup') {
     const token = req.headers['x-token'] || '';
@@ -778,7 +802,8 @@ const server = http.createServer(async (req, res) => {
       const m = ingest(raw, remoteIp);
       console.log(`[${new Date().toLocaleTimeString()}] ${m.host} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}%`);
       const upd = agentupd.orderFor(m.host, m.agent);      // 배포 버전과 다르면 업데이트(또는 되돌리기) 지시
-      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || ''), bl_guard: alerter.blGuard(m.host) ? '1' : '0', ...(upd ? { update: upd } : {}) } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
+      const unl = agentupd.unlockOrder();                   // 종료·삭제 비밀번호 해시
+      return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || ''), bl_guard: alerter.blGuard(m.host) ? '1' : '0', ...(upd ? { update: upd } : {}), ...(unl ? { unlock: unl } : {}) } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
     } catch (e) {
       return json(res, 400, { ok: false, error: String(e.message || e) });
     }
@@ -790,8 +815,12 @@ const server = http.createServer(async (req, res) => {
       const raw = JSON.parse((await readBody(req)) || '{}');
       const host = String(raw.host || '').trim();
       if (!host) return json(res, 400, { ok: false, error: 'host required' });
+      const ent = store.get(host), hadSec = !!secmon.summary(host), nm = ent && ent.latest ? ent.latest.name : '';
       const removed = removeHost(host);
       console.log(`[${new Date().toLocaleTimeString()}] 목록에서 제거: ${host} (${remoteIp})${removed ? '' : ' - 없던 호스트'}`);
+      // 에이전트 제거도 알린다: 공격자가 감시를 끄려고 지운 것일 수 있다 (보안 감시 중이던 서버는 위험)
+      if (removed && raw.pwok) alerter.securityEvents(host, nm, [{ sev: 'warn', msg: `에이전트가 제거되었습니다 (삭제 비밀번호 확인됨) — 이 서버는 더 이상 감시되지 않습니다 (요청 IP ${remoteIp})` }]);
+      else if (removed) alerter.securityEvents(host, nm, [{ sev: hadSec ? 'crit' : 'warn', msg: `에이전트가 제거되었습니다 — 이 서버는 더 이상 감시되지 않습니다${hadSec ? ' (보안 감시 포함)' : ''}. 직접 지운 게 아니면 바로 확인 (요청 IP ${remoteIp})` }]);
       saveState(false);
       return json(res, 200, { ok: true, removed });
     } catch (e) { return json(res, 400, { ok: false, error: String(e.message || e) }); }
@@ -943,7 +972,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && url.pathname === '/api/agent-versions') {
         const hosts = serversView().map((s) => {
           const isWin = /windows/i.test(String(s.os || ''));
-          return { host: s.host, name: s.name || '', os: s.os || '', online: s.online, ver: (s.agent && s.agent.version) || '', ...agentupd.stateFor(s.host, s.agent, isWin, s.online) };
+          return { host: s.host, name: s.name || '', os: s.os || '', online: s.online, ver: (s.agent && s.agent.version) || '', unlock_v: (s.agent && s.agent.unlock_v) || 0, stopped: s.stopped, ...agentupd.stateFor(s.host, s.agent, isWin, s.online) };
         });
         return json(res, 200, { ok: true, ...agentupd.info(), hosts, admin: !!(me && me.admin) });
       }
@@ -978,6 +1007,12 @@ const server = http.createServer(async (req, res) => {
         const p = agentupd.setPin(host, String(raw.ver || ''));
         console.log(`[${t}] [에이전트] ${host} 버전 ${p ? (p.ver === 'none' ? '업데이트 안 함' : p.ver + ' 고정') : '전체 배포 버전 따름'} (${who})`);
         return json(res, 200, { ok: true, pin: p });
+      }
+      if (req.method === 'PUT' && url.pathname === '/api/agent-versions/unlock') {   // { pw } — 종료·삭제 비밀번호 ('' = 해제)
+        const raw = JSON.parse((await readBody(req)) || '{}');
+        const u = agentupd.setUnlock(String(raw.pw || ''), who);
+        console.log(`[${t}] [에이전트] 종료·삭제 비밀번호 ${u.set ? '변경' : '해제'} (${who})`);
+        return json(res, 200, { ok: true, unlock: u });
       }
       if (req.method === 'DELETE' && url.pathname === '/api/agent-versions') {
         return json(res, 200, { ok: agentupd.remove(String(url.searchParams.get('ver') || '')) });

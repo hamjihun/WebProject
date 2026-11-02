@@ -4,10 +4,11 @@ Unicode true
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.9.0"
+!define VERSION "1.10.0"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
@@ -38,6 +39,7 @@ Var Interval
 Var hUrl
 Var hToken
 Var hInterval
+Var hUnPw
 
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "${APPNAME} 설치"
@@ -51,6 +53,7 @@ Page custom ConfigPage ConfigPageLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
+UninstPage custom un.PwPage un.PwLeave
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Korean"
@@ -248,6 +251,55 @@ Section "Install"
   IfSilent +2
   Exec 'wscript.exe "$INSTDIR\tray.vbs"'
 SectionEnd
+
+; ---- 삭제 비밀번호 ----
+; 서버 모니터링 화면(⬆ 에이전트)에서 관리자가 '종료·삭제 비밀번호'를 정하면 에이전트가 해시를 unlock.json 에 받아 둔다.
+; 있으면 제거할 때 비밀번호를 묻고 service.ps1 -CheckPw 로 확인 (0 맞음, 1 틀림, 2 비밀번호 없음). 비밀번호는 환경 변수로 넘긴다.
+; 조용한 제거(/S)는 /PW=비밀번호 를 같이 줘야 한다.
+Function un.onInit
+  SetShellVarContext all
+  IfSilent 0 un_init_done
+  IfFileExists "$APPDATA\${APPID}\unlock.json" 0 un_init_done
+    ${un.GetParameters} $R0
+    ClearErrors
+    ${un.GetOptions} $R0 "/PW=" $1
+    IfErrors un_init_fail
+    System::Call 'kernel32::SetEnvironmentVariable(t "IMS_UNPW", t r1)'
+    nsExec::ExecToStack 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\service.ps1" -CheckPw'
+    Pop $0
+    Pop $2
+    StrCmp $0 "1" un_init_fail un_init_done
+  un_init_fail:
+    SetErrorLevel 5
+    Quit
+  un_init_done:
+FunctionEnd
+
+Function un.PwPage
+  SetShellVarContext all
+  IfFileExists "$APPDATA\${APPID}\unlock.json" +2 0
+    Abort                                  ; 비밀번호를 정하지 않았으면 이 화면은 건너뜀
+  !insertmacro MUI_HEADER_TEXT "삭제 비밀번호" "에이전트를 지우려면 삭제 비밀번호가 필요합니다"
+  nsDialogs::Create 1018
+  Pop $0
+  ${NSD_CreateLabel} 0 0 100% 40u "이 에이전트는 서버 모니터링·보안 감시를 하고 있어 비밀번호 없이 지울 수 없습니다.$\r$\n서버 모니터링 화면(⬆ 에이전트)에서 관리자가 정한 '종료·삭제 비밀번호'를 넣으세요."
+  Pop $0
+  ${NSD_CreatePassword} 0 46u 70% 13u ""
+  Pop $hUnPw
+  nsDialogs::Show
+FunctionEnd
+
+Function un.PwLeave
+  ${NSD_GetText} $hUnPw $1
+  System::Call 'kernel32::SetEnvironmentVariable(t "IMS_UNPW", t r1)'
+  nsExec::ExecToStack 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\service.ps1" -CheckPw'
+  Pop $0
+  Pop $2
+  ${If} $0 == "1"
+    MessageBox MB_ICONEXCLAMATION|MB_OK "삭제 비밀번호가 틀렸습니다."
+    Abort
+  ${EndIf}
+FunctionEnd
 
 Section "Uninstall"
   nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\service.ps1" -Uninstall'

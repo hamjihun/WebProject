@@ -1,6 +1,6 @@
 ﻿# 설치 프로그램이 호출: 에이전트를 시스템 시작 시 자동 실행(작업 스케줄러, SYSTEM)으로 등록하고
 # 트레이 아이콘을 로그온 시 자동 실행(Run 키)으로 등록합니다.
-param([switch]$Install, [switch]$Uninstall)
+param([switch]$Install, [switch]$Uninstall, [switch]$CheckPw, [switch]$Stop, [switch]$Start, [string]$PwB64 = '')
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TaskName = "IMSMonitoringAgent"
@@ -17,7 +17,60 @@ function Stop-AgentProcesses {
     ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
 }
 
+# ---- 종료·삭제 비밀번호 ----
+# 서버 모니터링 화면(⬆ 에이전트)에서 관리자가 정하면 에이전트가 해시만 unlock.json 에 받아 둔다 (PBKDF2-SHA1, 10만 번).
+# 트레이의 '에이전트 종료', 제어판의 프로그램 제거가 이 비밀번호를 묻는다. 비밀번호를 정하지 않았으면 예전처럼 그냥 된다.
+$UnlockFile = Join-Path $DataDir "unlock.json"
+function Get-GivenPw { if ($PwB64) { try { return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PwB64)) } catch { return '' } }; return [string]$env:IMS_UNPW }
+function Test-UnlockPw {                             # 0 = 맞음, 1 = 틀림, 2 = 비밀번호를 정하지 않음
+  if (-not (Test-Path $UnlockFile)) { return 2 }
+  try { $u = Get-Content $UnlockFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return 2 }
+  if (-not $u.hash -or -not $u.salt) { return 2 }
+  $pw = Get-GivenPw; if (-not $pw) { return 1 }
+  try {
+    $salt = [byte[]]@(for ($i = 0; $i -lt $u.salt.Length; $i += 2) { [Convert]::ToByte($u.salt.Substring($i, 2), 16) })
+    $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($pw, $salt, [int]$u.iter)
+    $hex = ([BitConverter]::ToString($kdf.GetBytes(32)) -replace '-', '').ToLower()
+    if ($hex -eq ([string]$u.hash).ToLower()) { return 0 }
+  } catch {}
+  return 1
+}
+function Send-AgentEvent([string]$kind) {          # 수집기에 알림 (관리자 종료 등)
+  try {
+    $conf = @{}; $confPath = Join-Path $Dir "agent.conf"
+    if (Test-Path $confPath) { foreach ($line in Get-Content $confPath) { if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$') { $conf[$matches[1].ToUpper()] = $matches[2] } } }
+    if (-not $conf['URL']) { return }
+    if ($conf['SKIPCERT'] -eq '1') { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
+    $u = $conf['URL'] -replace '/api/metrics/?$', '/api/agent/event'
+    $body = @{ host = $env:COMPUTERNAME; token = $conf['TOKEN']; kind = $kind; by = "$env:USERDOMAIN\$env:USERNAME" } | ConvertTo-Json -Compress
+    Invoke-RestMethod -Uri $u -Method Post -ContentType 'application/json; charset=utf-8' -Headers @{ 'X-Token' = $conf['TOKEN'] } -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5 | Out-Null
+  } catch {}
+}
+function Write-AgentLog($m) { try { Add-Content -Path (Join-Path $DataDir "agent.log") -Value ("{0:yyyy-MM-dd HH:mm:ss} [관리] {1}" -f (Get-Date), $m) } catch {} }
+
+if ($CheckPw) { exit (Test-UnlockPw) }
+
+if ($Stop) {                                         # 트레이에서 '에이전트 종료' (관리자 권한으로 실행됨)
+  $r = Test-UnlockPw
+  if ($r -eq 1) { Write-AgentLog "에이전트 종료 시도 — 종료 비밀번호가 틀림 ($env:USERNAME)"; exit 1 }
+  try { @{ at = (Get-Date).ToString('o'); by = "$env:USERDOMAIN\$env:USERNAME" } | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $DataDir "stopped.json") -Encoding UTF8 } catch {}   # 감시자·되살리기가 다시 켜지 않게
+  Send-AgentEvent 'stop'
+  try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\agent\.ps1' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
+  Write-AgentLog "관리자가 종료 비밀번호로 에이전트를 종료함 ($env:USERNAME)"
+  exit 0
+}
+if ($Start) {                                        # 트레이에서 '에이전트 시작'
+  Remove-Item (Join-Path $DataDir "stopped.json") -Force -ErrorAction SilentlyContinue
+  try { Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop } catch { & schtasks.exe /Run /TN $TaskName | Out-Null }
+  Write-AgentLog "에이전트 시작 ($env:USERNAME)"
+  exit 0
+}
+
 if ($Uninstall) {
+  # 제거 프로그램이 비밀번호를 확인했다(IMS_UNPW). 에이전트가 작업을 되살리지 못하게 프로세스부터 끈다
+  $pwok = (Test-UnlockPw) -eq 0
+  Stop-AgentProcesses
   # 수집기에 "이 서버를 목록에서 빼달라"고 알림 (실패해도 제거는 계속)
   try {
     $conf = @{}
@@ -27,12 +80,13 @@ if ($Uninstall) {
       $unregUrl = $conf['URL'] -replace '/api/metrics/?$', '/api/unregister'
       if ($conf['SKIPCERT'] -eq '1') { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
       try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
-      $body = @{ host = $env:COMPUTERNAME; token = $conf['TOKEN'] } | ConvertTo-Json -Compress
+      $body = @{ host = $env:COMPUTERNAME; token = $conf['TOKEN']; pwok = [bool]$pwok } | ConvertTo-Json -Compress
       Invoke-RestMethod -Uri $unregUrl -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 5 | Out-Null
       Write-Host "수집기 목록에서 제거 요청 완료: $unregUrl"
     }
   } catch { Write-Host "수집기 알림 실패 (무시): $($_.Exception.Message)" }
 
+  try { Set-Content -Path (Join-Path $DataDir "install.marker") -Value (Get-Date).ToString('o') -Encoding UTF8 } catch {}
   foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) {
     try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}
     Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
@@ -45,8 +99,14 @@ if ($Uninstall) {
 
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-  # 트레이(일반 사용자)가 표시 이름을 저장할 수 있도록 Users 그룹에 수정 권한 (S-1-5-32-545 = Users)
-  try { & icacls.exe "$DataDir" /grant "*S-1-5-32-545:(OI)(CI)M" /Q | Out-Null } catch {}
+  # 데이터 폴더는 SYSTEM·관리자만 고칠 수 있게 잠근다 (일반 사용자가 remote.conf·보안 상태를 바꿔 감시를 끄지 못하게).
+  # 일반 사용자는 읽기만 (트레이가 상태를 읽음), 표시 이름 파일(display.conf)만 고칠 수 있다. S-1-5-18 SYSTEM, -32-544 Administrators, -32-545 Users
+  try {
+    & icacls.exe "$DataDir" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /T /C /Q | Out-Null
+    $disp = Join-Path $DataDir "display.conf"; if (-not (Test-Path $disp)) { Set-Content -Path $disp -Value "" -Encoding UTF8 }
+    & icacls.exe "$disp" /grant "*S-1-5-32-545:M" /Q | Out-Null
+  } catch {}
+  try { Set-Content -Path (Join-Path $DataDir "install.marker") -Value (Get-Date).ToString('o') -Encoding UTF8 } catch {}   # 설치 중 작업을 지웠다 만드는 것은 보안 경고에서 뺀다
   # 이전 이름/수동 설치로 등록된 것이 있으면 정리
   foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   foreach ($n in $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }

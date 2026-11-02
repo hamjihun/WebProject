@@ -23,8 +23,8 @@ function exeVer(buf) {
 
 function create({ dir, distExe, nsiFile, log = console.log }) {
   const IDX = path.join(dir, 'index.json');
-  let db = { versions: [], target: null, pins: {}, removed: [] };
-  try { const v = JSON.parse(fs.readFileSync(IDX, 'utf8')); if (v && Array.isArray(v.versions)) db = { versions: v.versions, target: v.target || null, pins: v.pins || {}, removed: Array.isArray(v.removed) ? v.removed : [] }; }
+  let db = { versions: [], target: null, pins: {}, removed: [], unlock: null };
+  try { const v = JSON.parse(fs.readFileSync(IDX, 'utf8')); if (v && Array.isArray(v.versions)) db = { versions: v.versions, target: v.target || null, pins: v.pins || {}, removed: Array.isArray(v.removed) ? v.removed : [], unlock: v.unlock || null }; }
   catch (e) { if (e.code !== 'ENOENT') log('에이전트 버전 목록 읽기 실패: ' + e.message); }
   function save() {
     try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(IDX + '.tmp', JSON.stringify(db, null, 1)); fs.renameSync(IDX + '.tmp', IDX); }
@@ -121,10 +121,27 @@ function create({ dir, distExe, nsiFile, log = console.log }) {
     if (r && r.to === w.ver && r.state === 'failed') return { ...base, state: 'bad', text: `실패 (오른쪽 결과 참고, '다시 시도' 로 재시도)` };
     return { ...base, state: 'wait', text: online ? (cmpVer(w.ver, agent.version) < 0 ? '되돌리기 대기 (다음 전송 때 시작)' : '업데이트 대기 (다음 전송 때 시작)') : '대기 (서버 오프라인)' };
   }
+  // 종료·삭제 비밀번호: 해시(PBKDF2-SHA1 10만 번, 에이전트의 .NET Rfc2898DeriveBytes 와 같은 방식)만 저장해 에이전트에 내려보낸다
+  const ITER = 100000;
+  function setUnlock(pw, by) {
+    pw = String(pw || '');
+    const v = ((db.unlock && db.unlock.v) || 0) + 1;
+    if (!pw) db.unlock = { v, at: Date.now(), by: String(by || '').slice(0, 40) };   // 해제 (해시 없음 → 에이전트가 파일을 지움)
+    else {
+      if (pw.length < 6) throw new Error('비밀번호는 6자 이상으로 정해 주세요');
+      if (pw.length > 64) throw new Error('비밀번호가 너무 깁니다');
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.pbkdf2Sync(pw, Buffer.from(salt, 'hex'), ITER, 32, 'sha1').toString('hex');
+      db.unlock = { v, salt, hash, iter: ITER, at: Date.now(), by: String(by || '').slice(0, 40) };
+    }
+    save(); return unlockInfo();
+  }
+  const unlockOrder = () => (db.unlock ? (db.unlock.hash ? { v: db.unlock.v, salt: db.unlock.salt, hash: db.unlock.hash, iter: db.unlock.iter } : { v: db.unlock.v }) : null);
+  const unlockInfo = () => ({ set: !!(db.unlock && db.unlock.hash), v: db.unlock ? db.unlock.v : 0, at: db.unlock ? db.unlock.at : null, by: db.unlock ? db.unlock.by : '' });
   function filePath(ver) { const v = find(ver); return v ? path.join(dir, v.file) : null; }
-  function info() { return { versions: db.versions.map(({ file, ...v }) => v), target: db.target, pins: db.pins, min_self: MIN_SELF_UPDATE }; }
+  function info() { return { versions: db.versions.map(({ file, ...v }) => v), target: db.target, pins: db.pins, min_self: MIN_SELF_UPDATE, unlock: unlockInfo() }; }
   scanDist();
-  return { add, remove, setTarget, setPin, orderFor, stateFor, filePath, info, find, scanDist };
+  return { add, remove, setTarget, setPin, orderFor, stateFor, filePath, info, find, scanDist, setUnlock, unlockOrder, unlockInfo };
 }
 
 module.exports = { create, cmpVer, exeVer };

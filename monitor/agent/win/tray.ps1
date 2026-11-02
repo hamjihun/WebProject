@@ -103,6 +103,22 @@ function Update-Tray {
 }
 
 # 관리자 권한이 필요한 작업(schtasks /Run, /End)은 UAC 창을 띄워 실행
+function Invoke-Service([string]$argStr) {        # service.ps1 을 관리자 권한으로 (UAC). 돌려줌: 종료 코드, 취소하면 -1
+  try {
+    $p = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Dir\service.ps1`" $argStr" -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+    Start-Sleep -Milliseconds 800; Update-Tray; return $p.ExitCode
+  } catch { return -1 }
+}
+function Show-PwDialog {                            # 종료 비밀번호 입력 창 (가린 글자). 취소하면 $null
+  $f = New-Object System.Windows.Forms.Form
+  $f.Text = "에이전트 종료"; $f.Size = New-Object System.Drawing.Size(380, 175); $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.TopMost = $true
+  $l = New-Object System.Windows.Forms.Label; $l.Text = "보안 감시가 멈춥니다. 서버 모니터링 화면에서 정한`r`n'종료·삭제 비밀번호'를 넣으세요."; $l.SetBounds(14, 12, 350, 36); $f.Controls.Add($l)
+  $t = New-Object System.Windows.Forms.TextBox; $t.UseSystemPasswordChar = $true; $t.SetBounds(14, 52, 340, 24); $f.Controls.Add($t)
+  $ok = New-Object System.Windows.Forms.Button; $ok.Text = "종료"; $ok.SetBounds(196, 90, 75, 28); $ok.DialogResult = 'OK'; $f.Controls.Add($ok); $f.AcceptButton = $ok
+  $cc = New-Object System.Windows.Forms.Button; $cc.Text = "취소"; $cc.SetBounds(279, 90, 75, 28); $cc.DialogResult = 'Cancel'; $f.Controls.Add($cc); $f.CancelButton = $cc
+  $r = $f.ShowDialog(); $v = $t.Text; $f.Dispose()
+  if ($r -eq 'OK') { return $v } else { return $null }
+}
 function Invoke-TaskCommand([string]$verb) {
   try {
     Start-Process -FilePath "schtasks.exe" -ArgumentList @($verb, '/TN', $TaskName) -Verb RunAs -WindowStyle Hidden -Wait
@@ -136,13 +152,17 @@ $mLog = $menu.Items.Add("로그 보기")
 $mLog.add_Click({ if (Test-Path $LogFile) { Start-Process notepad.exe $LogFile } else { [System.Windows.Forms.MessageBox]::Show("아직 로그가 없습니다.", "IMS Monitoring Agent") | Out-Null } })
 $menu.Items.Add("-") | Out-Null
 $mStart = $menu.Items.Add("에이전트 시작")
-$mStart.add_Click({ Invoke-TaskCommand '/Run' })
+$mStart.add_Click({ Invoke-Service '-Start' | Out-Null })
 $mRestart = $menu.Items.Add("에이전트 재시작")
 $mRestart.add_Click({ Invoke-TaskCommand '/End'; Start-Sleep -Seconds 2; Invoke-TaskCommand '/Run' })
-$mStop = $menu.Items.Add("에이전트 종료 (전송 중지)")
+# 종료는 '종료·삭제 비밀번호'(서버 모니터링 화면에서 관리자가 정함)를 넣어야 한다. 비밀번호 없이 끄면 감시자가 5분 안에 다시 켠다.
+$mStop = $menu.Items.Add("에이전트 종료 (종료 비밀번호 필요)")
 $mStop.add_Click({
-  $r = [System.Windows.Forms.MessageBox]::Show("에이전트를 종료하면 이 서버의 정보가 모니터링 화면에 오프라인으로 표시됩니다.`n종료할까요?", "IMS Monitoring Agent", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
-  if ($r -eq [System.Windows.Forms.DialogResult]::Yes) { Invoke-TaskCommand '/End' }
+  $pw = Show-PwDialog; if ($null -eq $pw) { return }
+  $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pw))
+  $code = Invoke-Service "-Stop -PwB64 $b64"
+  if ($code -eq 1) { [System.Windows.Forms.MessageBox]::Show("종료 비밀번호가 틀렸습니다.", "IMS Monitoring Agent", 'OK', 'Warning') | Out-Null }
+  elseif ($code -eq 0) { $ni.ShowBalloonTip(3000, "IMS Monitoring Agent", "에이전트를 종료했습니다. 메뉴의 '에이전트 시작' 또는 재부팅하면 다시 켜집니다.", [System.Windows.Forms.ToolTipIcon]::Info) }
 })
 $menu.Items.Add("-") | Out-Null
 $mHide = $menu.Items.Add("트레이 아이콘 닫기 (에이전트는 계속 실행)")

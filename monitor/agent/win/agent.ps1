@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.9.0"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.10.0"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -210,6 +210,24 @@ if ($HasSec) {
 # 스스로 업데이트 (수집기 화면에서 배포 버전을 정하면 받아 설치, 문제가 있으면 자동 되돌림)
 $HasSelfUpd = $false
 try { if (Test-Path (Join-Path $Dir "selfupdate.ps1")) { . (Join-Path $Dir "selfupdate.ps1"); Initialize-SelfUpdate; $HasSelfUpd = $true } } catch { Log "업데이트 기능 불러오기 실패: $($_.Exception.Message)" }
+# 종료·삭제 비밀번호: 수집기가 보낸 해시를 unlock.json 에 둔다 (service.ps1 -Stop/-CheckPw 가 확인). 에이전트가 켜지면 '관리자 종료' 표시는 지운다
+$UnlockFile = Join-Path $DataDir "unlock.json"; $unlockCache = ''; $unlockV = 0
+try { if (Test-Path $UnlockFile) { $unlockV = [int](Get-Content $UnlockFile -Raw -Encoding UTF8 | ConvertFrom-Json).v } } catch {}
+Remove-Item (Join-Path $DataDir "stopped.json") -Force -ErrorAction SilentlyContinue
+# 스스로 지키기: 에이전트·감시자 작업을 기억해 두고, 누가 끄거나 지우면 1분 안에 되살리며 보안 경고를 보낸다
+$TaskXml = @{}; $guardChk = Get-Date
+foreach ($tn in @('IMSMonitoringAgent', 'IMSMonitoringAgentWatchdog')) { try { $TaskXml[$tn] = [string](Export-ScheduledTask -TaskName $tn -ErrorAction Stop) } catch {} }
+function Protect-Tasks {
+  foreach ($tn in @($TaskXml.Keys)) {
+    try {
+      $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+      if (-not $t) { Register-ScheduledTask -TaskName $tn -Xml $TaskXml[$tn] -Force -ErrorAction Stop | Out-Null; $m = "모니터링 작업 '$tn' 이 지워져 다시 만들었습니다 — 누군가 에이전트를 끄려 한 것일 수 있음" }
+      elseif ($t.State -eq 'Disabled') { Enable-ScheduledTask -TaskName $tn -ErrorAction Stop | Out-Null; $m = "모니터링 작업 '$tn' 이 꺼져 있어 다시 켰습니다 — 누군가 에이전트를 끄려 한 것일 수 있음" }
+      else { continue }
+      Log $m; if (Get-Command Add-FsEv -ErrorAction SilentlyContinue) { Add-FsEv 'crit' $m 'tamper' }
+    } catch { Log "작업 확인 실패 ($tn): $($_.Exception.Message)" }
+  }
+}
 Get-CpuPercent | Out-Null   # 첫 샘플
 
 while ($true) {
@@ -270,6 +288,7 @@ while ($true) {
       } catch {}
     }
     $security = $null
+    if ($HasSec -and ((Get-Date) - $guardChk).TotalSeconds -ge 60) { $guardChk = Get-Date; Protect-Tasks; $remoteCache = ''; $unlockCache = '' }   # remote.conf 도 1분마다 다시 씀 (누가 고쳐도 되돌림)
     if ($HasSec) {
       if ((-not $secProc -or $secProc.HasExited) -and ((Get-Date) - $secLast).TotalSeconds -ge 60) {
         $secLast = Get-Date
@@ -309,7 +328,7 @@ while ($true) {
       cpu = $cpu; mem_total = $memTotal; mem_used = $memUsed
       uptime = $uptime; net_rx = $netRx; net_tx = $netTx
       disks = @($disks)
-      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; security = [bool]$HasSec; paths = @($BackupPaths); caps = @($(if ($HasSelfUpd) { 'update' })) }
+      agent = @{ version = $AgentVersion; veeam = [bool]$HasVeeam; backup = [bool]$HasBackup; env = [bool]$EnvPort; security = [bool]$HasSec; paths = @($BackupPaths); caps = @($(if ($HasSelfUpd) { 'update' })); unlock_v = $unlockV }
     }
     if ($backups) { $payload.backups = $backups }
     if ($security) { $payload.security = $security }
@@ -322,6 +341,16 @@ while ($true) {
       -Headers @{ 'X-Token' = $Token } -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 5
     try { if ($resp -and $resp.agent) { $rc = "USB_HOURS=$($resp.agent.usb_window)`r`nUSB_PATHS=$($resp.agent.usb_paths)`r`nBL_GUARD=$($resp.agent.bl_guard)"; if ($rc -ne $remoteCache) { Set-Content -Path $RemoteConf -Value $rc -Encoding UTF8; $remoteCache = $rc } } } catch {}
     if ($HasSelfUpd) { try { if ($resp -and $resp.agent -and $resp.agent.update) { Start-AgentUpdate $resp.agent.update } } catch { Log "업데이트 처리 오류: $($_.Exception.Message)" } }
+    try {                                           # 종료·삭제 비밀번호 해시 (바뀌었거나 1분마다 다시 씀, 해시가 없으면 해제)
+      if ($resp -and $resp.agent -and $resp.agent.unlock) {
+        $ul = $resp.agent.unlock; $js = $ul | ConvertTo-Json -Compress
+        if ($js -ne $unlockCache) {
+          if ($ul.hash) { Set-Content -Path $UnlockFile -Value $js -Encoding UTF8 } else { Remove-Item $UnlockFile -Force -ErrorAction SilentlyContinue }
+          if ([int]$ul.v -ne $unlockV) { Log "종료·삭제 비밀번호 $(if ($ul.hash) { '받음' } else { '해제' }) (v$($ul.v))" }
+          $unlockCache = $js; $unlockV = [int]$ul.v
+        }
+      }
+    } catch {}
     $sendSec = $sw.Elapsed.TotalSeconds - $collectSec
     if ($collectSec -ge 30 -or $sendSec -ge 3) {
       # 수집이 오래 걸리면 서버가 그 시간에 매우 느렸다는 뜻 (백업/메모리 부족). 어느 단계가 느렸는지 남긴다

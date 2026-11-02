@@ -133,7 +133,7 @@
   #upanel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(1100px,100%); max-height:92vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.4); }
   #upanel h2 { margin:0; font-size:18px; white-space:nowrap; } #upanel .sub { color:var(--muted); font-size:12.5px; }
   #upanel h3 { margin:18px 0 8px; font-size:13px; color:var(--muted); font-weight:600; border-top:1px solid var(--line); padding-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  #upanel select, #upanel input[type=text] { background:var(--barbg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 8px; font:inherit; font-size:12.5px; }
+  #upanel select, #upanel input[type=text], #upanel input[type=password] { background:var(--barbg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 8px; font:inherit; font-size:12.5px; }
   .utgt { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:13px; } .utgt .big { font-size:20px; font-weight:700; color:var(--accent); }
   .ust { font-weight:700; } .ust.ok { color:var(--ok); } .ust.wait, .ust.run { color:var(--accent); } .ust.bad { color:var(--bad); } .ust.manual { color:var(--warn); } .ust.na, .ust.skip, .ust.idle, .ust.old { color:var(--muted); font-weight:400; }
   #uMsg { font-size:12.5px; min-height:16px; } #uMsg.err { color:var(--bad); } #uMsg.ok { color:var(--ok); }
@@ -383,7 +383,7 @@
 <script src="common.js"></script>
 <script>
 MON.renderNav('index.html');
-const UI_VERSION = '1.45.1';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
+const UI_VERSION = '1.46.0';   // 이 화면 파일의 버전. 수집기(server.js) 버전과 다르면 경고
 const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.body.classList.add('embed');
 if (params.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
@@ -448,7 +448,7 @@ function cardHtml(s) {
   const title = s.name || s.host;      // 에이전트에서 설정한 표시 이름, 없으면 호스트명
   const hasAlert = activeAlerts.some(a => a.host === s.host && a.rule !== 'offline');
   return `<div class="card ${s.online ? '' : 'off'} ${s.sec && s.sec.level === 'crit' ? 'secbad' : ''} ${selected === s.host ? 'sel' : ''}" data-host="${esc(s.host)}" draggable="true">
-    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인',backup:'백업',security:'보안',temp:'온도',hum:'습도',env:'온습도'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : '<span class="badge">오프라인</span>'}${secMark(s)}<span class="ip">${esc(s.ip || '')}</span></div>
+    <div class="top"><span class="grip" title="드래그해서 순서 변경">⠿</span><span class="dot ${s.online ? '' : 'off'}"></span><span class="title" title="${esc(title)}">${esc(title)}</span>${hasAlert ? '<span class="warnmark" title="경고 상태">⚠</span>' : ''}${s.muted ? '<span class="mutemark" title="이 서버 알림 꺼짐">🔕</span>' : (s.host_rules && Object.keys(s.host_rules).length ? `<span class="mutemark" title="꺼진 알림: ${Object.keys(s.host_rules).map(k => ({cpu:'CPU',mem:'메모리',disk:'디스크',offline:'오프라인',backup:'백업',security:'보안',temp:'온도',hum:'습도',env:'온습도'})[k]).join(', ')}">🔕</span>` : '')}${s.online ? '' : s.stopped ? `<span class="badge" title="${esc(s.stopped.by || '')} 이(가) 종료 비밀번호로 끔 · ${fmtTime(s.stopped.at)}">관리자 종료</span>` : '<span class="badge">오프라인</span>'}${secMark(s)}<span class="ip">${esc(s.ip || '')}</span></div>
     <div class="hostline">${s.name ? esc(s.host) : '&nbsp;'}</div>
     ${bar('CPU', s.cpu, `${s.cpu}%`)}
     ${bar('메모리', s.mem_pct, `${fmtBytes(s.mem_used)} / ${fmtBytes(s.mem_total)}`)}
@@ -686,15 +686,20 @@ function renderUpd() {
   const used = (v) => hosts.filter(h => h.ver === v).length;
   const opt = (sel, extra) => extra + vs.map(v => `<option value="${esc(v.ver)}" ${sel === v.ver ? 'selected' : ''}>${esc(v.ver)}</option>`).join('');
   let h = !a ? '<div class="note" style="color:var(--warn)">관리자만 배포 · 되돌리기 · 설치 파일 올리기를 할 수 있습니다 (지금은 보기만)</div>' : '';
+  const ul = upd.unlock || {};
+  h += `<h3>🔒 에이전트 종료·삭제 비밀번호 <span class="dim" style="font-weight:400">트레이의 '에이전트 종료'와 제어판 '프로그램 제거'에서 이 비밀번호를 묻습니다 (관리자만 바꿈)</span></h3>
+    <div class="utgt">${ul.set ? `<span class="ok">● 설정됨</span><span class="dim">${fmtTime(ul.at)} · ${esc(ul.by || '')}</span>` : '<span class="ust manual">설정 안 됨 — 누구나 에이전트를 끄거나 지울 수 있습니다</span>'}
+    ${a ? `<span style="margin-left:auto"></span><input type="password" id="uPw1" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" style="width:180px"><input type="password" id="uPw2" placeholder="한 번 더" autocomplete="new-password" style="width:130px"><button class="sbtn" id="uPwSave">${ul.set ? '바꾸기' : '정하기'}</button>${ul.set ? '<button class="sbtn" id="uPwClear">해제</button>' : ''}` : ''}</div>
+    <div class="note">비밀번호는 IMS 서버와 각 서버에 <b>암호화된 값(해시)</b>으로만 저장되고, 다음 전송(5초 안)에 모든 에이전트에 적용됩니다 (1.10.0 이상). 잊으면 여기서 새로 정하면 됩니다. 아래 표 '비밀번호' 칸에서 서버별 적용 여부를 봅니다.</div>`;
   h += `<h3>배포 버전 (전체 서버)</h3><div class="utgt">${tg ? `<span class="big">${esc(tg.ver)}</span><span class="dim">${fmtTime(tg.at)} · ${esc(tg.by || '')}</span>` : '<span class="dim">정하지 않음 — 업데이트하지 않습니다</span>'}
     <span style="margin-left:auto"></span><select id="uTgt" ${dis}>${opt(tg ? tg.ver : '', '')}</select><button class="sbtn" id="uDeploy" ${dis}>이 버전으로 배포</button>
     ${tg && tg.prev && vs.some(v => v.ver === tg.prev) ? `<button class="sbtn" id="uBack" ${dis} title="배포 버전을 이전 버전으로 바꿉니다. 이미 새 버전이 깔린 서버도 이전 버전으로 다시 설치됩니다">↩ ${esc(tg.prev)} 로 되돌리기</button>` : ''}
     ${tg ? `<button class="sbtn" id="uStop" ${dis} title="배포를 멈춥니다 (이미 설치된 버전은 그대로)">배포 멈춤</button><button class="sbtn" id="uRetry" ${dis} title="실패한 서버도 다시 시도합니다">다시 시도</button>` : ''}</div>
     <div class="note">먼저 서버 한 대만 아래 표에서 새 버전으로 바꿔 시험해 보고, 괜찮으면 전체 배포하는 것을 권합니다. 되돌리기는 위 단추로 전체를, 아래 표에서 서버별로 할 수 있습니다.</div>`;
-  h += `<h3>서버별 <span class="dim" style="font-weight:400">받을 버전을 서버마다 따로 정할 수 있습니다 (전체 따름 / 특정 버전 고정 / 업데이트 안 함)</span></h3><table class="bktbl"><thead><tr><th>서버</th><th>지금 버전</th><th>받을 버전</th><th>상태</th><th>마지막 업데이트 결과</th></tr></thead><tbody>${hosts.map(x => {
+  h += `<h3>서버별 <span class="dim" style="font-weight:400">받을 버전을 서버마다 따로 정할 수 있습니다 (전체 따름 / 특정 버전 고정 / 업데이트 안 함)</span></h3><table class="bktbl"><thead><tr><th>서버</th><th>지금 버전</th><th>받을 버전</th><th>상태</th><th title="종료·삭제 비밀번호가 이 서버에 적용됐는지">비밀번호</th><th>마지막 업데이트 결과</th></tr></thead><tbody>${hosts.map(x => {
     const r = x.result, rs = r ? `${r.state === 'ok' ? '✅' : r.state === 'running' ? '⏳' : r.state === 'rolledback' ? '↩' : '❌'} ${esc(r.from)} → ${esc(r.to)} ${r.at ? fmtTime(r.at) : ''}${r.msg ? '<br><span class="dim">' + esc(r.msg) + '</span>' : ''}` : '<span class="dim">-</span>';
     const sel = x.state === 'na' ? '<span class="dim">-</span>' : `<select data-pin="${esc(x.host)}" ${dis}><option value="" ${!x.pin ? 'selected' : ''}>전체 따름${tg ? ' (' + esc(tg.ver) + ')' : ''}</option>${vs.map(v => `<option value="${esc(v.ver)}" ${x.pin === v.ver ? 'selected' : ''}>${esc(v.ver)} 고정</option>`).join('')}<option value="none" ${x.pin === 'none' ? 'selected' : ''}>업데이트 안 함</option></select>`;
-    return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}<div class="dim">${esc(shortOs(x.os))}</div></td><td>${esc(x.ver || '-')}</td><td>${sel}</td><td><span class="ust ${x.state}">${esc(x.text)}</span></td><td style="white-space:normal">${rs}</td></tr>`;
+    return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}<div class="dim">${esc(shortOs(x.os))}</div></td><td>${esc(x.ver || '-')}</td><td>${sel}</td><td><span class="ust ${x.state}">${esc(x.text)}</span>${x.stopped ? `<br><span class="ust manual">관리자 종료 (${esc(x.stopped.by || '')})</span>` : ''}</td><td>${x.state === 'na' ? '<span class="dim">-</span>' : !ul.v ? '<span class="dim">-</span>' : x.unlock_v === ul.v ? '<span class="ok">✓ 적용</span>' : verCmp(x.ver || '0', '1.10.0') < 0 ? '<span class="dim" title="1.10.0 이상에서 적용됩니다">미지원</span>' : '<span class="ust wait">대기</span>'}</td><td style="white-space:normal">${rs}</td></tr>`;
   }).join('')}</tbody></table>
   <div class="note">${esc(upd.min_self)} 미만 에이전트는 이 기능이 없어 <b>한 번은 직접 설치</b>해야 합니다 (그 뒤부터 자동). 리눅스 · NAS · ESXi 에이전트는 해당 없음.</div>`;
   h += `<h3>보관된 설치 파일 ${a ? '<button class="sbtn" id="uScan" title="C:\\ims\\monitor\\dist 와 dist\\old 폴더의 설치 파일을 다시 찾아 넣습니다">🔄 설치 파일 다시 찾기</button>' : ''} <span class="dim" style="font-weight:400">IMS 서버 data\\agent-versions 에 보관 · 수집기를 다시 설치하면 dist 의 새 설치 파일이 자동으로 추가됩니다</span></h3><table class="bktbl"><thead><tr><th>버전</th><th>등록</th><th>크기</th><th>쓰는 서버</th><th>메모</th><th></th></tr></thead><tbody>${vs.map(v => `<tr><td><b>${esc(v.ver)}</b>${tg && tg.ver === v.ver ? ' <span class="ok">● 배포 중</span>' : ''}${verCmp(v.ver, upd.min_self) < 0 ? ' <span class="dim" title="이 버전으로 되돌리면 자동 업데이트 기능이 없어져, 다음 업데이트는 직접 설치해야 합니다">(자동 업데이트 없음)</span>' : ''}</td><td>${fmtTime(v.added)} <span class="dim">${esc(v.by || '')}</span></td><td>${Math.round(v.size / 1024)} KB</td><td>${used(v.ver)}대</td><td class="dim" style="white-space:normal">${esc(v.note || '')}</td><td style="white-space:nowrap"><a class="sbtn" style="text-decoration:none" href="api/agent-versions/file?ver=${encodeURIComponent(v.ver)}" title="이 버전 설치 파일을 PC 로 받기 (서버에 직접 설치할 때)">⬇ 내려받기</a> ${a && !(tg && tg.ver === v.ver) ? `<button class="sbtn" data-delver="${esc(v.ver)}">지우기</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="dim">보관된 설치 파일이 없습니다</td></tr>'}</tbody></table>
@@ -718,6 +723,13 @@ document.getElementById('upanel').addEventListener('click', async (e) => {
   else if (t.id === 'uBack') { if (confirm(`배포 버전을 ${tg.prev} 로 되돌릴까요?\n이미 ${tg.ver} 이 깔린 서버도 ${tg.prev} 로 다시 설치됩니다.`)) updApi('PUT', 'api/agent-versions/target', { ver: tg.prev }); }
   else if (t.id === 'uStop') { if (confirm('배포를 멈출까요? (이미 설치된 버전은 그대로 둡니다)')) updApi('PUT', 'api/agent-versions/target', { ver: '' }); }
   else if (t.id === 'uRetry') updApi('PUT', 'api/agent-versions/target', { ver: tg.ver });
+  else if (t.id === 'uPwSave') {
+    const p1 = document.getElementById('uPw1').value, p2 = document.getElementById('uPw2').value, m = document.getElementById('uMsg');
+    if (p1.length < 6) { m.className = 'err'; m.textContent = '비밀번호는 6자 이상으로 정해 주세요'; return; }
+    if (p1 !== p2) { m.className = 'err'; m.textContent = '두 비밀번호가 다릅니다'; return; }
+    if (confirm('에이전트 종료·삭제 비밀번호를 ' + (upd.unlock && upd.unlock.set ? '바꿀까요?' : '정할까요?') + '\n잊지 않게 따로 적어 두세요.')) updApi('PUT', 'api/agent-versions/unlock', { pw: p1 });
+  }
+  else if (t.id === 'uPwClear') { if (confirm('비밀번호를 해제할까요?\n누구나 에이전트를 끄거나 지울 수 있게 됩니다.')) updApi('PUT', 'api/agent-versions/unlock', { pw: '' }); }
   else if (t.id === 'uScan') {
     const j = await updApi('POST', 'api/agent-versions/rescan', {}); const m = document.getElementById('uMsg');
     if (j && m) { m.className = j.old_files > 0 || j.added ? 'ok' : 'err'; m.textContent = j.old_files < 0 ? `예전 버전 폴더가 없습니다: ${j.old_dir} — GitHub 에서 ZIP 을 새로 받아 monitor 폴더를 덮어쓰세요` : `새로 넣은 설치 파일 ${j.added}개 (dist\\old 에 ${j.old_files}개 있음)`; }
@@ -800,7 +812,7 @@ async function loadSec() {
     h += hosts.length ? `<table class="bktbl"><thead><tr><th>서버</th><th>상태</th><th>미끼 파일</th><th>파일 대량 변경 감시</th><th>BitLocker</th><th title="암호화가 시작되면 바로 멈추고 복구키를 추가해 보관합니다">BitLocker 자동 차단</th><th>섀도 복사본</th><th>감사 설정</th><th>Defender</th><th>마지막 수신</th></tr></thead><tbody>${hosts.map(x => {
       const c = secStatusCells(x);
       return `<tr><td><b>${esc(x.name || x.host)}</b>${x.online ? '' : ' <span class="bad">오프라인</span>'}</td><td>${c.state}</td><td>${c.canary}</td><td>${c.fs}</td><td>${c.bl}</td><td><button class="sbtn" data-guard="${esc(x.host)}" data-v="${x.bl_guard ? '0' : '1'}" title="${x.bl_guard ? '누르면 끔 — 이 서버에서 직접 BitLocker 를 켤 때만 끄세요' : '누르면 켬'}">${x.bl_guard ? '<span class="ok">● 켜짐</span>' : '<span class="dim">○ 꺼짐</span>'}</button></td><td>${c.vss}</td><td>${c.audit}</td><td>${c.def}</td><td>${agoTxt(x.ts)}${agoTxt(x.ts) === '방금' ? '' : ' 전'}</td></tr>`;
-    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.8.1 을 다시 설치하세요.</div>';
+    }).join('')}</tbody></table>` : '<div class="note">아직 보안 정보를 보낸 서버가 없습니다. 각 서버에 에이전트 1.10.0 을 설치하세요.</div>';
     const keys = hosts.flatMap(x => (x.keys || []).map(k => ({ ...k, host: x.host })));
     if (keys.length) h += `<h3>🔑 BitLocker 복구키 보관함 <span class="dim" style="font-weight:400">자동 차단이 넣은 키입니다. 드라이브가 잠기면 이 번호(48자리)로 엽니다 — 종이에 적거나 다른 곳에도 보관하세요</span></h3><table class="ev">${keys.map(k => `<tr><td class="t">${fmtTime(k.t)}</td><td><b>${esc(hostLabel(k.host))}</b> ${esc(k.m)}</td><td>${k.pw ? `<code class="bkey" hidden>${esc(k.pw)}</code><button class="sbtn" data-showkey="1">번호 보기</button>` : '<span class="dim">번호는 관리자만 볼 수 있습니다</span>'} <span class="dim">키 ID ${esc(k.id || '-')}</span></td><td class="dim">${esc(k.why || '')}</td></tr>`).join('')}</table>`;
     if (none.length) h += `<div class="note">보안 감시 안 됨 (에이전트 1.8.0 미만 또는 리눅스·NAS): ${esc(none.join(', '))}</div>`;
