@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.10.4"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.10.5"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -38,18 +38,22 @@ function Log([string]$msg) {
     Add-Content -Path $LogFile -Value $line
   } catch {}
 }
-function WriteStatus([bool]$ok, [string]$err, [double]$cpu, [int]$memPct) {
+function Save-StatusFile([string]$json) {          # 임시 파일에 쓴 뒤 바꿔치기 — 트레이가 반쯤 쓴(빈) 파일을 읽지 않게
+  $tmp = $StatusFile + '.tmp'
   try {
-    @{ ok = $ok; time = (Get-Date).ToString('o'); error = $err; host = $HostName; url = $Url; cpu = $cpu; mem_pct = $memPct; interval = $Interval } |
-      ConvertTo-Json -Compress | Set-Content -Path $StatusFile -Encoding UTF8
-  } catch {}
+    [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding $false))
+    if (Test-Path $StatusFile) { [IO.File]::Replace($tmp, $StatusFile, [NullString]::Value) } else { [IO.File]::Move($tmp, $StatusFile) }
+  } catch { try { Set-Content -Path $StatusFile -Value $json -Encoding UTF8 } catch {} }
+}
+function WriteStatus([bool]$ok, [string]$err, [double]$cpu, [int]$memPct) {
+  try { Save-StatusFile (@{ ok = $ok; time = (Get-Date).ToString('o'); error = $err; host = $HostName; url = $Url; cpu = $cpu; mem_pct = $memPct; interval = $Interval } | ConvertTo-Json -Compress) } catch {}
 }
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 if ($SkipCertCheck) { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
 
 # 시작 직후 상태 파일부터 기록 (트레이가 "시작 중"으로 표시)
-try { @{ ok = $false; starting = $true; time = (Get-Date).ToString('o'); error = '시작 중'; host = $HostName; url = $Url; interval = $Interval } | ConvertTo-Json -Compress | Set-Content -Path $StatusFile -Encoding UTF8 } catch {}
+try { Save-StatusFile (@{ ok = $false; starting = $true; time = (Get-Date).ToString('o'); error = '시작 중'; host = $HostName; url = $Url; interval = $Interval } | ConvertTo-Json -Compress) } catch {}
 Log "에이전트 시작: $HostName -> $Url (간격 ${Interval}초)"
 
 # 부팅 직후에는 WMI 가 준비 안 됐을 수 있으므로 될 때까지 재시도

@@ -78,6 +78,7 @@ function Get-TaskState {
   } catch { return 'unknown' }
 }
 $script:taskState = 'unknown'
+$script:lastGood = $null
 $script:lastText = ""
 function Read-Status {
   $script:taskState = Get-TaskState
@@ -92,11 +93,16 @@ function Read-Status {
   if ($script:taskState -eq 'stopped') { return @{ state = 'off'; text = "에이전트 중지됨 (메뉴에서 시작)" } }
   try {
     if (-not (Test-Path $StatusFile)) { return @{ state = 'warn'; text = "에이전트 시작 중..." } }
-    $st = Get-Content $StatusFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $st = $null
+    for ($i = 0; $i -lt 3 -and -not ($st -and $st.time); $i++) {         # 에이전트가 쓰는 순간이면 잠깐 뒤 다시 읽기
+      try { $st = Get-Content $StatusFile -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json } catch { $st = $null }
+      if (-not ($st -and $st.time)) { Start-Sleep -Milliseconds 300 }
+    }
+    if (-not ($st -and $st.time)) { if ($script:lastGood) { return $script:lastGood }; return @{ state = 'warn'; text = "상태 확인 중..." } }
     $age = [int]((Get-Date) - [datetime]$st.time).TotalSeconds
     if ($st.starting -and $age -lt 180) { return @{ state = 'warn'; text = "에이전트 시작 중 ($age 초)" } }
     if ($age -gt ([int]$st.interval * 6 + 30)) { return @{ state = 'bad'; text = "에이전트 응답 없음 ($age 초 전이 마지막)" } }
-    if ($st.ok) { return @{ state = 'ok'; text = "정상 전송 중 ($age 초 전) CPU $($st.cpu)% MEM $($st.mem_pct)%" } }
+    if ($st.ok) { $script:lastGood = @{ state = 'ok'; text = "정상 전송 중 ($age 초 전) CPU $($st.cpu)% MEM $($st.mem_pct)%" }; return $script:lastGood }
     return @{ state = 'bad'; text = "전송 실패: $($st.error)" }
   } catch { return @{ state = 'warn'; text = "상태 읽기 오류: $($_.Exception.Message)" } }
 }
