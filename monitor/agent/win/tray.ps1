@@ -81,7 +81,14 @@ $script:taskState = 'unknown'
 $script:lastText = ""
 function Read-Status {
   $script:taskState = Get-TaskState
-  if ($script:taskState -eq 'missing') { return @{ state = 'bad'; text = "에이전트가 설치되어 있지 않습니다" } }
+  # 일반 사용자 권한으로는 SYSTEM 작업이 안 보일 수 있다 → 상태 파일이 1분 안에 갱신됐으면 실행 중으로 본다
+  if ($script:taskState -eq 'missing' -or $script:taskState -eq 'unknown') {
+    try { if ((Test-Path $StatusFile) -and ((Get-Date) - (Get-Item $StatusFile).LastWriteTime).TotalSeconds -lt 60) { $script:taskState = 'running' } } catch {}
+  }
+  if ($script:taskState -eq 'missing') {
+    if (Test-Path (Join-Path $DataDir "stopped.json")) { $script:taskState = 'stopped'; return @{ state = 'off'; text = "관리자가 종료함 (메뉴에서 시작)" } }
+    return @{ state = 'bad'; text = "에이전트가 실행되고 있지 않습니다 (작업을 찾을 수 없음)" }
+  }
   if ($script:taskState -eq 'stopped') { return @{ state = 'off'; text = "에이전트 중지됨 (메뉴에서 시작)" } }
   try {
     if (-not (Test-Path $StatusFile)) { return @{ state = 'warn'; text = "에이전트 시작 중..." } }
