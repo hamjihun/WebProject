@@ -103,13 +103,17 @@ if ($Install) {
   # 데이터 폴더는 SYSTEM·관리자만 고칠 수 있게 잠근다 (일반 사용자가 remote.conf·보안 상태를 바꿔 감시를 끄지 못하게).
   # 일반 사용자는 읽기만 (트레이가 상태를 읽음), 표시 이름 파일(display.conf)만 고칠 수 있다. S-1-5-18 SYSTEM, -32-544 Administrators, -32-545 Users
   try {
-    # 폴더에만 권한을 정하고(상속 플래그), 안의 파일·폴더는 그 권한을 그대로 물려받게 되돌린다(/reset).
-    # (1.10.0~1.10.3 은 /T 로 파일마다 직접 정해서, 이미 있던 파일이 읽기조차 안 되는 경우가 있었음 → 소유권을 관리자에게 가져온 뒤 다시 맞춤)
-    & icacls.exe "$DataDir" /setowner "*S-1-5-32-544" /T /C /Q 2>&1 | Out-Null   # 소유자를 Administrators 로 (묻는 창 없이)
-    & icacls.exe "$DataDir" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /C /Q | Out-Null
-    & icacls.exe "$DataDir\*" /reset /T /C /Q | Out-Null
-    # 그래도 일반 사용자가 못 읽는 PC 가 있었음(2026-11 사용자 PC) → 읽기 권한을 모든 파일에 직접 한 번 더 (고치기·지우기 권한은 주지 않음)
-    & icacls.exe "$DataDir" /grant "*S-1-5-32-545:(OI)(CI)RX" /T /C /Q | Out-Null
+    # 1.10.0~1.10.6 은 icacls /T 로 파일마다 (OI)(CI) 권한을 주다가 파일 권한이 통째로 비어 관리자도 못 여는 경우가 생겼다(사용자 PC 2026-11-02).
+    # 그래서: 소유자를 Administrators 로 가져오고(takeown, 하나씩 — 묻는 창 없이) → 폴더에만 권한 → 안의 것은 모두 폴더 권한을 물려받게(/reset).
+    function Repair-Item([string]$p, [bool]$root) {
+      & takeown.exe /F $p /A 2>&1 | Out-Null
+      if ($root) { & icacls.exe $p /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /C /Q 2>&1 | Out-Null }
+      else { & icacls.exe $p /reset /C /Q 2>&1 | Out-Null }
+      if (Test-Path -LiteralPath $p -PathType Container) { foreach ($c in @(Get-ChildItem -LiteralPath $p -Force -ErrorAction SilentlyContinue)) { Repair-Item $c.FullName $false } }
+    }
+    Repair-Item $DataDir $true
+    $esc = Join-Path $DataDir "bl-escrow.json"   # BitLocker 복구키 보관 파일은 계속 SYSTEM·관리자만
+    if (Test-Path $esc) { & icacls.exe $esc /inheritance:r /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F" /C /Q 2>&1 | Out-Null }
     $disp = Join-Path $DataDir "display.conf"; if (-not (Test-Path $disp)) { Set-Content -Path $disp -Value "" -Encoding UTF8 }
     & icacls.exe "$disp" /grant "*S-1-5-32-545:M" /Q | Out-Null
   } catch {}
