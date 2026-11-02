@@ -8,7 +8,7 @@ Unicode true
 
 !define APPNAME "IMS Monitoring Agent"
 !define APPID "IMSMonitoringAgent"
-!define VERSION "1.10.1"
+!define VERSION "1.10.2"
 !define PUBLISHER "ILSAN IT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}"
 
@@ -247,7 +247,7 @@ Section "Install"
   CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "wscript.exe" '"$INSTDIR\start.vbs"' "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME} 제거.lnk" "$INSTDIR\Uninstall.exe"
 
-  ; 현재 사용자에게 트레이 아이콘 바로 표시 (자동 업데이트 등 조용한 설치(/S)는 SYSTEM 이 돌리므로 띄우지 않음 — 다음 로그온 때 뜸)
+  ; 현재 사용자에게 트레이 아이콘 바로 표시 (조용한 설치(/S)·자동 업데이트는 SYSTEM 이 돌리므로 service.ps1 이 사용자 화면에 띄움)
   IfSilent +2
   Exec 'wscript.exe "$INSTDIR\tray.vbs"'
 SectionEnd

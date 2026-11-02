@@ -5,6 +5,7 @@ param([switch]$Install, [switch]$Uninstall, [switch]$CheckPw, [switch]$Stop, [sw
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TaskName = "IMSMonitoringAgent"
 $WatchTask = "IMSMonitoringAgentWatchdog"
+$TrayTask = "IMSMonitoringAgentTray"           # 로그온해 있는 사용자 화면에 트레이를 띄우는 작업 (조용한 설치·자동 업데이트 뒤)
 $LegacyTasks = @("ServerMonitorAgent")
 $RunKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
 $RunName = "IMSMonitoringAgentTray"
@@ -87,7 +88,7 @@ if ($Uninstall) {
   } catch { Write-Host "수집기 알림 실패 (무시): $($_.Exception.Message)" }
 
   try { Set-Content -Path (Join-Path $DataDir "install.marker") -Value (Get-Date).ToString('o') -Encoding UTF8 } catch {}
-  foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) {
+  foreach ($t in @($WatchTask, $TaskName, $TrayTask) + $LegacyTasks) {
     try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}
     Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
   }
@@ -108,7 +109,7 @@ if ($Install) {
   } catch {}
   try { Set-Content -Path (Join-Path $DataDir "install.marker") -Value (Get-Date).ToString('o') -Encoding UTF8 } catch {}   # 설치 중 작업을 지웠다 만드는 것은 보안 경고에서 뺀다
   # 이전 이름/수동 설치로 등록된 것이 있으면 정리
-  foreach ($t in @($WatchTask, $TaskName) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
+  foreach ($t in @($WatchTask, $TaskName, $TrayTask) + $LegacyTasks) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   foreach ($n in $LegacyRunNames) { Remove-ItemProperty -Path $RunKey -Name $n -ErrorAction SilentlyContinue }
   Stop-AgentProcesses
 
@@ -167,6 +168,17 @@ if ($Install) {
   } catch { Write-Host "감시자 작업 등록 실패 (무시, 에이전트는 정상 등록됨): $($_.Exception.Message)" }
 
   Set-ItemProperty -Path $RunKey -Name $RunName -Value "wscript.exe `"$Dir\tray.vbs`""
+  # 트레이 다시 띄우기: 설치 중에 사용자 트레이를 껐으므로, SYSTEM 이 설치한 경우(자동 업데이트·/S) 로그온한 사용자 화면에 다시 띄운다.
+  # Users 그룹으로 등록한 작업은 로그온해 있는 사용자 세션에서 실행된다 (그룹 이름은 SID 로 찾아 한글 윈도우에서도 같음).
+  try {
+    $users = (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-545')).Translate([System.Security.Principal.NTAccount]).Value
+    $ta = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$Dir\tray.vbs`""
+    $tp = New-ScheduledTaskPrincipal -GroupId $users -RunLevel Limited
+    $ts = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances Parallel
+    Register-ScheduledTask -TaskName $TrayTask -Action $ta -Principal $tp -Settings $ts -Description "IMS Monitoring Agent 트레이 아이콘 띄우기 (설치·업데이트 뒤)" -Force | Out-Null
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    if ($me -eq 'S-1-5-18') { Start-ScheduledTask -TaskName $TrayTask; Write-Host "로그온한 사용자 화면에 트레이 다시 띄움" }
+  } catch { Write-Host "트레이 작업 등록 실패 (다음 로그온 때 뜸): $($_.Exception.Message)" }
   Write-Host "등록 완료: 작업 '$TaskName' 및 트레이 자동 실행"
   exit 0
 }
