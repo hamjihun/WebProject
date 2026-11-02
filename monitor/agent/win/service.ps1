@@ -108,6 +108,8 @@ if ($Install) {
     & icacls.exe "$DataDir" /setowner "*S-1-5-32-544" /T /C /Q 2>&1 | Out-Null   # 소유자를 Administrators 로 (묻는 창 없이)
     & icacls.exe "$DataDir" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /C /Q | Out-Null
     & icacls.exe "$DataDir\*" /reset /T /C /Q | Out-Null
+    # 그래도 일반 사용자가 못 읽는 PC 가 있었음(2026-11 사용자 PC) → 읽기 권한을 모든 파일에 직접 한 번 더 (고치기·지우기 권한은 주지 않음)
+    & icacls.exe "$DataDir" /grant "*S-1-5-32-545:(OI)(CI)RX" /T /C /Q | Out-Null
     $disp = Join-Path $DataDir "display.conf"; if (-not (Test-Path $disp)) { Set-Content -Path $disp -Value "" -Encoding UTF8 }
     & icacls.exe "$disp" /grant "*S-1-5-32-545:M" /Q | Out-Null
   } catch {}
