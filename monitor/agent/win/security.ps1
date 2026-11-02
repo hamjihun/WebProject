@@ -6,7 +6,7 @@
 # agent.conf: SEC_CANARY=D:\공유;E:\자료 (미끼 폴더를 만들 곳, 0 = 안 만듦) · SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.10.0'
+$Ver = '1.10.1'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'
@@ -243,8 +243,9 @@ foreach ($k in @($S.canary.Keys)) { $keep = $false; foreach ($dir in $roots) { i
 # ---- BitLocker ----
 # 평소 안 쓰는 서버에서 암호화가 시작되거나 키(암호)가 추가되면 BitLocker 랜섬웨어 의심.
 # 자동 차단(기본 켬, 서버 현황 → 🛡 보안 에서 서버별로 끔 · agent.conf SEC_BL_GUARD=0/1 이 우선):
-#   암호화를 멈추고(manage-bde -pause) 우리 복구키를 추가해 bl-escrow.json(SYSTEM·관리자만 읽기) → 수집기에 보관,
-#   공격자가 걸어 둔 재부팅 예약은 취소(shutdown /a). 이후에도 1분마다 다시 시작되거나 우리 키가 지워지면 또 막는다.
+#   암호화를 멈추고(manage-bde -pause) 우리 복구키를 추가해 bl-escrow.json(SYSTEM·관리자만 읽기) → 수집기에 보관한 뒤
+#   BitLocker 를 끈다(manage-bde -off = 해독 시작). 멈추기만 하면 화면의 '계속' 으로 다시 이어 갈 수 있어서다 (현장 시험 2026-11).
+#   공격자가 걸어 둔 재부팅 예약은 취소(shutdown /a). 에이전트가 10초마다 상태를 보고 다시 켜지면 바로 이 검사를 돌린다.
 $rc = @{}; $rcPath = Join-Path $DataDir 'remote.conf'
 if (Test-Path $rcPath) { foreach ($line in Get-Content $rcPath) { if ($line -match '^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$') { $rc[$matches[1].ToUpper()] = $matches[2] } } }
 $Guard = $rc['BL_GUARD'] -ne '0'
@@ -270,6 +271,8 @@ function Guard-Volume([string]$m, [int]$conv, [string]$why) {
     if ($pw) { $S.guard[$m] = $new; Save-Escrow ([ordered]@{ m = $m; id = $new; pw = $pw; t = (Iso (Get-Date)); why = (Cut $why 120) }); $done += '복구키 추가·보관' }
     else { $done += "복구키 추가 실패 ($(Cut $o 100))" }
   }
+  $o2 = (& manage-bde.exe -off $m 2>&1 | Out-String)   # 해독 시작 — '계속' 으로 이어 갈 수 없게 BitLocker 자체를 끈다
+  $done += $(if ($LASTEXITCODE -eq 0) { '해독 시작(BitLocker 끔)' } else { "끄기 실패 ($(Cut $o2 100))" })
   & shutdown.exe /a 2>&1 | Out-Null                    # 재부팅 예약 취소 (예약이 없으면 아무 일 없음)
   Log "BitLocker 자동 차단 $m : $($done -join ', ') ($why)"
   return ($done -join ', ')
@@ -296,11 +299,11 @@ foreach ($v in $vols) {
     $pv = $prev -split '\|'; $pc = [int]$pv[0]; $pk = [int]$pv[1]; $pp = [int]$pv[2]
     $mine = [string]$S.guard[$m]
     $started = $pc -eq 0 -and @(1, 2, 4) -contains $x.conv
-    $resumed = $Guard -and $mine -and $x.conv -eq 2
-    $lost = $Guard -and $mine -and $x.conv -ne 0 -and (@(RecIds $m) -notcontains $mine)
+    $resumed = $Guard -and $mine -and @(1, 2, 4) -contains $x.conv              # 끈 뒤 다시 켜거나 해독을 멈추고 이어 감
+    $lost = $Guard -and $mine -and @(0, 3) -notcontains $x.conv -and (@(RecIds $m) -notcontains $mine)   # 해독 중(3)에는 키를 다시 넣지 않음
     $keyAdd = $x.keys -gt $pk -and $x.conv -ne 0
     if ($started -or $resumed -or $lost -or $keyAdd) {
-      $what = $(if ($started) { "BitLocker 암호화가 시작됐습니다: $m ($($x.pct)%)" } elseif ($lost) { "자동으로 넣어 둔 복구키가 지워졌습니다: $m — 공격이 계속되는 중일 수 있음" } elseif ($resumed) { "멈춘 BitLocker 암호화가 다시 시작됐습니다: $m ($($x.pct)%)" } else { "BitLocker 키(암호)가 추가됐습니다: $m ($pk → $($x.keys)개)" })
+      $what = $(if ($started) { "BitLocker 암호화가 시작됐습니다: $m ($($x.pct)%)" } elseif ($lost) { "자동으로 넣어 둔 복구키가 지워졌습니다: $m — 공격이 계속되는 중일 수 있음" } elseif ($resumed) { "끈 BitLocker 암호화가 다시 시작됐습니다: $m ($($x.pct)%)" } else { "BitLocker 키(암호)가 추가됐습니다: $m ($pk → $($x.keys)개)" })
       $evid = "B:$($m):$(if ($started) { 'enc' } elseif ($lost) { 'lost' } elseif ($resumed) { 'resume' } else { 'key' }):$($now.ToString('yyyyMMddHHmmss'))"
       if ($Guard) {
         $res = Guard-Volume $m $x.conv $what

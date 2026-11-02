@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.10.0"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.10.1"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -214,6 +214,22 @@ try { if (Test-Path (Join-Path $Dir "selfupdate.ps1")) { . (Join-Path $Dir "self
 $UnlockFile = Join-Path $DataDir "unlock.json"; $unlockCache = ''; $unlockV = 0
 try { if (Test-Path $UnlockFile) { $unlockV = [int](Get-Content $UnlockFile -Raw -Encoding UTF8 | ConvertFrom-Json).v } } catch {}
 Remove-Item (Join-Path $DataDir "stopped.json") -Force -ErrorAction SilentlyContinue
+# BitLocker 빠른 확인 (10초마다): 암호화 상태가 바뀌면(시작·'계속'으로 재개 등) security.ps1 을 바로 돌려 자동 차단이 1분을 기다리지 않게
+$blFast = @{}; $blFastAt = Get-Date; $blNone = $false; $blNoneAt = (Get-Date).AddHours(-1)
+function Test-BlFast {
+  if ($script:blNone -and ((Get-Date) - $script:blNoneAt).TotalMinutes -lt 5) { return $false }   # BitLocker 기능이 없는 서버는 5분마다만
+  try { $vols = @(Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -ErrorAction Stop); $script:blNone = $false }
+  catch { $script:blNone = $true; $script:blNoneAt = Get-Date; return $false }
+  $hit = $false
+  foreach ($v in $vols) {
+    if (-not $v.DriveLetter) { continue }
+    try { $c = [int](Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop).ConversionStatus } catch { continue }
+    $k = [string]$v.DriveLetter
+    if ($script:blFast.ContainsKey($k) -and $script:blFast[$k] -ne $c -and @(1, 2, 4) -contains $c) { $hit = $true }
+    $script:blFast[$k] = $c
+  }
+  return $hit
+}
 # 스스로 지키기: 에이전트·감시자 작업을 기억해 두고, 누가 끄거나 지우면 1분 안에 되살리며 보안 경고를 보낸다
 $TaskXml = @{}; $guardChk = Get-Date
 foreach ($tn in @('IMSMonitoringAgent', 'IMSMonitoringAgentWatchdog')) { try { $TaskXml[$tn] = [string](Export-ScheduledTask -TaskName $tn -ErrorAction Stop) } catch {} }
@@ -289,6 +305,10 @@ while ($true) {
     }
     $security = $null
     if ($HasSec -and ((Get-Date) - $guardChk).TotalSeconds -ge 60) { $guardChk = Get-Date; Protect-Tasks; $remoteCache = ''; $unlockCache = '' }   # remote.conf 도 1분마다 다시 씀 (누가 고쳐도 되돌림)
+    if ($HasSec -and ((Get-Date) - $blFastAt).TotalSeconds -ge 10) {
+      $blFastAt = Get-Date
+      try { if (Test-BlFast) { $secLast = (Get-Date).AddMinutes(-5); Log "BitLocker 암호화 상태 변화 — 보안 검사를 바로 실행" } } catch {}
+    }
     if ($HasSec) {
       if ((-not $secProc -or $secProc.HasExited) -and ((Get-Date) - $secLast).TotalSeconds -ge 60) {
         $secLast = Get-Date
