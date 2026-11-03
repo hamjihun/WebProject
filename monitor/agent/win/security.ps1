@@ -1,12 +1,12 @@
 ﻿# 보안 감시 (agent.ps1 이 1분마다 별도 프로세스로 실행). 결과는 %ProgramData%\IMSMonitoringAgent\security.json
 #  - 이벤트 로그: 보안 로그 삭제, 계정 생성·관리자 그룹 추가, 로그인 실패 폭주, 원격 데스크톱 접속(처음 보는 PC·외부 IP),
 #    새 서비스·예약 작업, 위험 명령(섀도 복사본 삭제·BitLocker 켜기·로그 지우기 등 — 4688), Defender 탐지·꺼짐
-#  - 미끼 파일(드라이브마다 !IMS-canary 폴더), BitLocker 상태 변화, 섀도 복사본 개수
+#  - BitLocker 상태 변화, 섀도 복사본 개수 (미끼 파일 폴더는 1.10.11 부터 만들지 않음)
 #  - 하루 한 번 감사 정책(프로세스 생성·예약 작업 등)과 보안 로그 크기를 맞춘다 (agent.conf SEC_AUDIT=0 이면 안 함)
-# agent.conf: SEC_CANARY=D:\공유;E:\자료 (미끼 폴더를 만들 곳, 0 = 안 만듦) · SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
+# agent.conf: SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.10.10'
+$Ver = '1.10.11'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'
@@ -191,54 +191,8 @@ foreach ($e in @(Q 'Microsoft-Windows-Windows Defender/Operational' @(1116, 1117
 $def = $null
 try { $mp = Get-MpComputerStatus -ErrorAction Stop; $def = [ordered]@{ on = [bool]$mp.AntivirusEnabled; rt = [bool]$mp.RealTimeProtectionEnabled; sig = [int]$mp.AntivirusSignatureAge } } catch {}
 
-# ---- 미끼 파일 ----
-# 드라이브마다 !IMS-canary 폴더에 흔한 문서 이름의 파일을 두고, 바뀌거나 지워지거나 새 파일이 생기면 위험 알림 (평소엔 아무도 안 건드림)
-$CanaryName = '!IMS-canary'
-$CanaryFiles = @('0_급여대장.xlsx', '0_계약서.docx', '0_회계자료.pdf', '0_사진.jpg', '0_업무자료.txt', '_이 폴더는 지우지 마세요.txt')
-$roots = @()
-if ($conf['SEC_CANARY'] -eq '0') { $roots = @() }
-elseif ($conf['SEC_CANARY']) { $roots = @($conf['SEC_CANARY'] -split ';' | ForEach-Object { $_.Trim().TrimEnd('\') } | Where-Object { $_ } | ForEach-Object { "$_\$CanaryName" }) }
-else { $roots = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object { "$($_.DeviceID)\$CanaryName" }) + @("$env:PUBLIC\Documents\$CanaryName") }
-function Hash([string]$p) { $fs = $null; try { $fs = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite'); $h = [Security.Cryptography.SHA256]::Create(); return [BitConverter]::ToString($h.ComputeHash($fs)) -replace '-', '' } catch { return 'ERR' } finally { if ($fs) { $fs.Close() } } }
-function New-Canary([string]$dir) {
-  try { New-Item -ItemType Directory -Force -Path $dir | Out-Null } catch { return }
-  $rng = New-Object Security.Cryptography.RNGCryptoServiceProvider
-  foreach ($n in $CanaryFiles) {
-    $p = Join-Path $dir $n; if (Test-Path -LiteralPath $p) { continue }
-    try {
-      if ($n -like '_*') { Set-Content -LiteralPath $p -Encoding UTF8 -Value "랜섬웨어 감시용 미끼 파일입니다 (IMS 서버 모니터링).`r`n이 폴더의 파일을 열거나 고치거나 지우면 '보안 위험' 알림이 갑니다. 그대로 두세요." }
-      else { $b = New-Object byte[] (8192 + (Get-Random -Maximum 24576)); $rng.GetBytes($b); [IO.File]::WriteAllBytes($p, $b) }
-    } catch {}
-  }
-}
-$canaryOk = $true; $canaryN = 0
-foreach ($dir in $roots) {
-  try {
-    $pre = $dir + '\'
-    $known = @($S.canary.Keys | Where-Object { $_.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase) })
-    $chg = @()
-    if (-not (Test-Path -LiteralPath $dir)) {
-      if ($known.Count) { $chg += '폴더가 사라짐' }
-      foreach ($k in $known) { $S.canary.Remove($k) }; $known = @()
-    }
-    $files = @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue)
-    if ($known.Count) {
-      foreach ($f in $files) { if (-not $S.canary.ContainsKey($f.FullName)) { $chg += "새 파일 $($f.Name)" } elseif ($S.canary[$f.FullName] -ne (Hash $f.FullName)) { $chg += "바뀜 $($f.Name)" } }
-      foreach ($k in $known) { if (-not (Test-Path -LiteralPath $k)) { $chg += "없어짐 $(Split-Path $k -Leaf)" } }
-    }
-    if ($chg.Count) {
-      $canaryOk = $false
-      Add-Ev "C:$($dir):$($now.ToString('yyyyMMddHHmmss'))" 'crit' 'ransom' "미끼 파일이 바뀌었습니다 ($dir): $(($chg | Select-Object -First 6) -join ', ')$(if ($chg.Count -gt 6) { " 외 $($chg.Count - 6)개" }) — 랜섬웨어 의심, 즉시 확인"
-    }
-    if ($chg.Count -or -not $known.Count) {                # 처음이거나 바뀐 뒤에는 다시 만들고 새로 기억 (새로 생긴 파일은 증거로 그대로 둔다)
-      New-Canary $dir
-      foreach ($k in $known) { $S.canary.Remove($k) }
-      foreach ($f in @(Get-ChildItem -LiteralPath $dir -File -Force -ErrorAction SilentlyContinue)) { $S.canary[$f.FullName] = Hash $f.FullName }
-    }
-    $canaryN += @($S.canary.Keys | Where-Object { $_.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase) }).Count
-  } catch {}
-}
-foreach ($k in @($S.canary.Keys)) { $keep = $false; foreach ($dir in $roots) { if ($k.StartsWith($dir + '\', [StringComparison]::OrdinalIgnoreCase)) { $keep = $true } }; if (-not $keep) { $S.canary.Remove($k) } }
+# ---- 미끼 파일: 1.10.11 부터 만들지 않음 (사용자 요청 — 서버 드라이브에 폴더를 만들지 않는다). 예전에 만든 !IMS-canary 폴더는 직접 지운다 ----
+$S.canary = @{}
 
 # ---- BitLocker ----
 # 평소 안 쓰는 서버에서 암호화가 시작되거나 키(암호)가 추가되면 BitLocker 랜섬웨어 의심.
@@ -365,7 +319,7 @@ $state = [ordered]@{ last = $now.ToString('o'); ids = $ids; rdp = @($S.rdp); eve
 try { $state | ConvertTo-Json -Depth 5 -Compress | Set-Content -Path $StFile -Encoding UTF8 } catch {}
 $o = [ordered]@{
   time = (Iso $now); ver = $Ver
-  status = [ordered]@{ audit = $S.auditOk; logs = $secReadable; canary = [ordered]@{ dirs = @($roots); files = $canaryN; ok = $canaryOk }
+  status = [ordered]@{ audit = $S.auditOk; logs = $secReadable; canary = $null
     bitlocker = [ordered]@{ avail = $blAvail; guard = $Guard; vols = @($bl) }; vss = $vss; defender = $def; rdp_known = @($S.rdp).Count }
   events = $all
 }

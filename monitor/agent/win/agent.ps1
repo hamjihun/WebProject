@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.10.10"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.10.11"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -202,13 +202,13 @@ function Get-CpuPercent {
   } catch {}
   try { return [double](Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average } catch { return 0 }
 }
-# 보안 감시: security.ps1(이벤트 로그·미끼 파일·BitLocker·섀도 복사본)을 1분마다 별도 프로세스로 + 파일 대량 변경 감시(fswatch.ps1)
+# 보안 감시: security.ps1(이벤트 로그·BitLocker·섀도 복사본)을 1분마다 별도 프로세스로 + 파일 대량 변경 감시(fswatch.ps1)
 # agent.conf SECURITY=0 이면 둘 다 끔
 $SecScript = Join-Path $Dir "security.ps1"; $SecOut = Join-Path $DataDir "security.json"
 $HasSec = (Test-Path $SecScript) -and ($conf['SECURITY'] -ne '0')
 $secLast = (Get-Date).AddMinutes(-2); $secProc = $null; $secCache = $null; $secStamp = $null
 if ($HasSec) {
-  Log "보안 감시 시작: 이벤트 로그·미끼 파일·BitLocker 를 1분마다 확인합니다"
+  Log "보안 감시 시작: 이벤트 로그·BitLocker 를 1분마다 확인합니다"
   try { . (Join-Path $Dir "fswatch.ps1"); Start-FsWatch $BackupPaths } catch { Log "파일 감시 불러오기 실패: $($_.Exception.Message)" }
 }
 # 스스로 업데이트 (수집기 화면에서 배포 버전을 정하면 받아 설치, 문제가 있으면 자동 되돌림)
