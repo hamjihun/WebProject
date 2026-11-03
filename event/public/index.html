@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>연말 경품 추첨</title>
+<style>
+:root {
+  --bg: #0a0f24; --bg2: #141a3a; --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.12);
+  --gold: #ffcf5a; --gold2: #ffe9a8; --red: #ff4d5e; --green: #3fe0a5; --txt: #f3f5ff; --dim: #8f97c0;
+  --fs: 14px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* .panel 처럼 display 를 준 요소도 숨김이 이기게 */
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(1200px 700px at 15% -10%, #3a1240 0%, transparent 60%), radial-gradient(1000px 700px at 110% 110%, #0f3a4a 0%, transparent 55%), var(--bg);
+  color: var(--txt); font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif; overflow: hidden;
+}
+button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: rgba(255,255,255,.08); color: var(--txt); border-radius: 10px; padding: 8px 14px; }
+button:hover:not(:disabled) { background: rgba(255,255,255,.16); }
+button:disabled { opacity: .35; cursor: default; }
+button.pri { background: linear-gradient(180deg, #ffd769, #f0a92c); color: #2a1600; border: 0; font-weight: 700; }
+button.red { background: linear-gradient(180deg, #ff6b78, #d92d3f); border: 0; font-weight: 700; }
+input, textarea, select { font: inherit; color: var(--txt); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+
+/* ---- 머리 ---- */
+header { display: flex; align-items: center; gap: 18px; padding: 12px 22px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,.25); }
+header h1 { margin: 0; font-size: 30px; letter-spacing: -1px; white-space: nowrap; background: linear-gradient(90deg, var(--gold2), var(--gold), #ff9d5a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.phase { padding: 6px 14px; border-radius: 999px; background: rgba(255,207,90,.15); color: var(--gold); font-weight: 700; white-space: nowrap; }
+.prog { flex: 1; min-width: 120px; height: 14px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--red), #ff9d5a); transition: width .6s; }
+.stats { display: flex; gap: 14px; white-space: nowrap; font-size: 17px; }
+.stats b { color: var(--gold); font-size: 22px; }
+.tools { display: flex; gap: 6px; align-items: center; }
+.tools input { width: 150px; }
+
+/* ---- 본문 ---- */
+main { display: grid; grid-template-columns: minmax(520px, 36%) 1fr; gap: 16px; padding: 14px 18px; min-height: 0; }
+.stage { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.big { position: relative; flex: 0 0 auto; border-radius: 22px; padding: 22px 24px 26px; text-align: center; overflow: hidden;
+  background: linear-gradient(160deg, rgba(255,255,255,.09), rgba(255,255,255,.02)); border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.45) inset, 0 10px 40px rgba(0,0,0,.35); }
+.big .lbl { color: var(--dim); font-size: 20px; letter-spacing: 2px; }
+.big .num { font-size: clamp(64px, 7.2vw, 132px); font-weight: 900; letter-spacing: 2px; line-height: 1.15; margin-top: 6px; font-variant-numeric: tabular-nums; text-shadow: 0 0 30px rgba(255,207,90,.35); color: var(--gold2); }
+.big .who { font-size: clamp(30px, 3vw, 54px); font-weight: 800; min-height: 1.3em; }
+.big .sub { font-size: clamp(18px, 1.5vw, 26px); color: var(--dim); min-height: 1.4em; }
+.big.spin .num { filter: blur(1.5px); color: #fff; animation: jit .12s infinite; }
+.big.spin .who { opacity: .55; }
+@keyframes jit { 50% { transform: translateY(-3px); } }
+.big.land { animation: shake .55s; }
+@keyframes shake { 10%, 90% { transform: translateX(-3px); } 20%, 80% { transform: translateX(6px); } 30%, 50%, 70% { transform: translateX(-10px); } 40%, 60% { transform: translateX(10px); } }
+.stamp { position: absolute; right: 16px; top: 14px; font-size: clamp(38px, 3.4vw, 64px); font-weight: 900; color: var(--red); border: 6px solid var(--red); border-radius: 14px; padding: 0 14px; background: rgba(40,5,12,.55); transform: rotate(-14deg) scale(0); opacity: 0; text-shadow: 0 0 20px rgba(255,77,94,.5); }
+.big.land .stamp, .big.shown .stamp { animation: stamp .45s cubic-bezier(.2,1.6,.4,1) forwards; }
+@keyframes stamp { 0% { transform: rotate(-14deg) scale(3); opacity: 0; } 100% { transform: rotate(-14deg) scale(1); opacity: .92; } }
+.count { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 200px; font-weight: 900; color: var(--gold); background: rgba(10,15,36,.82); }
+.count.on { display: flex; animation: pop 1s infinite; }
+@keyframes pop { 0% { transform: scale(1.4); opacity: 0; } 30% { transform: scale(1); opacity: 1; } }
+.pausebox { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 46px; font-weight: 800; background: rgba(10,15,36,.75); }
+.pausebox.on { display: flex; }
+
+.prizehead { font-size: clamp(30px, 2.8vw, 50px); font-weight: 900; color: var(--gold); }
+.prizehead small { display: block; font-size: 20px; color: var(--dim); font-weight: 400; margin-top: 4px; }
+.reel { height: 2.6em; overflow: hidden; font-size: clamp(36px, 3.6vw, 64px); font-weight: 900; margin: 14px 0 6px; border-radius: 14px; background: rgba(0,0,0,.3); border: 2px solid rgba(255,207,90,.4); display: flex; align-items: center; justify-content: center; }
+.reel.spin span { animation: jit .1s infinite; filter: blur(1px); }
+.winners { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+.winners .w { background: linear-gradient(180deg, #ffd769, #f0a92c); color: #2a1600; border-radius: 14px; padding: 10px 16px; font-weight: 800; font-size: 26px; animation: win .7s cubic-bezier(.2,1.6,.4,1) both; }
+.winners .w small { display: block; font-size: 15px; font-weight: 600; opacity: .8; }
+.winners.many .w { font-size: 18px; padding: 6px 10px; }
+@keyframes win { 0% { transform: scale(.2) rotate(-10deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.congrats { font-size: 34px; font-weight: 900; color: var(--gold2); margin-top: 10px; animation: glow 1.2s infinite alternate; }
+@keyframes glow { to { text-shadow: 0 0 24px var(--gold); } }
+.idle .msg { font-size: clamp(26px, 2.2vw, 40px); font-weight: 800; line-height: 1.4; }
+.idle .msg small { display: block; font-size: 20px; color: var(--dim); font-weight: 400; margin-top: 10px; }
+
+.panel { flex: 1; min-height: 0; overflow: hidden; border-radius: 16px; background: var(--card); border: 1px solid var(--line); padding: 12px 14px; display: flex; flex-direction: column; }
+.panel h3 { margin: 0 0 8px; font-size: 18px; color: var(--dim); font-weight: 600; }
+.recent { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 6px 10px; overflow: hidden; min-height: 0; flex: 1; }
+.recent div { display: flex; gap: 8px; align-items: baseline; padding: 5px 9px; border-radius: 8px; background: rgba(255,77,94,.1); font-size: 17px; white-space: nowrap; overflow: hidden; }
+.recent div:first-child { background: rgba(255,77,94,.3); animation: win .5s both; }
+.recent b { color: #ffb0b8; font-variant-numeric: tabular-nums; }
+.recent span { color: var(--dim); font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+.wlist { overflow: auto; font-size: 17px; }
+.wlist .pz { margin-bottom: 8px; }
+.wlist .pz b { color: var(--gold); }
+.wlist .pz span { display: inline-block; margin: 3px 4px 0 0; padding: 2px 8px; border-radius: 6px; background: rgba(255,207,90,.15); }
+
+/* ---- 팀별 현황: 위→아래, 왼→오른쪽으로 채우는 격자 (줄 수·글자 크기는 fitBoard 가 화면에 맞춤) ---- */
+.board { min-height: 0; overflow: hidden; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-rows: repeat(40, 1.42em); column-gap: .7em; align-content: start; font-size: var(--fs); }
+.grp { display: flex; align-items: center; gap: .4em; padding: 0 .5em; border-radius: .35em; background: linear-gradient(90deg, rgba(255,207,90,.45), rgba(255,207,90,.08)); font-weight: 900; white-space: nowrap; overflow: hidden; }
+.grp small { font-weight: 400; color: var(--gold2); font-size: .78em; overflow: hidden; text-overflow: ellipsis; }
+.th { display: flex; justify-content: space-between; align-items: center; gap: .3em; padding: 0 .4em; border-radius: .35em; font-weight: 800; white-space: nowrap; overflow: hidden; background: hsla(var(--tc), 65%, 45%, .45); }
+.th span { overflow: hidden; text-overflow: ellipsis; }
+.th em { font-style: normal; font-weight: 400; font-size: .8em; color: #dfe3ff; }
+.th em b { color: #ffb0b8; }
+.pp { display: flex; justify-content: space-between; align-items: center; gap: .3em; padding: 0 .25em 0 .4em; border-left: .22em solid hsla(var(--tc), 70%, 60%, .75); border-radius: .2em; white-space: nowrap; overflow: hidden; }
+.pp .n { overflow: hidden; text-overflow: ellipsis; }
+.pp .d { display: flex; gap: .2em; flex: 0 0 auto; }
+.dot { width: .72em; height: .72em; border-radius: 50%; background: var(--gold); box-shadow: 0 0 .3em rgba(255,207,90,.6); }
+.dot.o { background: #474e72; box-shadow: none; position: relative; }
+.dot.o::after { content: ''; position: absolute; left: -.08em; right: -.08em; top: 50%; height: .12em; background: var(--red); transform: rotate(-45deg); }
+.dot.w { background: #fff; box-shadow: 0 0 .5em #fff, 0 0 1em var(--gold); }
+.pp.dead .n { color: #6d7398; text-decoration: line-through; }
+.pp.win { background: rgba(255,207,90,.25); }
+.pp.win .n::before { content: '★ '; color: var(--gold); }
+.pp.flash { animation: flash 2.4s; }
+@keyframes flash { 0%, 40% { background: rgba(255,77,94,.8); } 100% { background: transparent; } }
+.pp.hit { outline: 2px solid #5ad1ff; background: rgba(90,209,255,.25); }
+
+/* ---- 진행 버튼 ---- */
+footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 18px; border-top: 1px solid var(--line); background: rgba(0,0,0,.35); }
+footer .sp { flex: 1; }
+footer .info { color: var(--dim); font-size: 14px; }
+footer.hide { display: none; }
+.login { position: fixed; right: 10px; bottom: 8px; font-size: 12px; color: #59608a; text-decoration: none; }
+.toast { position: fixed; left: 50%; top: 80px; transform: translateX(-50%); background: #2a0f16; border: 1px solid var(--red); color: #ffd6da; padding: 12px 18px; border-radius: 12px; white-space: pre-line; z-index: 50; display: none; max-width: 80vw; }
+canvas#fx { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+
+/* ---- 설정 창 ---- */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 30px 12px; z-index: 60; overflow: auto; }
+.modal:not(.on) { display: none; }
+.sheet { width: min(980px, 100%); background: #151b3d; border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px 22px; }
+.sheet h2 { margin: 0 0 12px; }
+.sheet h4 { margin: 18px 0 6px; color: var(--gold); }
+.sheet .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.sheet label { color: var(--dim); }
+.sheet textarea { width: 100%; font-family: Consolas, 'Malgun Gothic', monospace; font-size: 13px; }
+.sheet table { border-collapse: collapse; }
+.sheet td, .sheet th { border: 1px solid var(--line); padding: 5px 10px; text-align: center; }
+.sheet td input { width: 80px; text-align: right; }
+.help { color: var(--dim); font-size: 13px; line-height: 1.6; }
+.ok { color: var(--green); }
+.warn { color: #ffb36b; }
+
+/* ---- 휴대폰·작은 화면: 위아래로 쌓고 스크롤 ---- */
+@media (max-width: 1000px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100vh; }
+  header { flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; }
+  header h1 { font-size: 22px; }
+  .prog { order: 9; flex-basis: 100%; }
+  .stats { font-size: 14px; } .stats b { font-size: 17px; }
+  main { grid-template-columns: 1fr; padding: 10px; }
+  .board { overflow: visible; --fs: 15px; grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none !important; grid-auto-rows: 1.6em; }
+  .grp, .th { grid-column: 1 / -1; }
+  .panel { max-height: 300px; }
+  .stamp { top: 30px; right: 10px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1 id="title">연말 경품 추첨</h1>
+    <div class="phase" id="phase">준비 중</div>
+    <div class="prog" title="이번 발표 진행률"><i id="bar"></i></div>
+    <div class="stats" id="stats"></div>
+    <div class="tools">
+      <input id="q" placeholder="🔍 이름·응모번호 찾기">
+      <button id="bSound" title="소리 켜기/끄기">🔇</button>
+      <button id="bFull" title="전체 화면">⛶</button>
+    </div>
+  </header>
+  <main>
+    <section class="stage">
+      <div class="big" id="big">
+        <div id="vElim">
+          <div class="lbl" id="eLbl">응모번호</div>
+          <div class="num" id="eNum">-</div>
+          <div class="who" id="eWho"></div>
+          <div class="sub" id="eSub"></div>
+          <div class="stamp">탈락</div>
+        </div>
+        <div id="vPrize" hidden>
+          <div class="prizehead" id="pHead"></div>
+          <div class="reel" id="pReel"><span id="pReelTxt">?</span></div>
+          <div class="winners" id="pWin"></div>
+          <div class="congrats" id="pCongrats" hidden>🎉 축하합니다! 🎉</div>
+        </div>
+        <div id="vIdle" class="idle" hidden><div class="msg" id="iMsg"></div></div>
+        <div class="count" id="count"></div>
+        <div class="pausebox" id="pause">⏸ 잠시 멈춤</div>
+      </div>
+      <div class="panel" id="pRecent"><h3 id="recentH">방금 탈락</h3><div class="recent" id="recent"></div></div>
+      <div class="panel" id="pWins" hidden><h3>당첨자</h3><div class="wlist" id="wlist"></div></div>
+    </section>
+    <section class="board" id="board"></section>
+  </main>
+  <footer id="ctl" class="hide">
+    <button class="pri" id="bR0">1차 탈락 시작</button>
+    <button class="pri" id="bR1">2차 탈락 시작</button>
+    <button id="bPause">⏸ 멈춤</button>
+    <button id="bFlush" title="남은 탈락자를 바로 모두 발표">⏩ 남은 탈락 한꺼번에</button>
+    <label class="info">발표 간격 <select id="sInt"></select></label>
+    <span class="info" id="eta"></span>
+    <span class="sp"></span>
+    <button class="pri" id="bDraw">🎁 다음 경품 추첨</button>
+    <button id="bDrawAll" title="지금 경품의 남은 수량을 한 번에 추첨">🎁 이 경품 모두</button>
+    <button id="bUndo" title="마지막 당첨 또는 마지막 탈락 발표를 되돌립니다 (리허설용)">↩ 되돌리기</button>
+    <button id="bSet">⚙ 설정</button>
+    <span class="info">H: 버튼 숨기기</span>
+  </footer>
+</div>
+<a class="login" id="loginLink" href="/login.html?next=/event">진행자 로그인</a>
+<div class="toast" id="toast"></div>
+<canvas id="fx"></canvas>
+
+<div class="modal" id="mSet">
+  <div class="sheet">
+    <h2>⚙ 추첨 설정</h2>
+    <div class="row">
+      <label>제목 <input id="cTitle" size="24"></label>
+      <label>발표 간격 <input id="cInt" type="number" min="2" max="60" style="width:70px">초</label>
+      <label>숫자 돌림 <input id="cSpin" type="number" min="1" max="10" style="width:60px">초</label>
+      <label>최종 추첨 돌림 <input id="cFSpin" type="number" min="2" max="20" style="width:60px">초</label>
+      <label><input id="cOne" type="checkbox"> 한 사람 한 경품</label>
+    </div>
+
+    <h4>1. 명단 (그룹, 팀, 이름, 매수[, 응모번호…])</h4>
+    <div class="help">엑셀에서 4열(그룹·팀·이름·매수)을 복사해 붙여 넣어도 됩니다. 매수는 1~4장. 응모권에 번호가 인쇄돼 있으면 5열부터 번호를 적으세요 (띄어쓰기로 구분). 번호를 안 적으면 A-001 처럼 자동으로 붙습니다.</div>
+    <textarea id="cRoster" rows="9" placeholder="A,영업1팀,홍길동,4&#10;A,영업1팀,김철수,2&#10;B,생산팀,이영희,3,B-101 B-102 B-103"></textarea>
+    <div class="row"><button id="cRosterApply" class="pri">명단 적용</button><button id="cSample">예시 넣기</button><span id="cRosterInfo" class="help"></span></div>
+
+    <h4>2. 탈락 장수 (응모권 기준)</h4>
+    <div id="cCounts"></div>
+    <div class="help" id="cCountsInfo"></div>
+
+    <h4>3. 경품 (위에서부터 차례로 추첨 — 보통 작은 경품부터)</h4>
+    <div class="help">한 줄에 하나: <b>경품 이름, 그룹(A / B / 전체), 수량</b> &nbsp; 예) 상품권 5만원, 전체, 10</div>
+    <textarea id="cPrizes" rows="6" placeholder="상품권 5만원, 전체, 10&#10;에어팟, A, 2&#10;TV 65인치, 전체, 1"></textarea>
+
+    <div class="row" style="margin-top:16px">
+      <button class="pri" id="cSave">설정 저장</button>
+      <button id="cClose">닫기</button>
+      <span class="sp" style="flex:1"></span>
+      <a id="cCsv" href="api/result.csv" style="color:var(--gold)">결과 엑셀(CSV) 받기</a>
+      <button class="red" id="cReset">처음부터 다시 (명단 유지)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = location.pathname.replace(/\/(index\.html)?$/, '') || '/event';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+let R = null, L = null, rosterRev = 0, offset = 0;
+let pT = [], teams = [], dotEl = [], rowEl = [], teamEl = {};
+let prevOut = '', prevOrders = [], prevWinN = -1, lastEvent = null, landTimer = null;
+
+// ---------- 소리 (Web Audio 로 직접 만듦, 파일 없음) ----------
+let AC = null, soundOn = store.get('ev_sound') === '1';
+function ac() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended') AC.resume(); return AC; }
+function tone(f, d, type, vol, f2) {
+  if (!soundOn) return; const a = ac(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
+  o.type = type || 'square'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+  g.gain.setValueAtTime(vol || 0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + 0.02);
+}
+function noise(d, vol) {
+  if (!soundOn) return; const a = ac(); if (!a) return;
+  const b = a.createBuffer(1, Math.floor(a.sampleRate * d), a.sampleRate), x = b.getChannelData(0);
+  for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * (1 - i / x.length);
+  const s = a.createBufferSource(), g = a.createGain(); g.gain.value = vol || 0.15; s.buffer = b; s.connect(g); g.connect(a.destination); s.start();
+}
+const sTick = () => tone(700 + Math.random() * 500, 0.04, 'square', 0.04);
+const sBoom = () => { tone(160, 0.6, 'sine', 0.35, 40); noise(0.35, 0.2); };
+const sDrum = () => noise(0.06, 0.08);
+const sFanfare = () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, i === 5 ? 0.9 : 0.22, 'triangle', 0.16), i * 150));
+function setSound(on) { soundOn = on; store.set('ev_sound', on ? '1' : '0'); $('bSound').textContent = on ? '🔊' : '🔇'; if (on) { ac(); tone(880, 0.1, 'triangle', 0.1); } }
+$('bSound').onclick = () => setSound(!soundOn);
+$('bFull').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
+
+// ---------- 폭죽 ----------
+const cv = $('fx'), cx = cv.getContext('2d'); let parts = [], fxOn = false;
+function fit() { cv.width = innerWidth; cv.height = innerHeight; }
+addEventListener('resize', () => { fit(); fitBoard(); }); fit();
+function confetti(n) {
+  const cols = ['#ffcf5a', '#ff4d5e', '#ffffff', '#3fe0a5', '#5ad1ff', '#ff9d5a'];
+  for (let i = 0; i < (n || 260); i++) parts.push({ x: innerWidth * (0.2 + Math.random() * 0.6), y: innerHeight * 0.35, vx: (Math.random() - 0.5) * 22, vy: -Math.random() * 20 - 6, r: 4 + Math.random() * 6, c: cols[i % cols.length], a: Math.random() * 6, va: (Math.random() - 0.5) * 0.4, life: 260 + Math.random() * 120 });
+  if (!fxOn) { fxOn = true; requestAnimationFrame(fxLoop); }
+}
+function fxLoop() {
+  cx.clearRect(0, 0, cv.width, cv.height);
+  parts = parts.filter((p) => p.life-- > 0 && p.y < cv.height + 30);
+  for (const p of parts) { p.vy += 0.45; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.a += p.va; cx.save(); cx.translate(p.x, p.y); cx.rotate(p.a); cx.fillStyle = p.c; cx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); cx.restore(); }
+  if (parts.length) requestAnimationFrame(fxLoop); else { fxOn = false; cx.clearRect(0, 0, cv.width, cv.height); }
+}
+
+// ---------- 서버 ----------
+const now = () => Date.now() + offset;
+function toast(m) { const t = $('toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = 'none'), 6000); }
+async function api(act, extra) {
+  if (soundOn) ac();
+  try {
+    const r = await fetch(BASE + '/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ act }, extra || {})) });
+    const j = await r.json(); if (!j.ok) { toast(j.error || '실패'); return null; }
+    poll(true); return j;
+  } catch (e) { toast('서버에 연결하지 못했습니다'); return null; }
+}
+let polling = false;
+async function poll(force) {
+  if (polling && !force) return; polling = true;
+  try {
+    const r = await fetch(BASE + '/api/live' + (L && !force ? '?rev=' + L.rev : ''), { cache: 'no-store' });
+    const j = await r.json();
+    offset = j.now - Date.now();
+    if (!j.same) {
+      if (!R || j.rosterRev !== rosterRev) { const rr = await (await fetch(BASE + '/api/roster', { cache: 'no-store' })).json(); setRoster(rr); }
+      apply(j);
+    }
+  } catch (e) {} finally { polling = false; }
+}
+setInterval(poll, 700);
+
+// ---------- 명단 → 팀별 현황 ----------
+function setRoster(rr) {
+  R = rr; rosterRev = rr.rosterRev; pT = R.people.map(() => []);
+  R.tickets.forEach((t, i) => pT[t[1]].push(i));
+  const map = new Map(); teams = [];
+  for (const g of R.groups) {
+    R.people.forEach((p, i) => { if (p[0] !== g) return; const k = g + '|' + p[1]; if (!map.has(k)) { const t = { k, g, name: p[1], ps: [] }; map.set(k, t); teams.push(t); } map.get(k).ps.push(i); });
+  }
+  let h = '', lastG = null;
+  maxName = 3;
+  teams.forEach((t, ti) => {
+    const tc = (ti * 47 + 200) % 360;                  // 팀마다 다른 색 띠 (열이 바뀌어도 어느 팀인지 보이게)
+    if (t.g !== lastG) { lastG = t.g; h += `<div class="grp" data-g="${esc(t.g)}">${esc(t.g)}그룹 <small id="gs_${esc(t.g)}"></small></div>`; }
+    h += `<div class="th" style="--tc:${tc}"><span>${esc(t.name)}</span><em id="tc_${esc(t.k)}"></em></div>`;
+    for (const p of t.ps) { maxName = Math.max(maxName, Math.min(8, R.people[p][2].length)); h += `<div class="pp" style="--tc:${tc}" data-p="${p}"><span class="n">${esc(R.people[p][2])}</span><span class="d">${pT[p].map((ti2) => `<i class="dot" data-t="${ti2}" title="${esc(R.tickets[ti2][0])}"></i>`).join('')}</span></div>`; }
+  });
+  $('board').innerHTML = h || '<div class="idle"><div class="msg">명단이 아직 없습니다<small>진행자 로그인 → ⚙ 설정에서 명단을 넣으세요</small></div></div>';
+  dotEl = []; rowEl = []; teamEl = {};
+  $('board').querySelectorAll('.dot').forEach((d) => (dotEl[+d.dataset.t] = d));
+  $('board').querySelectorAll('.pp').forEach((d) => (rowEl[+d.dataset.p] = d));
+  for (const t of teams) teamEl[t.k] = document.getElementById('tc_' + t.k);
+  prevOut = ''; fitBoard(); search();
+}
+let maxName = 3;
+function fitBoard() {                                  // 큰 화면: 팀별 현황이 한 화면에 다 들어가게 줄 수·글자 크기를 정한다
+  const b = $('board'); if (!b) return;
+  const n = b.querySelectorAll('.grp, .th, .pp').length;
+  if (innerWidth <= 1000 || !n) { b.style.removeProperty('--fs'); b.style.gridTemplateRows = ''; return; }
+  const W = b.clientWidth, H = b.clientHeight;
+  let fs = 7;
+  for (let f = 26; f >= 7; f -= 0.5) {                 // 큰 글자부터: 줄 수 = 높이/줄높이, 열 수 = 항목/줄 수, 열 너비 = 이름 + 점 4개
+    const rows = Math.max(1, Math.floor(H / (f * 1.42))), cols = Math.ceil(n / rows), colW = f * (maxName * 1.02 + 4 * 0.92 + 1.6) + f * 0.7;
+    if (cols * colW <= W) { fs = f; break; }
+  }
+  const rows = Math.max(1, Math.floor(H / (fs * 1.42)));
+  b.style.setProperty('--fs', fs + 'px');
+  b.style.gridTemplateRows = `repeat(${rows}, ${(H / rows).toFixed(2)}px)`;
+}
+
+// ---------- 상태 반영 ----------
+const gOf = (ti) => R.people[R.tickets[ti][1]][0];
+function apply(j) {
+  const first = !L; L = j;
+  $('title').textContent = j.title; document.title = j.title;
+  const hid = !j.admin || store.get('ev_hidectl') === '1';
+  if ($('ctl').classList.contains('hide') !== hid || first) { $('ctl').classList.toggle('hide', hid); setTimeout(fitBoard, 30); }
+  $('loginLink').hidden = j.admin;
+  if (!R) return;
+  const out = j.out;
+  // 응모권 점 색
+  for (let i = 0; i < out.length; i++) if (out[i] !== prevOut[i] && dotEl[i]) dotEl[i].className = 'dot' + (out[i] === 'W' ? ' w' : out[i] !== '0' ? ' o' : '');
+  for (let p = 0; p < pT.length; p++) {
+    const ts = pT[p], el = rowEl[p]; if (!el) continue;
+    el.classList.toggle('dead', ts.every((i) => out[i] === '1' || out[i] === '2'));
+    el.classList.toggle('win', ts.some((i) => out[i] === 'W'));
+  }
+  for (const t of teams) {
+    let all = 0, gone = 0; for (const p of t.ps) for (const i of pT[p]) { all++; if (out[i] === '1' || out[i] === '2') gone++; }
+    if (teamEl[t.k]) teamEl[t.k].innerHTML = `${all - gone}/${all}${gone ? ` <b>-${gone}</b>` : ''}`;
+  }
+  const alive = {}, total = {};
+  for (let i = 0; i < out.length; i++) { const g = gOf(i); total[g] = (total[g] || 0) + 1; if (out[i] === '0' || out[i] === 'W') alive[g] = (alive[g] || 0) + 1; }
+  for (const g of R.groups) { const el = document.getElementById('gs_' + g); if (el) el.textContent = `${R.people.filter((p) => p[0] === g).length}명 · ${alive[g] || 0}/${total[g] || 0}장`; }
+  $('stats').innerHTML = R.groups.map((g) => `<span>${esc(g)}그룹 <b>${alive[g] || 0}</b>장</span>`).join('') + `<span>남은 사람 <b>${pT.filter((ts) => ts.some((i) => out[i] === '0' || out[i] === 'W')).length}</b>명</span>`;
+
+  // 새로 발표된 탈락자 / 당첨자
+  const orders = j.orders || [];
+  let newElim = [];
+  orders.forEach((o, r) => { const before = (prevOrders[r] || []).length; if (o.length > before) newElim = newElim.concat(o.slice(before).map((t) => ({ r, t }))); });
+  const winN = j.prizes.reduce((s, p) => s + p.wins.length, 0);
+  if (first) {
+    if (winN) { const k = lastPrizeWithWins(); lastEvent = { type: 'win', k, ts: j.prizes[k].wins.slice(-1) }; }
+    else { const r = orders.reduce((a, o, i) => (o.length ? i : a), -1); if (r >= 0) lastEvent = { type: 'elim', r, t: orders[r][orders[r].length - 1] }; }
+    showLast(false);
+  } else {
+    if (newElim.length) {
+      const last = newElim[newElim.length - 1];
+      lastEvent = { type: 'elim', r: last.r, t: last.t };
+      showLast(newElim.length <= 3);
+      for (const e of newElim.slice(-30)) { const el = rowEl[R.tickets[e.t][1]]; if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
+    }
+    if (winN > prevWinN && prevWinN >= 0) {
+      const k = lastPrizeWithWins(), before = prevPrizeWins[k] || 0;
+      lastEvent = { type: 'win', k, ts: j.prizes[k].wins.slice(before) };
+      showLast(true);
+    } else if (winN < prevWinN) { lastEvent = null; showLast(false); }
+  }
+  prevOut = out; prevOrders = orders.map((o) => o.slice()); prevWinN = winN; prevPrizeWins = j.prizes.map((p) => p.wins.length);
+  renderRecent(); renderWins(); renderCtl(); search(true);
+}
+let prevPrizeWins = [];
+function lastPrizeWithWins() { let k = -1; L.prizes.forEach((p, i) => { if (p.wins.length) k = i; }); return k; }
+
+function who(ti) { const t = R.tickets[ti], p = R.people[t[1]]; return { no: t[0], g: p[0], team: p[1], name: p[2], p: t[1] }; }
+function showLast(anim) {
+  const big = $('big');
+  big.classList.remove('land', 'shown', 'spin');
+  if (lastEvent && lastEvent.type === 'elim') {
+    view('elim');
+    const w = who(lastEvent.t), left = pT[w.p].filter((i) => L.out[i] === '0' || L.out[i] === 'W').length;
+    $('eLbl').textContent = `${L.rounds[lastEvent.r].name} · ${L.orders[lastEvent.r].indexOf(lastEvent.t) + 1}번째`;
+    $('eNum').textContent = w.no; $('eWho').textContent = w.name;
+    $('eSub').textContent = `${w.team} · ${w.g}그룹 · ${left ? `남은 응모권 ${left}장` : '모든 응모권 탈락 😢'}`;
+    void big.offsetWidth; big.classList.add(anim ? 'land' : 'shown');
+    if (anim) sBoom();
+  } else if (lastEvent && lastEvent.type === 'win') {
+    view('prize');
+    const P = L.prizes[lastEvent.k];
+    $('pHead').innerHTML = `🎁 ${esc(P.name)}<small>${P.g === '*' ? '전체' : esc(P.g) + '그룹'} · ${P.wins.length} / ${P.n}명</small>`;
+    $('pReel').classList.remove('spin');
+    const ws = lastEvent.ts.map(who);
+    $('pReelTxt').textContent = ws.length === 1 ? ws[0].name : `${ws.length}명 당첨!`;
+    $('pWin').className = 'winners' + (ws.length > 6 ? ' many' : '');
+    $('pWin').innerHTML = ws.map((w, i) => `<div class="w" style="animation-delay:${Math.min(i * 0.12, 3)}s">${esc(w.name)}<small>${esc(w.team)} · ${esc(w.no)}</small></div>`).join('');
+    $('pCongrats').hidden = false;
+    if (anim) { sFanfare(); confetti(ws.length > 1 ? 360 : 260); setTimeout(() => confetti(160), 900); }
+  } else idleView();
+}
+function view(v) { $('vElim').hidden = v !== 'elim'; $('vPrize').hidden = v !== 'prize'; $('vIdle').hidden = v !== 'idle'; }
+function idleView() {
+  view('idle');
+  let m = '';
+  if (!R || !R.tickets.length) m = '명단 준비 중<small>진행자가 설정에서 명단을 넣으면 시작합니다</small>';
+  else {
+    const r = L.rounds.findIndex((x) => x.state !== 'done' && x.total > 0);
+    if (r >= 0) m = `${esc(L.rounds[r].name)} 대기 중<small>탈락 예정 ${Object.entries(L.rounds[r].counts).filter(([, n]) => n).map(([g, n]) => `${esc(g)}그룹 ${n}장`).join(' · ')} · 응모권 ${R.tickets.length}장 · ${R.people.length}명 참여</small>`;
+    else if (L.prizes.length) m = '🎁 최종 추첨 대기 중<small>' + L.prizes.map((p) => `${esc(p.name)} ${p.n}명`).join(' · ') + '</small>';
+    else m = '추첨 준비 중';
+  }
+  $('iMsg').innerHTML = m;
+}
+function renderRecent() {
+  const r = lastEvent && lastEvent.type === 'elim' ? lastEvent.r : L.orders.reduce((a, o, i) => (o.length ? i : a), -1);
+  const prizeTime = !!(L.prizes.some((p) => p.wins.length) || (L.run && L.run.type === 'prize'));
+  $('pRecent').hidden = prizeTime; $('pWins').hidden = !prizeTime && !(L.rounds.every((x) => x.state === 'done' || !x.total) && L.prizes.length && !L.run);
+  if (r < 0) { $('recent').innerHTML = '<span class="help">아직 발표 전입니다</span>'; return; }
+  const o = L.orders[r];
+  $('recentH').textContent = `방금 탈락 — ${L.rounds[r].name} ${o.length}장`;
+  $('recent').innerHTML = o.slice(-40).reverse().map((t) => { const w = who(t); return `<div><b>${esc(w.no)}</b>${esc(w.name)}<span>${esc(w.team)}</span></div>`; }).join('');
+}
+function renderWins() {
+  $('wlist').innerHTML = L.prizes.map((p) => `<div class="pz"><b>${esc(p.name)}</b> <span class="help">${p.wins.length}/${p.n}</span><br>${p.wins.map((t) => { const w = who(t); return `<span>${esc(w.name)} <small class="help">${esc(w.team)}</small></span>`; }).join('') || '<small class="help">추첨 전</small>'}</div>`).join('');
+}
+
+// ---------- 진행 중 화면 (돌림·카운트다운) ----------
+let lastSpin = 0, spinPool = [];
+function frame() {
+  requestAnimationFrame(frame);
+  if (!L || !R) return;
+  const run = L.run, t = now(), big = $('big');
+  // 진행률
+  let ph = '준비 중', pct = 0;
+  const cur = run && run.type === 'round' ? run.r : -1;
+  if (cur >= 0) { const Rd = L.rounds[cur]; ph = `${Rd.name} ${Rd.shown}/${Rd.total}`; pct = Rd.total ? Rd.shown / Rd.total : 0; }
+  else if (run && run.type === 'prize') ph = `🎁 ${L.prizes[run.k].name} 추첨 중`;
+  else if (L.prizes.some((p) => p.wins.length)) { const done = L.prizes.reduce((s, p) => s + p.wins.length, 0), all = L.prizes.reduce((s, p) => s + p.n, 0); ph = `최종 추첨 ${done}/${all}`; pct = all ? done / all : 0; }
+  else { const d = L.rounds.filter((x) => x.state === 'done' && x.total); if (d.length) { ph = `${d[d.length - 1].name} 끝`; pct = 1; } }
+  $('phase').textContent = ph; $('bar').style.width = (pct * 100).toFixed(1) + '%';
+  $('pause').classList.toggle('on', !!(run && run.type === 'round' && run.paused));
+
+  if (run && run.type === 'round' && !run.paused && run.nextAt) {
+    const remain = run.nextAt - t, spinMs = L.spin * 1000, Rd = L.rounds[run.r];
+    const cnt = $('count');
+    if (Rd.shown === 0 && remain > spinMs) {           // 시작 카운트다운
+      const c = Math.ceil((remain - spinMs) / 1000);
+      view('elim'); cnt.classList.add('on'); if (cnt.textContent !== String(c)) { cnt.textContent = c; tone(c > 1 ? 660 : 990, 0.15, 'triangle', 0.15); }
+      return;
+    }
+    cnt.classList.remove('on');
+    if (remain <= spinMs) {                             // 숫자 돌림
+      if (!big.classList.contains('spin')) {
+        big.classList.remove('land', 'shown'); big.classList.add('spin'); view('elim');
+        $('eLbl').textContent = `${Rd.name} · ${Rd.shown + 1}번째 탈락자는…`; $('eSub').textContent = '두구두구두구…';
+        spinPool = []; for (let i = 0; i < L.out.length; i++) if (L.out[i] === '0') spinPool.push(i);
+      }
+      const prog = Math.min(1, Math.max(0, 1 - remain / spinMs)), gap = 45 + prog * prog * 260;
+      if (t - lastSpin > gap && spinPool.length) { lastSpin = t; const w = who(spinPool[Math.floor(Math.random() * spinPool.length)]); $('eNum').textContent = w.no; $('eWho').textContent = w.name; sTick(); }
+    }
+  } else { $('count').classList.remove('on'); if (big.classList.contains('spin') && !(run && run.type === 'prize')) { big.classList.remove('spin'); showLast(false); } }
+
+  if (run && run.type === 'prize') {
+    const remain = run.revealAt - t, P = L.prizes[run.k], all = L.finalSpin * 1000;
+    if (remain > 0) {
+      if (!$('pReel').classList.contains('spin')) {
+        view('prize'); $('pReel').classList.add('spin'); $('pWin').innerHTML = ''; $('pCongrats').hidden = true;
+        $('pHead').innerHTML = `🎁 ${esc(P.name)}<small>${P.g === '*' ? '전체' : esc(P.g) + '그룹'} · ${run.count > 1 ? run.count + '명 한꺼번에' : (P.wins.length + 1) + '번째 당첨자'}</small>`;
+        spinPool = []; for (let i = 0; i < L.out.length; i++) if (L.out[i] === '0' && (P.g === '*' || gOf(i) === P.g)) spinPool.push(i);
+      }
+      const prog = Math.min(1, Math.max(0, 1 - remain / all)), gap = 40 + prog * prog * prog * 520;
+      if (t - lastSpin > gap && spinPool.length) { lastSpin = t; const w = who(spinPool[Math.floor(Math.random() * spinPool.length)]); $('pReelTxt').textContent = `${w.name} · ${w.team}`; sTick(); if (Math.random() < 0.5) sDrum(); }
+    }
+  }
+}
+requestAnimationFrame(frame);
+
+// ---------- 진행 버튼 (관리자) ----------
+const INTS = [3, 4, 5, 6, 7, 8, 10, 12, 15, 20];
+$('sInt').innerHTML = INTS.map((s) => `<option value="${s}">${s}초</option>`).join('');
+$('sInt').onchange = () => api('config', { interval: +$('sInt').value });
+function renderCtl() {
+  if (!L.admin) return;
+  const run = L.run, busy = !!run;
+  const r0 = L.rounds[0], r1 = L.rounds[1], wins = L.prizes.some((p) => p.wins.length);
+  $('bR0').disabled = busy || r0.state !== 'ready' || !r0.total || wins;
+  $('bR1').disabled = busy || r1.state !== 'ready' || !r1.total || wins || (r0.total && r0.state !== 'done');
+  const inRound = run && run.type === 'round';
+  $('bPause').disabled = !inRound; $('bPause').textContent = inRound && run.paused ? '▶ 계속' : '⏸ 멈춤';
+  $('bFlush').disabled = !inRound;
+  const roundsDone = L.rounds.every((x) => x.state === 'done' || !x.total);
+  const leftPrize = L.prizes.some((p) => p.wins.length < p.n);
+  $('bDraw').disabled = busy || !roundsDone || !leftPrize; $('bDrawAll').disabled = $('bDraw').disabled;
+  $('bUndo').disabled = busy;
+  if (document.activeElement !== $('sInt')) { if (!INTS.includes(L.interval)) $('sInt').insertAdjacentHTML('beforeend', `<option value="${L.interval}">${L.interval}초</option>`); $('sInt').value = L.interval; }
+  if (inRound) { const Rd = L.rounds[run.r], s = (Rd.total - Rd.shown) * L.interval; $('eta').textContent = `남은 ${Rd.total - Rd.shown}장 · 약 ${Math.ceil(s / 60)}분`; }
+  else { const r = L.rounds.find((x) => x.state === 'ready' && x.total); $('eta').textContent = r ? `${r.name}: ${r.total}장 · 약 ${Math.ceil(r.total * L.interval / 60)}분 예상` : ''; }
+}
+$('bR0').onclick = () => confirm(`${L.rounds[0].name}를 시작할까요? (${L.rounds[0].total}장, 약 ${Math.ceil(L.rounds[0].total * L.interval / 60)}분)`) && api('start', { r: 0 });
+$('bR1').onclick = () => confirm(`${L.rounds[1].name}를 시작할까요? (${L.rounds[1].total}장, 약 ${Math.ceil(L.rounds[1].total * L.interval / 60)}분)`) && api('start', { r: 1 });
+$('bPause').onclick = () => api(L.run && L.run.paused ? 'resume' : 'pause');
+$('bFlush').onclick = () => confirm('남은 탈락자를 지금 한꺼번에 발표할까요?') && api('flush');
+$('bDraw').onclick = () => api('draw');
+$('bDrawAll').onclick = () => { const P = L.prizes.find((p) => p.wins.length < p.n); if (P && confirm(`${P.name} 남은 ${P.n - P.wins.length}명을 한꺼번에 추첨할까요?`)) api('draw', { all: true }); };
+$('bUndo').onclick = () => {
+  const wins = L.prizes.some((p) => p.wins.length);
+  if (confirm(wins ? '마지막 당첨 결과를 취소할까요? (리허설용)' : '마지막 탈락 발표를 통째로 되돌릴까요? (리허설용)')) api(wins ? 'undo-win' : 'undo-round');
+};
+addEventListener('keydown', (e) => {
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || !L || !L.admin) return;
+  if (e.key === 'h' || e.key === 'H') { const h = !$('ctl').classList.contains('hide'); $('ctl').classList.toggle('hide', h); store.set('ev_hidectl', h ? '1' : '0'); setTimeout(fitBoard, 50); }
+  if (e.key === ' ' && L.run && L.run.type === 'round') { e.preventDefault(); $('bPause').click(); }
+});
+
+// ---------- 찾기 ----------
+$('q').oninput = () => search();
+function search(quiet) {
+  const q = $('q').value.trim().toLowerCase();
+  let firstHit = null;
+  rowEl.forEach((el, p) => { const hit = !!q && (R.people[p][2].toLowerCase().includes(q) || pT[p].some((i) => R.tickets[i][0].toLowerCase() === q)); el.classList.toggle('hit', hit); if (hit && !firstHit) firstHit = el; });
+  if (firstHit && !quiet) firstHit.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+// ---------- 설정 창 ----------
+let C = null;
+$('bSet').onclick = openSet;
+$('cClose').onclick = () => $('mSet').classList.remove('on');
+async function openSet() {
+  const j = await (await fetch(BASE + '/api/config', { cache: 'no-store' })).json(); if (!j.ok) return toast(j.error);
+  C = j;
+  $('cTitle').value = L.title; $('cInt').value = L.interval; $('cSpin').value = L.spin; $('cFSpin').value = L.finalSpin; $('cOne').checked = L.onePrize;
+  $('cRoster').value = j.rosterText; $('cRoster').disabled = j.started; $('cRosterApply').disabled = j.started;
+  $('cRosterInfo').textContent = j.started ? '추첨이 시작돼 명단은 바꿀 수 없습니다 ([처음부터 다시] 뒤 가능)' : `지금 ${R.people.length}명 · 응모권 ${R.tickets.length}장`;
+  $('cPrizes').value = j.prizes.map((p) => `${p.name}, ${p.g === '*' ? '전체' : p.g}, ${p.n}`).join('\n');
+  drawCounts();
+  $('mSet').classList.add('on');
+}
+function drawCounts() {
+  const gs = C.groups;
+  if (!gs.length) { $('cCounts').innerHTML = '<span class="help">명단을 먼저 적용하세요</span>'; $('cCountsInfo').textContent = ''; return; }
+  $('cCounts').innerHTML = `<table><tr><th></th>${gs.map((g) => `<th>${esc(g)}그룹</th>`).join('')}<th>합계 · 예상 시간</th></tr>` +
+    C.rounds.map((r, i) => `<tr><td><input id="rn${i}" value="${esc(r.name)}" style="width:150px;text-align:left" ${r.state !== 'ready' ? 'disabled' : ''}></td>${gs.map((g) => `<td><input type="number" min="0" id="rc${i}_${esc(g)}" value="${r.counts[g] || 0}" ${r.state !== 'ready' ? 'disabled' : ''}></td>`).join('')}<td id="rt${i}"></td></tr>`).join('') + '</table>';
+  $('cCounts').querySelectorAll('input').forEach((x) => (x.oninput = countInfo)); countInfo();
+}
+function countInfo() {
+  const gs = C.groups, tot = {}; R.tickets.forEach((t) => { const g = R.people[t[1]][0]; tot[g] = (tot[g] || 0) + 1; });
+  const left = Object.assign({}, tot), iv = +$('cInt').value || L.interval, lines = [];
+  C.rounds.forEach((r, i) => {
+    let s = 0; for (const g of gs) { const n = +($('rc' + i + '_' + g) || {}).value || 0; s += n; left[g] -= n; }
+    $('rt' + i).textContent = `${s}장 · 약 ${Math.ceil(s * iv / 60)}분`;
+  });
+  for (const g of gs) lines.push(`${g}그룹: 전체 ${tot[g]}장 → 최종 추첨에 남는 응모권 <b class="${left[g] > 0 ? 'ok' : 'warn'}">${left[g]}장</b>`);
+  $('cCountsInfo').innerHTML = lines.join(' &nbsp;·&nbsp; ');
+}
+$('cInt').oninput = () => C && countInfo();
+$('cSample').onclick = () => {
+  const teamsA = ['경영지원팀', '영업1팀', '영업2팀', '연구소'], teamsB = ['생산1팀', '생산2팀', '품질팀', '물류팀'], fam = '김이박최정강조윤장임한오서신권황안송류홍', giv = ['민준', '서연', '도윤', '지우', '하준', '서윤', '은우', '지민', '시우', '수아', '현우', '예린'];
+  const rows = ['그룹,팀,이름,매수'];
+  for (let i = 0; i < 300; i++) { const A = i < 160, tm = (A ? teamsA : teamsB)[i % 4]; rows.push(`${A ? 'A' : 'B'},${tm},${fam[i % fam.length]}${giv[(i * 7) % giv.length]}${i + 1},${1 + (i * 13) % 4}`); }
+  $('cRoster').value = rows.join('\n');
+};
+$('cRosterApply').onclick = async () => {
+  const j = await api('roster', { text: $('cRoster').value });
+  if (j) { $('cRosterInfo').innerHTML = `<span class="ok">적용됨: ${j.people}명 · 응모권 ${j.tickets}장</span>`; setTimeout(async () => { const c = await (await fetch(BASE + '/api/config', { cache: 'no-store' })).json(); C = c; $('cRoster').value = c.rosterText; drawCounts(); }, 900); }
+};
+$('cSave').onclick = async () => {
+  const prizes = $('cPrizes').value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const c = l.split(/[,\t]/).map((x) => x.trim()); const g = /^(전체|모두|\*|all)$/i.test(c[1] || '') || !c[1] ? '*' : c[1]; return { name: c[0], g, n: parseInt(c[2], 10) || 1 }; });
+  const body = { title: $('cTitle').value, spin: +$('cSpin').value, interval: +$('cInt').value, finalSpin: +$('cFSpin').value, onePrize: $('cOne').checked,
+    rounds: C.rounds.map((r, i) => { const counts = {}; for (const g of C.groups) counts[g] = +(($('rc' + i + '_' + g) || {}).value || 0); return { name: ($('rn' + i) || {}).value, counts }; }) };
+  if (!L.prizes.some((p) => p.wins.length)) body.prizes = prizes;
+  if (await api('config', body)) { toast('저장했습니다'); $('mSet').classList.remove('on'); }
+};
+$('cReset').onclick = () => confirm('탈락·당첨 결과를 모두 지우고 처음 상태로 돌릴까요? (명단·설정은 그대로)') && confirm('정말 지울까요? 되돌릴 수 없습니다.') && api('reset');
+$('cCsv').href = BASE + '/api/result.csv';
+
+setSound(soundOn);
+if (!soundOn) $('bSound').textContent = '🔇';
+poll(true);
+</script>
+</body>
+</html>

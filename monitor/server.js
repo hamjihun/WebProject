@@ -4,7 +4,7 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.46.2';
+const VERSION = '1.47.0';
 const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -25,6 +25,10 @@ const SETTINGS_FILE = process.env.SETTINGS_FILE || path.join(__dirname, 'data', 
 const alerter = require('./alerts').create({ settingsFile: SETTINGS_FILE, log: console.log });
 const USERS_FILE = process.env.USERS_FILE || path.join(__dirname, 'data', 'users.json');            // 로그인 계정·권한
 const auth = require('./auth').create({ file: USERS_FILE, log: console.log });
+// 연말 경품 추첨 (/event) — 모니터링과 별개 폴더(monitor 옆의 event). 폴더가 없으면 그냥 건너뜀
+const EVENT_DIR = process.env.EVENT_DIR || path.join(__dirname, '..', 'event');
+let eventApp = null;
+try { if (fs.existsSync(path.join(EVENT_DIR, 'event.js'))) { eventApp = require(path.join(EVENT_DIR, 'event.js')); console.log('경품 추첨 화면: /event (' + EVENT_DIR + ')'); } } catch (e) { console.error('경품 추첨(event) 불러오기 실패:', e.message); }
 const SCHEDULE_FILE = process.env.SCHEDULE_FILE || path.join(__dirname, 'data', 'schedule.json');   // 일정 관리
 const sched = require('./schedule').create({ file: SCHEDULE_FILE, log: console.log });
 const MEMO_FILE = process.env.MEMO_FILE || path.join(__dirname, 'data', 'memo.json');             // 메모 보드 (사람별)
@@ -562,6 +566,12 @@ async function handle(req, res) {
   const AGENT_PATHS = url.pathname === '/api/metrics' || url.pathname === '/api/unregister' || url.pathname === '/api/agent/setup' || url.pathname === '/api/agent/event';
   const me = AGENT_PATHS ? null : auth.fromCookie(req.headers.cookie);
 
+  // 경품 추첨: 보기는 누구나(로그인 없이), 진행 버튼은 관리자 로그인일 때만 (event/event.js 가 판단)
+  if (url.pathname === '/event' || url.pathname.startsWith('/event/')) {
+    if (!eventApp) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('경품 추첨 폴더(event)가 없습니다. monitor 폴더 옆에 event 폴더를 두고 수집기를 다시 시작하세요.'); }
+    return eventApp.handle(req, res, url, { user: me, readBody, log: console.log });
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/login') {
     try {
       const raw = JSON.parse((await readBody(req)) || '{}');
@@ -1091,7 +1101,7 @@ setInterval(() => {
 const runDevices = () => devices.checkAll().then(() => { try { alerter.evaluateDevices(devices.list()); } catch (e) { console.error('장비 알림 판단 오류:', e.message); } }).catch(() => {});
 setTimeout(runDevices, 3000).unref();
 setInterval(runDevices, 30000).unref();
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { saveState(true); saveHourly(true); process.exit(0); });
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, () => { saveState(true); saveHourly(true); try { if (eventApp) eventApp.flush(); } catch (_) {} process.exit(0); });
 
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') { console.error(`포트 ${PORT} 가 이미 사용 중입니다. 예전 수집기가 아직 실행 중일 수 있습니다. (설치 스크립트를 다시 실행하거나 node.exe 를 종료하세요)`); process.exit(2); }
