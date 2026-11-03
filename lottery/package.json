@@ -1,0 +1,8 @@
+{
+  "name": "yearend-lottery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "사내 연말 경품 추첨 (TV 송출 + 실시간 동시 접속)",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

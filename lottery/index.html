@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>연말 경품 추첨</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#070b1f;--line:rgba(255,255,255,.12);--panel:rgba(12,18,48,.72);--gold:#ffd166;--red:#ff4d6d;--text:#f4f6ff;--dim:#9aa3c7}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;color:var(--text);font-family:'Noto Sans KR',system-ui,'Malgun Gothic',sans-serif}
+body{background:radial-gradient(ellipse at 50% -10%,#24306e 0%,#0b1130 45%,#050816 100%);background-color:var(--bg)}
+button,select,input,textarea{font:inherit;color:inherit}
+#snow,#fx{position:fixed;inset:0;pointer-events:none;width:100vw;height:100vh}
+#snow{z-index:0}#fx{z-index:1000}
+#app{position:relative;z-index:1;height:100vh;display:grid;grid-template-rows:auto 1fr}
+.bigfont{font-family:'Black Han Sans','Noto Sans KR',sans-serif;font-weight:400}
+
+/* header */
+header{display:flex;align-items:center;gap:1.1vw;padding:.9vh 1.2vw;background:rgba(0,0,0,.38);border-bottom:1px solid var(--line)}
+.brand{font-size:1.7vw;color:var(--gold);white-space:nowrap;text-shadow:0 0 1.2vw rgba(255,209,102,.55)}
+.tabs{display:flex;gap:.4vw}
+.tab{white-space:nowrap;font-size:1.05vw;font-weight:900;padding:.45em 1em;border-radius:.6em;border:1px solid var(--line);background:rgba(255,255,255,.06);cursor:pointer}
+.tab.active{background:var(--gold);color:#2b1d00;border-color:var(--gold)}
+.tab:disabled{cursor:not-allowed}.tab:disabled:not(.active){opacity:.35}
+.phase{font-size:1.1vw;font-weight:900;padding:.35em .9em;border-radius:99px;background:rgba(255,77,109,.18);border:1px solid rgba(255,77,109,.6);color:#ffb3c1;white-space:nowrap}
+.phase.final{background:rgba(255,209,102,.16);border-color:var(--gold);color:var(--gold)}
+.stats{display:flex;gap:1.4vw;margin-left:auto}
+.stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05}
+.stat small{font-size:.72vw;color:var(--dim);white-space:nowrap}
+.stat b{white-space:nowrap;font-size:1.75vw;font-variant-numeric:tabular-nums}
+.stat b.g{color:var(--gold)}
+.stat span{font-size:.8vw;color:var(--dim)}
+.controls{display:flex;gap:.4vw;align-items:center}
+.btn{font-size:.95vw;padding:.5em .8em;border-radius:.6em;border:1px solid var(--line);background:rgba(255,255,255,.08);cursor:pointer;white-space:nowrap}
+.btn:hover{background:rgba(255,255,255,.16)}
+select.btn{appearance:none;padding-right:.8em}
+select.btn option{color:#000}
+#mainBtn{font-size:1.25vw;font-weight:900;padding:.55em 1.2em;border:none;background:linear-gradient(180deg,#ff6b81,#e63950);box-shadow:0 0 1.4vw rgba(255,77,109,.55);min-width:15vw}
+#mainBtn.gold{background:linear-gradient(180deg,#ffe08a,#ffb703);color:#3a2500;box-shadow:0 0 1.4vw rgba(255,209,102,.6)}
+#mainBtn.pause{background:linear-gradient(180deg,#5b6bb5,#36428a);box-shadow:none}
+#mainBtn:disabled{opacity:.55;cursor:default}
+
+/* layout */
+main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:1vw;backdrop-filter:blur(4px)}
+#left{display:grid;grid-template-rows:auto 1fr;gap:1vw;min-height:0}
+#stage{padding:1.4vh 1.2vw 1.6vh}
+.stage-label{font-size:1.15vw;font-weight:900;color:var(--gold);text-align:center;letter-spacing:.05em}
+.reel{position:relative;margin:1.2vh 0 1vh;padding:2.6vh .6vw 2.2vh;border-radius:1vw;text-align:center;overflow:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.02));border:2px solid rgba(255,209,102,.35);box-shadow:inset 0 0 3vw rgba(0,0,0,.55)}
+.reel::before,.reel::after{content:"";position:absolute;left:0;right:0;height:28%;pointer-events:none}
+.reel::before{top:0;background:linear-gradient(rgba(5,8,22,.55),transparent)}
+.reel::after{bottom:0;background:linear-gradient(transparent,rgba(5,8,22,.55))}
+.rname{font-size:5.4vw;line-height:1.12;letter-spacing:.04em;white-space:nowrap}
+.rdept{font-size:1.45vw;color:var(--dim);margin-top:.6vh;font-weight:700;min-height:1.3em}
+.reel.spinning{border-color:#fff;box-shadow:inset 0 0 3vw rgba(0,0,0,.55),0 0 2vw rgba(255,255,255,.25)}
+.reel.spinning .rname{animation:flick .09s linear infinite}
+@keyframes flick{0%{transform:translateY(-12%);opacity:.6}100%{transform:translateY(8%);opacity:1}}
+.reel.landed{border-color:var(--red);animation:shake .45s,glowRed 1.6s}
+.reel.landed .rname{color:var(--red);text-shadow:0 0 2vw rgba(255,77,109,.6)}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-1.2%)}40%{transform:translateX(1.2%)}60%{transform:translateX(-.7%)}80%{transform:translateX(.7%)}}
+@keyframes glowRed{0%{box-shadow:0 0 4vw rgba(255,77,109,.9)}100%{box-shadow:0 0 0 rgba(255,77,109,0)}}
+.stamp{position:absolute;right:1vw;top:1.2vh;font-size:2.3vw;color:var(--red);border:.28vw solid var(--red);border-radius:.6vw;padding:0 .6vw;transform:rotate(-14deg) scale(3);opacity:0;z-index:2}
+.reel.stamped .stamp{animation:stamp .4s cubic-bezier(.2,1.6,.4,1) forwards}
+@keyframes stamp{to{opacity:.95;transform:rotate(-14deg) scale(1)}}
+.rsub{text-align:center;font-size:1.25vw;min-height:1.6em}
+.rsub b{color:var(--gold);font-size:1.15em}
+.rsub .red{color:var(--red)}
+.prog{height:1vh;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:1.2vh}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff4d6d,#ffd166);transition:width .6s}
+.ptext{display:flex;justify-content:space-between;font-size:1vw;color:var(--dim);margin-top:.6vh;font-variant-numeric:tabular-nums}
+.ptext b{color:var(--text)}
+
+#logWrap{display:flex;flex-direction:column;min-height:0;padding:1.2vh 1vw;overflow:hidden}
+.log-title{font-size:1.15vw;font-weight:900;color:var(--gold);margin-bottom:.8vh;display:flex;justify-content:space-between}
+.log-title span{color:var(--dim);font-weight:400}
+#log{list-style:none;margin:0;padding:0;overflow:hidden;flex:1;min-height:0}
+#log li{display:grid;grid-template-columns:3.2em 5.6em 1fr auto;gap:.5em;align-items:center;padding:.35em .6em;border-radius:.5em;font-size:1.12vw;border-bottom:1px solid rgba(255,255,255,.05)}
+#log li .no{color:var(--dim);font-variant-numeric:tabular-nums}
+#log li .nm{font-weight:900}
+#log li .dp{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#log li .rd{font-size:.8em;color:#ffb3c1}
+#log li.new{animation:slideIn .6s}
+#log li.win{grid-template-columns:auto 1fr auto;background:linear-gradient(90deg,rgba(255,209,102,.22),rgba(255,209,102,.04));margin-bottom:.4em;font-size:1.3vw}
+#log li.win .pz{color:var(--gold);font-weight:900}
+@keyframes slideIn{0%{transform:translateX(-30%);opacity:0;background:var(--red)}40%{transform:none;opacity:1;background:rgba(255,77,109,.7)}100%{background:transparent}}
+
+/* board */
+#boardWrap{padding:.8vw;min-height:0;min-width:0;overflow:hidden}
+#board{height:100%;column-width:11.5em;column-gap:.6em;column-fill:auto;font-size:18px}
+.dept{break-inside:avoid;margin-bottom:.5em;padding:.3em .4em .35em;border-radius:.5em;background:rgba(255,255,255,.045);border-left:.26em solid var(--c);transition:background .4s}
+.dept.flash{animation:dflash 1.6s}
+@keyframes dflash{0%{background:rgba(255,77,109,.45)}100%{background:rgba(255,255,255,.045)}}
+.dept.wiped{opacity:.45}
+.dh{display:flex;justify-content:space-between;align-items:baseline;gap:.4em;font-weight:900;font-size:.9em;line-height:1.2}
+.dh em{font-style:normal;font-weight:400;font-size:.75em;color:var(--c);margin-left:.35em}
+.dc{font-size:.78em;color:var(--dim);font-weight:400;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dc b{color:var(--gold);font-weight:900}
+.bar{height:.16em;margin:.2em 0 .25em;border-radius:9px;background:rgba(255,255,255,.08);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--c);transition:width .8s}
+.chips{display:flex;flex-wrap:wrap;gap:.18em}
+.chip{position:relative;display:inline-flex;align-items:center;gap:.28em;padding:.08em .32em;border-radius:.35em;background:rgba(255,255,255,.08);font-size:.8em;line-height:1.4;white-space:nowrap;transition:opacity .8s}
+.pips{display:inline-flex;gap:.12em}
+.pips i{width:.42em;height:.42em;border-radius:50%;background:var(--gold);box-shadow:0 0 .3em rgba(255,209,102,.75);transition:background .5s}
+.pips i.x{background:#4a4f6e;box-shadow:none}
+.pips i.v{background:#4a4f6e;box-shadow:none}
+.pips i.w{background:#fff;box-shadow:0 0 .5em #fff}
+.chip.dead{opacity:.3}
+.chip.dead .nm{text-decoration:line-through;text-decoration-thickness:.12em;text-decoration-color:var(--red)}
+.chip.winner{background:linear-gradient(90deg,#ffe08a,#ffb703);color:#3a2500;opacity:1;box-shadow:0 0 .8em rgba(255,209,102,.8)}
+.chip.winner::before{content:"🏆";margin-right:-.1em}
+.chip.hit{animation:hit 2.6s;z-index:5}
+@keyframes hit{0%{background:var(--red);transform:scale(1.6);box-shadow:0 0 1.2em var(--red);opacity:1}25%{transform:scale(1.35);background:var(--red);opacity:1}100%{transform:none}}
+.chip.whit{animation:whit 3s;z-index:5}
+@keyframes whit{0%{transform:scale(2);box-shadow:0 0 2em #fff}100%{transform:none}}
+
+/* overlays */
+.ov{position:fixed;inset:0;z-index:900;display:none;align-items:center;justify-content:center;text-align:center;background:rgba(3,5,18,.86);backdrop-filter:blur(6px);cursor:pointer}
+.ov.show{display:flex}
+.ov h1{margin:0;font-size:6.5vw;color:var(--gold);text-shadow:0 0 3vw rgba(255,209,102,.5);animation:pop .6s cubic-bezier(.2,1.5,.4,1)}
+.ov p{font-size:2.3vw;margin:2vh 0 0;line-height:1.5}
+.ov p b{color:var(--gold)}
+.ov p small{font-size:.7em;color:var(--dim)}
+.ov .num{font-size:22vw;line-height:1;color:#fff;text-shadow:0 0 4vw rgba(255,77,109,.9)}
+.ov .num.go{animation:pop .9s ease-out}
+.hint{margin-top:4vh;font-size:1.1vw;color:var(--dim)}
+@keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+.final{background:radial-gradient(ellipse at 50% 40%,rgba(40,30,90,.92),rgba(2,3,12,.97) 70%);overflow:hidden}
+.spot{position:absolute;left:50%;top:45%;width:220vmax;height:220vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,rgba(255,209,102,.07) 0 8deg,transparent 8deg 16deg);animation:rot 40s linear infinite;opacity:.5}
+.final.won .spot{opacity:1;background:repeating-conic-gradient(from 0deg,rgba(255,209,102,.16) 0 8deg,transparent 8deg 16deg);animation-duration:14s}
+@keyframes rot{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.f-in{position:relative}
+.f-rank{font-size:1.6vw;color:var(--dim);letter-spacing:.2em}
+.f-prize{font-size:5.5vw;color:var(--gold);margin:.5vh 0 3vh;text-shadow:0 0 2vw rgba(255,209,102,.6)}
+.f-reel{min-width:56vw;padding:3vh 3vw;border-radius:2vw;border:.3vw solid rgba(255,255,255,.3);background:rgba(0,0,0,.35)}
+.f-reel #fName{font-size:11vw;line-height:1.1;white-space:nowrap}
+.f-reel #fDept{font-size:2.4vw;color:var(--dim);margin-top:1vh;min-height:1.3em}
+.f-reel.spinning #fName{animation:flick .1s linear infinite}
+.final.won .f-reel{border-color:var(--gold);box-shadow:0 0 5vw rgba(255,209,102,.7);animation:pop .7s cubic-bezier(.2,1.5,.4,1)}
+.final.won #fName{color:var(--gold);text-shadow:0 0 3vw rgba(255,209,102,.8)}
+.final.won #fDept{color:#fff}
+.f-msg{font-size:3.6vw;margin-top:3vh;min-height:1.4em}
+.f-msg small{display:block;font-size:.4em;color:var(--dim);margin-top:.6vh}
+.final:not(.won) .hint{visibility:hidden}
+.final:not(.won) .f-msg{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.35}}
+
+/* settings */
+.modal{position:fixed;inset:0;z-index:950;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7)}
+.modal.show{display:flex}
+.modal-in{width:min(1200px,94vw);max-height:92vh;overflow:auto;background:#121a3f;border:1px solid var(--line);border-radius:14px;padding:22px 26px;font-size:15px}
+.modal-in h2{margin:0 0 6px;color:var(--gold)}
+.modal-in .help{color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.gbox{border:1px solid var(--line);border-radius:10px;padding:14px;background:rgba(255,255,255,.03)}
+.gbox h3{margin:0 0 10px;font-size:17px}
+.gbox label{display:block;font-size:13px;color:var(--dim);margin:8px 0 4px}
+.gbox input,.gbox textarea{width:100%;background:#0a1030;border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:14px}
+.gbox textarea{resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.row3{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ginfo{font-size:13px;color:var(--gold);margin-top:6px}
+.mbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;align-items:center}
+.mbtns .btn{font-size:14px}
+.mbtns .sp{flex:1}
+.btn.danger{border-color:rgba(255,77,109,.6);color:#ffb3c1}
+.btn.ok{background:var(--gold);color:#2b1d00;font-weight:900;border-color:var(--gold)}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px}
+.phase.live{background:rgba(255,0,60,.25);border-color:#ff3355;color:#fff;animation:blink 1.6s infinite}
+.viewers{font-size:.9vw;color:var(--dim);white-space:nowrap}
+.reg{margin-top:1.4vh;text-align:center;font-size:1vw;color:var(--dim)}
+.reg .btn{font-size:1vw;margin-top:.6vh}
+body.viewer .host-only{display:none!important}
+.upl{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.upl .btn{font-size:13px}
+.drop{border:2px dashed rgba(255,209,102,.5);border-radius:10px;padding:14px;text-align:center;color:var(--dim);margin-bottom:14px}
+.drop.over{background:rgba(255,209,102,.1)}
+.drop b{color:var(--gold)}
+</style>
+</head>
+<body>
+<canvas id="snow"></canvas>
+<div id="app">
+  <header>
+    <div class="brand bigfont">🎁 연말 경품 추첨</div>
+    <div class="tabs"><button class="tab" data-g="A">A그룹</button><button class="tab" data-g="B">B그룹</button></div>
+    <div class="phase" id="phaseLabel"></div><div class="phase live" id="liveBadge" hidden>● LIVE</div><div class="viewers host-only" id="viewers"></div>
+    <div class="stats" id="stats"></div>
+    <div class="controls">
+      <select class="btn host-only" id="speed" title="응모권 1매당 발표 간격"></select>
+      <button class="btn host-only" id="mainBtn"></button>
+      <button class="btn" id="soundBtn" title="소리">🔊</button>
+      <button class="btn" id="fsBtn" title="전체화면 (F)">⛶</button>
+      <button class="btn host-only" id="setBtn" title="설정">⚙</button>
+    </div>
+  </header>
+  <main>
+    <section id="left">
+      <div id="stage" class="panel">
+        <div id="stageLabel" class="stage-label"></div>
+        <div id="reel" class="reel"><div class="stamp bigfont">탈락</div><div id="reelName" class="rname bigfont"></div><div id="reelDept" class="rdept"></div></div>
+        <div id="reelSub" class="rsub"></div>
+        <div class="prog"><i id="progBar"></i></div>
+        <div id="progText" class="ptext"></div>
+        <div id="regBox" class="reg host-only"></div>
+      </div>
+      <div id="logWrap" class="panel">
+        <div class="log-title"><div id="logTitle">최근 탈락</div><span id="logCount"></span></div>
+        <ol id="log"></ol>
+      </div>
+    </section>
+    <section id="boardWrap" class="panel"><div id="board"></div></section>
+  </main>
+</div>
+
+<div id="ov" class="ov"><div><h1 id="ovTitle" class="bigfont"></h1><div id="ovNum" class="num bigfont"></div><p id="ovSub"></p><div class="hint" id="ovHint">스페이스바 또는 클릭하여 계속</div></div></div>
+
+<div id="finalOv" class="ov final"><div class="spot"></div><div class="f-in">
+  <div id="fRank" class="f-rank"></div>
+  <div id="fPrize" class="f-prize bigfont"></div>
+  <div id="fReel" class="f-reel"><div id="fName" class="bigfont">?</div><div id="fDept"></div></div>
+  <div id="fMsg" class="f-msg bigfont"></div>
+  <div class="hint" id="fHint">스페이스바 또는 클릭하여 닫기</div>
+</div></div>
+
+<div id="setModal" class="modal"><div class="modal-in" id="setBody"></div></div>
+<canvas id="fx"></canvas>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script>
+(()=>{
+'use strict';
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const LS='yearend-lottery-v1';
+const KEYS=['A','B'];
+const DEF={
+  A:{title:'A그룹 · 일산전자 + ISEMM',r1:100,r2:80,prizes:'5등 경품\n4등 경품\n3등 경품\n2등 경품\n1등 경품',data:`일산전자,경영총괄,하재기,4
+일산전자,경영총괄,박영일,1
+일산전자,경영총괄,하지현,4
+일산전자,개발담당,이대귀,4
+일산전자,영업담당,강성영,4
+일산전자,경영기획담당,이동협,4
+일산전자,경영기획팀,정송조,1
+일산전자,경영기획팀,이소정,4
+일산전자,경영기획팀,김슬일,4
+일산전자,경영기획팀,이주원,4
+일산전자,경영기획팀,김승범,4
+일산전자,경영기획팀,이재열,4
+일산전자,경영기획팀,정경순,4
+일산전자,경영기획팀,전주아,4
+일산전자,경영기획팀,전동일,4
+일산전자,구매팀,박준홍,4
+일산전자,구매팀,허지범,4
+일산전자,구매팀,강한별,4
+일산전자,구매팀,박준현,4
+일산전자,구매팀,장수원,4
+일산전자,자재팀,김태영,4
+일산전자,자재팀,김정주,4
+일산전자,자재팀,전영우,4
+일산전자,자재팀,조형제,4
+일산전자,자재팀,김성민,4
+일산전자,QA팀,박민상,4
+일산전자,QA팀,피승훈,4
+일산전자,QA팀,이지은,4
+일산전자,QA팀,이종수,4
+일산전자,QA팀,강민재,4
+일산전자,QA팀,이태영,4
+일산전자,생산팀,우권택,4
+일산전자,생산팀,최성필,4
+일산전자,생산팀,장유리,4
+일산전자,생산팀,김진광,4
+일산전자,생산팀,정대근,4
+일산전자,SMT,한채우,4
+일산전자,SMT,송영환,4
+일산전자,SMT,장수환,4
+일산전자,영업팀,백승호,4
+일산전자,영업팀,한유빈,4
+일산전자,영업팀,김도영,4
+일산전자,영업팀,손만욱,4
+일산전자,영업팀,김태욱,4
+일산전자,개발팀,김건,4
+일산전자,개발팀,서영진,4
+일산전자,개발팀,이현모,4
+일산전자,개발팀,한보윤,4
+일산전자,개발팀,윤성호,4
+일산전자,개발팀,노경호,4
+일산전자,개발팀,전태경,4
+일산전자,개발팀,변수민,4
+일산전자,개발팀,정현욱,4
+일산전자,개발팀,이원진,4
+일산전자,MAIN,임선자,4
+일산전자,MAIN,김동욱,4
+일산전자,MAIN,김미연,4
+일산전자,MAIN,강수경,4
+일산전자,MAIN,김다숙,4
+일산전자,MAIN,윤종남,4
+일산전자,MAIN,이오남,1
+일산전자,MAIN,유수미,4
+일산전자,MAIN,권정희,4
+일산전자,MAIN,이금애,4
+일산전자,MAIN,윤재문,1
+일산전자,MAIN,양진관,1
+일산전자,MAIN,박순애,1
+일산전자,MAIN,유옥순,4
+일산전자,MAIN,김미영M,4
+일산전자,MAIN,이화섭,1
+일산전자,MAIN,윤지인,1
+일산전자,MAIN,김현숙,4
+일산전자,MAIN,제은경,1
+일산전자,MAIN,이영주,4
+일산전자,MAIN,장은자,4
+일산전자,MAIN,조현아,1
+일산전자,MAIN,최지은,4
+일산전자,MAIN,송성민,4
+일산전자,MAIN,김인영,1
+일산전자,MAIN,최혜경,4
+일산전자,MAIN,임경복,1
+일산전자,MAIN,임성숙,4
+일산전자,MAIN,손재분,1
+일산전자,MAIN,김태경,1
+일산전자,MAIN,백은찬,4
+일산전자,MAIN,이영지,4
+일산전자,MAIN,김지민,4
+일산전자,EMS,표순옥,4
+일산전자,EMS,곽숙미,4
+일산전자,EMS,김미영E,4
+일산전자,EMS,김경희,4
+일산전자,EMS,손일순,1
+일산전자,EMS,최명숙,4
+일산전자,EMS,강경미,4
+일산전자,EMS,정지우,1
+일산전자,EMS,박연주,4
+일산전자,EMS,이세비가,4
+일산전자,EMS,오은화,4
+일산전자,EMS,강동훈,4
+일산전자,DP,유영미,4
+일산전자,DP,정귀순,4
+일산전자,DP,박외숙,4
+일산전자,DP,오금정,4
+일산전자,DP,하문옥,4
+일산전자,DP,이채린,4
+일산전자,DP,남상희,4
+일산전자,DP,이혜정,4
+일산전자,DP,백순화,4
+일산전자,MICOM,김성희,4
+일산전자,MICOM,이향숙,3
+일산전자,MICOM,최현숙,4
+일산전자,MICOM,강희연,4
+일산전자,SMD,박기성,4
+일산전자,SMD,전민석,4
+일산전자,SMD,이승형,4
+일산전자,SMD,양승수,1
+일산전자,SMD,조준호,1
+일산전자,SMD,김승우,1
+일산전자,SMD,권민지,1
+일산전자,SMD,임정호,1
+일산전자,SMD,장지원,4
+일산전자,SMD,문정빈,4
+일산전자,SMD,류진우,4
+일산전자,SMD,박기태,4
+일산전자,SMD,이춘옥,4
+일산전자,SMD,김소영,1
+일산전자,SMD,하정빈,4
+일산전자,SMD,강성진,4
+일산전자,SMD,오유근,4
+일산전자,IMD,이원호,4
+일산전자,IMD,김지훈,1
+일산전자,IMD,고민혁,1
+일산전자,QA(직접),이정애,4
+일산전자,QA(직접),김영숙,4
+일산전자,QA(직접),배은희,4
+일산전자,QA(직접),박임숙,4
+일산전자,QA(직접),한향란,4
+일산전자,QA(직접),고선덕,4
+일산전자,QA(직접),이동숙,4
+일산전자,QA(직접),최영옥,4
+일산전자,QA(직접),오영옥,4
+일산전자,QA(직접),최성미,4
+일산전자,QA(직접),소윤희,4
+일산전자,QA(직접),탁수미,4
+일산전자,QA(직접),윤아영,1
+일산전자,QA(직접),김정미,1
+일산전자,QA(직접),정민기,1
+일산전자,QA(직접),류경범,1
+일산전자,QA(직접),박숙혜,4
+일산전자,QA(직접),김송자,4
+일산전자,QA(직접),강이은,4
+일산전자,QA(직접),안미란,4
+일산전자,QA(직접),권문경,4
+일산전자,QA(직접),박규영,4
+일산전자,QA(직접),이현정,4
+일산전자,영업(직접),최석진,4
+일산전자,영업(직접),정동식,4
+일산전자,영업(직접),정규재,4
+일산전자,자재(직접),정혜순,4
+일산전자,자재(직접),이금자,4
+일산전자,자재(직접),성유리,4
+일산전자,자재(직접),조준희,4
+일산전자,자재(직접),박세한,4
+일산전자,자재(직접),오용현,4
+일산전자,자재(직접),김선민,4
+일산전자,자재(직접),김민재,4
+ISEMM,ISEMM,장호근,4
+ISEMM,ISEMM,백승민,4
+ISEMM,ISEMM,김동주,4
+ISEMM,ISEMM,김병찬,4
+ISEMM,ISEMM,이병섭,4
+ISEMM,ISEMM,손인호,4
+ISEMM,ISEMM,니콜라스,4`},
+  B:{title:'B그룹 · 일산 + 우리전자 + 네오스텍',r1:70,r2:50,prizes:'5등 경품\n4등 경품\n3등 경품\n2등 경품\n1등 경품',data:`일산,가공실,정미옥,4
+일산,가공실,이무수,4
+일산,가공실,이덕성,4
+일산,가공실,안성곤,4
+일산,가공실,박미선,4
+일산,가공실,태애숙,4
+일산,가공실,김복민,4
+일산,가공실,박영임,4
+일산,기술연구소,황봉수,1
+일산,기술연구소,강상국,4
+일산,기술연구소,민병삼,4
+일산,기술연구소,최수현,1
+일산,기술연구소,김상진,4
+일산,기술연구소,지정환,4
+일산,기술연구소,오성문,4
+일산,기술연구소,김수민,1
+일산,우주기업,송필남,4
+일산,그린푸드,강말이,3
+일산,생산(Insul),김대현,4
+일산,라벨실,구성일,4
+일산,라벨실,성종경,4
+일산,라벨실,이현민,1
+일산,생산팀,서덕윤,4
+일산,생산팀,박효홍,4
+일산,생산팀,안준우,4
+일산,영업팀,황상복,4
+일산,영업팀,이호석,4
+일산,영업팀,한성민,4
+일산,영업팀,고인준,4
+일산,영업팀,이정수,4
+일산,영업팀,신화석,4
+일산,영업팀,이정은,4
+일산,영업팀,박인철,4
+일산,유전체(간접),백성순,4
+일산,유전체(간접),김정재,4
+일산,유전체(간접),최명옥,4
+일산,유전체(간접),남궁선,4
+일산,유전체(간접),서하나,4
+일산,유전체(간접),백희수,4
+일산,유전체(간접),김성애,4
+일산,유전체(간접),강민지,4
+일산,유전체(간접),이은진,4
+일산,자재팀,조성윤,4
+일산,자재팀,최지엉,4
+일산,자재팀,편상필,4
+일산,지원팀,함지훈,4
+일산,지원팀,박지영,4
+일산,지원팀,신영기,4
+일산,지원팀,김태형,4
+일산,지원팀,이종백,4
+일산,지원팀,양기호,4
+일산,지원팀,박기태,4
+일산,탈취필터,정성윤,4
+일산,탈취필터,이선혜,4
+일산,품질팀(간접),임찬형,4
+일산,품질팀(간접),안진우,4
+일산,품질팀(직접),이혜정,4
+우리전자,총괄,남기현,4
+우리전자,자재팀,이상엽,4
+우리전자,관리팀,변윤진,4
+우리전자,품질팀,오경훈,4
+우리전자,생산팀,박종희,4
+우리전자,생산팀,황은정,4
+우리전자,생산팀,김선정,1
+우리전자,생산팀,백필순,4
+우리전자,생산팀,이영주,4
+우리전자,생산팀,이양자,2
+우리전자,생산팀,이희정,4
+우리전자,생산팀,박지인,4
+우리전자,생산팀,오보영,4
+우리전자,생산팀,성우용,4
+우리전자,생산팀,정경숙,4
+우리전자,생산팀,조행란,1
+우리전자,생산팀,조경화,3
+우리전자,생산팀,박미숙,4
+우리전자,생산팀,우정숙,4
+우리전자,생산팀,김재선,1
+우리전자,생산팀,조혜원,4
+우리전자,생산팀,김경희,4
+우리전자,생산팀,김매자,4
+우리전자,생산팀,이나경,4
+우리전자,생산팀,서윤인,4
+우리전자,생산팀,김소영,4
+우리전자,생산팀,임하정,1
+우리전자,생산팀,신영휘,1
+우리전자,생산팀,김미화,4
+우리전자,생산팀,조영아,4
+우리전자,생산팀,김진영,1
+우리전자,생산팀,황선례,1
+우리전자,생산팀,손시현,4
+우리전자,생산팀,김지영,1
+우리전자,생산팀,박숙정,1
+우리전자,생산팀,박현정,4
+우리전자,생산팀,김정택,1
+우리전자,생산팀,곽민서,1
+우리전자,생산팀,김민선,4
+우리전자,영업팀,이현걸,4
+우리전자,물류팀,전성엉,4
+우리전자,물류팀,정태봉,4
+우리전자,물류팀,우승범,4
+우리전자,물류팀,김동수,1
+우리전자,생산팀,차선규,4
+우리전자,경영총괄,이정희,1
+네오스텍,네오스텍,이재경,1
+네오스텍,네오스텍,주영민,4
+네오스텍,네오스텍,박희정,4
+네오스텍,네오스텍,배정범,4
+네오스텍,네오스텍,김지민,4
+네오스텍,네오스텍,조성구,4
+네오스텍,네오스텍,이종봉,4
+네오스텍,네오스텍,김정태,4
+네오스텍,네오스텍,김인철,4
+네오스텍,네오스텍,유종택,4
+네오스텍,네오스텍,최성식,4
+네오스텍,네오스텍,박상준,4
+네오스텍,네오스텍,코아,4
+네오스텍,네오스텍,정희곤,4
+네오스텍,네오스텍,진근호,4
+네오스텍,네오스텍,한대성,4
+네오스텍,네오스텍,푸옌,4`}
+};
+const SITE_COLORS=['#ffd166','#4cc9f0','#ff7eb6','#80ed99','#b8a1ff','#ff9f1c'];
+const PHASE_NAME={r1:'1차 탈락자 발표',r2:'2차 탈락자 발표',final:'최종 경품 추첨',done:'추첨 완료'};
+
+let S,M={};
+let running=false,busy=false,starting=false,loopAlive=false,closer=null;
+
+/* ---------- 실행 모드: local(파일 단독) / host(서버·진행자) / viewer(서버·관람) ---------- */
+const QS=new URLSearchParams(location.search);
+let MODE='local',HOSTKEY=QS.get('host')||'',viewerSound=false,OID=0,viewerWait=null;
+const closedOids=new Set();
+let emitChain=Promise.resolve();
+function emit(event,data){
+  if(MODE!=='host')return;
+  const body=JSON.stringify({event,data:data||{},state:S});
+  emitChain=emitChain.then(()=>fetch('api/emit',{method:'POST',headers:{'content-type':'application/json','x-host-key':HOSTKEY},body})).catch(()=>{});
+}
+const soundOn=()=>MODE==='viewer'?viewerSound:S.sound;
+
+/* ---------- state ---------- */
+function fresh(){return{v:1,cur:'A',speed:6,sound:true,onePrize:true,groups:JSON.parse(JSON.stringify(DEF)),prog:{}}}
+function load(){try{const j=localStorage.getItem(LS);if(j)S=JSON.parse(j)}catch(e){S=null}if(!S||S.v!==1||!S.groups||!S.groups.A||!S.groups.B)S=fresh();if(!S.prog)S.prog={}}
+function save(){if(MODE==='viewer')return;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+function rand(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function parseData(txt){
+  const out=[];
+  for(const raw of String(txt||'').split(/\r?\n/)){
+    const line=raw.trim();if(!line)continue;
+    let c=(line.includes('\t')?line.split('\t'):line.split(',')).map(s=>s.trim());
+    let site,dept,name,n;
+    if(c.length>=7&&/^\d+$/.test(c[0])){site=c[1];dept=c[2];name=c[3];n=parseInt(c[6],10)}   // 원본 엑셀 그대로 붙여넣기 (NO,근무처,부서,성명,기본,추가,전체,…)
+    else if(c.length>=4){site=c[0];dept=c[1];name=c[2];n=parseInt(c[3],10)}
+    else if(c.length===3){site='';dept=c[0];name=c[1];n=parseInt(c[2],10)}
+    else continue;
+    if(!name||!(n>0))continue;
+    out.push({site,dept:dept||'-',name,n:Math.min(n,20)});
+  }
+  return out;
+}
+function build(key){
+  const rows=parseData(S.groups[key].data);
+  const people=[],tickets=[],depts=[],dmap={},sites=[];
+  for(const r of rows){
+    const dk=r.site+'|'+r.dept;let d=dmap[dk];
+    if(!d){if(!sites.includes(r.site))sites.push(r.site);
+      d=dmap[dk]={idx:depts.length,site:r.site,dept:r.dept,people:[],tickets:[],color:SITE_COLORS[sites.indexOf(r.site)%SITE_COLORS.length]};depts.push(d)}
+    const p={id:people.length,name:r.name,site:r.site,d,tickets:[]};people.push(p);d.people.push(p);
+    for(let i=0;i<r.n;i++){const t={id:tickets.length,no:tickets.length+1,p};tickets.push(t);p.tickets.push(t);d.tickets.push(t)}
+  }
+  return{people,tickets,depts};
+}
+function ensureProg(key){
+  let P=S.prog[key];
+  if(!P||!Array.isArray(P.status)||P.status.length!==M[key].tickets.length){
+    P=S.prog[key]={phase:'r1',status:new Array(M[key].tickets.length).fill(0),log:[],winners:[]};
+  }
+  normalizePhase(key);
+}
+function normalizePhase(key){
+  const P=S.prog[key],g=S.groups[key];
+  const nPrize=prizeList(key).length,alive=P.status.filter(s=>s===0).length;
+  if(P.phase==='r2'&&+g.r2<=0)P.phase='final';
+  if(P.phase==='final'&&(P.winners.length>=nPrize||!alive))P.phase='done';
+  if(P.phase==='done'&&P.winners.length<nPrize&&alive)P.phase='final';
+}
+const m=()=>M[S.cur],P=()=>S.prog[S.cur],G=()=>S.groups[S.cur];
+function prizeList(key){return String(S.groups[key||S.cur].prizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean)}
+function aliveList(){const st=P().status,a=[];for(let i=0;i<st.length;i++)if(st[i]===0)a.push(i);return a}
+function aliveCount(p){const st=P().status;return p.tickets.filter(t=>st[t.id]===0).length}
+function alivePeople(){return m().people.filter(p=>aliveCount(p)>0).length}
+function target(){const ph=P().phase;return ph==='r1'?+G().r1:ph==='r2'?+G().r2:prizeList().length}
+function doneCount(){const p=P();if(p.phase==='final'||p.phase==='done')return p.winners.length;const r=p.phase==='r1'?1:2;return p.log.filter(e=>e.r===r).length}
+const fullDept=d=>d.site&&d.site!==d.dept?`${d.site} · ${d.dept}`:d.dept;
+const fmtTime=s=>{s=Math.max(0,Math.round(s));const mm=Math.floor(s/60),ss=s%60;return mm?`${mm}분 ${String(ss).padStart(2,'0')}초`:`${ss}초`};
+
+/* ---------- board ---------- */
+function renderBoard(){
+  let h='';
+  for(const d of m().depts){
+    h+=`<div class="dept" style="--c:${d.color}" id="d-${d.idx}"><div class="dh"><span>${esc(d.dept)}${d.site&&d.site!==d.dept?`<em>${esc(d.site)}</em>`:''}</span><span class="dc"></span></div><div class="bar"><i></i></div><div class="chips">`;
+    for(const p of d.people)h+=`<span class="chip" id="p-${p.id}"><span class="nm">${esc(p.name)}</span><span class="pips">${p.tickets.map(t=>`<i id="t-${t.id}"></i>`).join('')}</span></span>`;
+    h+='</div></div>';
+  }
+  $('#board').innerHTML=h;
+  m().people.forEach(updChip);m().depts.forEach(updDept);
+  fitBoard();
+}
+function updChip(p){
+  const st=P().status,el=document.getElementById('p-'+p.id);if(!el)return;
+  let alive=0,won=false;
+  for(const t of p.tickets){const s=st[t.id];const pe=document.getElementById('t-'+t.id);if(pe)pe.className=s===0?'':s===3?'w':s===4?'v':'x';if(s===0)alive++;if(s===3)won=true}
+  el.classList.toggle('dead',!alive&&!won);el.classList.toggle('winner',won);
+}
+function updDept(d){
+  const st=P().status,el=document.getElementById('d-'+d.idx);if(!el)return;
+  const alive=d.tickets.filter(t=>st[t.id]===0).length,won=d.tickets.some(t=>st[t.id]===3);
+  el.querySelector('.dc').innerHTML=`<b>${alive}</b>/${d.tickets.length}매`;
+  el.querySelector('.bar i').style.width=(d.tickets.length?alive/d.tickets.length*100:0)+'%';
+  el.classList.toggle('wiped',!alive&&!won);
+}
+function restart(el,cls){if(!el)return;el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls)}
+function fitBoard(){
+  const b=$('#board');if(!b)return;
+  let fs=Math.min(34,innerWidth/50);b.style.fontSize=fs+'px';
+  let guard=0;
+  while((b.scrollWidth>b.clientWidth+1||b.scrollHeight>b.clientHeight+1)&&fs>7&&guard++<300){fs-=.3;b.style.fontSize=fs+'px'}
+}
+
+/* ---------- log ---------- */
+function liOut(e,i){const t=m().tickets[e.t];return`<li><span class="no">${i+1}</span><span class="nm">${esc(t.p.name)}</span><span class="dp">${esc(fullDept(t.p.d))}</span><span class="rd">${e.r}차</span></li>`}
+function liWin(w){const t=m().tickets[w.t];return`<li class="win"><span class="pz">${esc(w.prize)}</span><span class="nm">${esc(t.p.name)}</span><span class="dp">${esc(fullDept(t.p.d))}</span></li>`}
+function renderLog(){
+  const p=P(),ol=$('#log');
+  if(p.phase==='final'||p.phase==='done'){
+    $('#logTitle').textContent='🏆 당첨자';$('#logCount').textContent=`${p.winners.length} / ${prizeList().length}`;
+    ol.innerHTML=p.winners.map(liWin).reverse().join('');
+  }else{
+    $('#logTitle').textContent='최근 탈락';$('#logCount').textContent=`총 ${p.log.length}매 탈락`;
+    const s=Math.max(0,p.log.length-40);ol.innerHTML=p.log.slice(s).map((e,i)=>liOut(e,s+i)).reverse().join('');
+  }
+}
+function addLog(e,i){
+  const ol=$('#log');ol.insertAdjacentHTML('afterbegin',liOut(e,i));ol.firstElementChild.classList.add('new');
+  while(ol.children.length>40)ol.lastElementChild.remove();
+  $('#logCount').textContent=`총 ${P().log.length}매 탈락`;
+}
+
+/* ---------- UI ---------- */
+function resetStage(){
+  const p=P();
+  $('#reel').className='reel';
+  $('#stageLabel').textContent=G().title;
+  $('#reelName').textContent=p.phase==='done'?'🎉 THE END':p.phase==='final'?'🏆 FINAL':'READY';
+  $('#reelDept').textContent=PHASE_NAME[p.phase];
+  $('#reelSub').innerHTML=p.phase==='done'?'모든 추첨이 끝났습니다':'<span style="color:var(--dim)">스페이스바 또는 시작 버튼을 눌러주세요</span>';
+}
+function updateUI(){
+  const p=P(),locked=running||busy||starting||loopAlive;
+  $$('.tab').forEach(t=>{t.classList.toggle('active',t.dataset.g===S.cur);t.disabled=(locked||MODE==='viewer')&&t.dataset.g!==S.cur});
+  const pl=$('#phaseLabel');pl.textContent=PHASE_NAME[p.phase];pl.classList.toggle('final',p.phase==='final'||p.phase==='done');
+  const alive=aliveList().length;
+  $('#stats').innerHTML=`<div class="stat"><small>전체 응모권</small><b>${m().tickets.length}</b></div><div class="stat"><small>생존 응모권</small><b class="g">${alive}</b></div><div class="stat"><small>생존 인원</small><b>${alivePeople()}<span>/${m().people.length}명</span></b></div>`;
+  const T=target(),D=doneCount();
+  $('#progBar').style.width=(T?Math.min(100,D/T*100):100)+'%';
+  if(p.phase==='r1'||p.phase==='r2'){
+    $('#progText').innerHTML=`<span>${p.phase==='r1'?1:2}차 탈락 <b>${D}</b> / ${T}매</span><span>남은 시간 약 <b>${fmtTime((T-D)*S.speed)}</b></span>`;
+  }else{
+    $('#progText').innerHTML=`<span>당첨 <b>${D}</b> / ${T}명</span><span>추첨 대상 응모권 <b>${alive}</b>매</span>`;
+  }
+  const b=$('#mainBtn');b.className='btn host-only';b.disabled=false;
+  if(p.phase==='r1'||p.phase==='r2'){
+    const n=p.phase==='r1'?1:2;
+    if(starting){b.textContent='⏳ 곧 시작합니다';b.disabled=true}
+    else if(running){b.textContent='⏸ 일시정지';b.classList.add('pause')}
+    else b.textContent=D===0?`▶ ${n}차 탈락 발표 시작`:`▶ 계속하기 (${D}/${T})`;
+  }else if(p.phase==='final'){
+    b.classList.add('gold');
+    if(busy){b.textContent='🥁 추첨 중…';b.disabled=true}
+    else b.textContent=`🏆 ${D+1}번째 추첨 · ${prizeList()[D]||''}`;
+  }else{b.classList.add('gold');b.textContent='🎉 추첨 완료';b.disabled=true}
+  $('#soundBtn').textContent=soundOn()?'🔊':'🔇';
+  const rb=$('#regBox');
+  if(p.phase==='r1'&&!p.log.length&&!locked)rb.innerHTML=`참가자 <b style="color:var(--gold)">${m().people.length}</b>명 · 응모권 <b style="color:var(--gold)">${m().tickets.length}</b>매 등록됨 (오른쪽 팀별 현황에서 확인)<br><button class="btn" id="regBtn">📂 엑셀로 명단 등록 / 수정</button>`;
+  else rb.innerHTML='';
+  const rbt=$('#regBtn');if(rbt)rbt.onclick=e=>{e.currentTarget.blur();openSettings()};
+}
+function renderAll(){renderBoard();renderLog();resetStage();updateUI()}
+
+/* ---------- reel ---------- */
+function spin(pool,final,dur,nameEl,deptEl,box,heavy){
+  return new Promise(res=>{
+    box.classList.remove('landed','stamped');box.classList.add('spinning');
+    const t0=performance.now();let last=null;
+    (function step(){
+      const e=(performance.now()-t0)/dur;
+      if(e>=1){nameEl.textContent=final.name;deptEl.textContent=fullDept(final.d);box.classList.remove('spinning');res();return}
+      let q=pool[rand(pool.length)];if(pool.length>1){let g=0;while(q===last&&g++<10)q=pool[rand(pool.length)]}
+      last=q;nameEl.textContent=q.name;deptEl.textContent=fullDept(q.d);sfx.tick(heavy);
+      setTimeout(step,35+(heavy?460:300)*e*e*e);
+    })();
+  });
+}
+
+/* ---------- elimination rounds ---------- */
+async function eliminateOne(forced){
+  const p=P(),mm=m(),alive=aliveList();
+  const ti=forced?forced.ti:alive[rand(alive.length)],t=mm.tickets[ti];
+  const pool=[...new Set(alive.map(x=>mm.tickets[x].p))];
+  const r=forced?forced.r:(p.phase==='r1'?1:2);
+  const spinMs=forced?forced.spinMs:Math.round(Math.min(3200,Math.max(700,S.speed*500)));
+  if(!forced)emit('elim',{key:S.cur,ti,r,spinMs});
+  $('#stageLabel').textContent=`${r}차 탈락 · ${doneCount()+1}번째 응모권`;
+  $('#reelSub').innerHTML='&nbsp;';
+  await spin(pool,t.p,spinMs,$('#reelName'),$('#reelDept'),$('#reel'),false);
+  p.status[ti]=r;p.log.push({t:ti,r});save();
+  const rem=aliveCount(t.p);
+  $('#reel').classList.add('landed','stamped');
+  $('#reelSub').innerHTML=rem?`응모권 No.${t.no} 탈락 · 남은 응모권 <b>${rem}</b>매`:`<b class="red">응모권 모두 소진!</b> 아쉽지만 다음 기회에 😢`;
+  sfx.out(!rem);
+  updChip(t.p);updDept(t.p.d);
+  restart(document.getElementById('p-'+t.p.id),'hit');restart(document.getElementById('d-'+t.p.d.idx),'flash');
+  addLog({t:ti,r},p.log.length-1);updateUI();
+  emit('sync');
+  return spinMs;
+}
+async function loop(){
+  loopAlive=true;
+  try{
+    while(running){
+      if(doneCount()>=target()){running=false;await finishRound();break}
+      if(aliveList().length<=1){running=false;break}
+      busy=true;updateUI();
+      const spinMs=await eliminateOne();
+      busy=false;updateUI();
+      if(doneCount()>=target()){running=false;updateUI();await sleep(1800);await finishRound();break}
+      const t0=performance.now(),gap=Math.max(400,S.speed*1000-spinMs);
+      while(running&&performance.now()-t0<gap)await sleep(80);
+    }
+  }finally{loopAlive=false;busy=false;updateUI()}
+}
+async function startRound(){
+  if(starting)return;
+  if(!loopAlive&&doneCount()===0){
+    starting=true;updateUI();
+    emit('countdown',{title:PHASE_NAME[P().phase],sub:`응모권 <b>${target()}</b>매가 탈락합니다`});
+    await countdown(PHASE_NAME[P().phase],`응모권 <b>${target()}</b>매가 탈락합니다`);
+    starting=false;
+  }
+  running=true;updateUI();
+  if(!loopAlive)loop();
+}
+async function finishRound(){
+  const p=P(),n=p.phase==='r1'?1:2;
+  p.phase=n===1&&+G().r2>0?'r2':'final';normalizePhase(S.cur);save();emit('state');
+  renderLog();updateUI();sfx.round();confetti(180);
+  await message(`${n}차 탈락자 발표 완료!`,`생존 응모권 <b>${aliveList().length}</b>매 · <b>${alivePeople()}</b>명<br><small>다음 순서 : ${PHASE_NAME[p.phase]}</small>`);
+  resetStage();updateUI();
+}
+
+/* ---------- final draw ---------- */
+async function drawWinner(forced){
+  if(busy&&!forced)return;
+  const p=P(),pz=prizeList(),i=p.winners.length,alive=aliveList();
+  if(i>=pz.length||!alive.length){normalizePhase(S.cur);save();renderAll();return}
+  busy=true;updateUI();
+  const mm=m(),ti=forced?forced.ti:alive[rand(alive.length)],t=mm.tickets[ti];
+  const oid=forced?forced.oid:++OID;
+  if(!forced)emit('win',{key:S.cur,ti,oid});
+  const pool=[...new Set(alive.map(x=>mm.tickets[x].p))];
+  const ov=$('#finalOv');ov.classList.remove('won');
+  $('#fRank').textContent=`최종 추첨 ${i+1} / ${pz.length}`;$('#fPrize').textContent=pz[i];
+  $('#fName').textContent='?';$('#fDept').textContent='';$('#fMsg').textContent='두구두구두구…';
+  ov.classList.add('show');
+  await sleep(1500);
+  await spin(pool,t.p,6500,$('#fName'),$('#fDept'),$('#fReel'),true);
+  p.status[ti]=3;
+  if(S.onePrize)t.p.tickets.forEach(x=>{if(p.status[x.id]===0)p.status[x.id]=4});
+  p.winners.push({t:ti,prize:pz[i]});normalizePhase(S.cur);save();emit('sync');
+  ov.classList.add('won');
+  $('#fMsg').innerHTML=`🎉 축하합니다! 🎉<small>응모권 No.${t.no}</small>`;
+  sfx.fanfare();confetti(260);setTimeout(()=>confetti(200,'sides'),500);setTimeout(()=>confetti(160,'sides'),1300);
+  updChip(t.p);updDept(t.p.d);renderLog();
+  await waitClose(oid);
+  ov.classList.remove('show');
+  restart(document.getElementById('p-'+t.p.id),'whit');
+  $('#stageLabel').textContent=`🏆 ${pz[i]} 당첨`;$('#reel').className='reel';
+  $('#reelName').textContent=t.p.name;$('#reelDept').textContent=fullDept(t.p.d);$('#reelSub').innerHTML=`<b>축하합니다!</b>`;
+  busy=false;updateUI();
+  if(p.phase==='done'&&!forced){sfx.round();confetti(220);await message('모든 추첨이 끝났습니다',`${esc(G().title)}<br>당첨자 <b>${p.winners.length}</b>명 · 축하드립니다!`);updateUI()}
+}
+
+/* ---------- overlays ---------- */
+function waitClose(oid){
+  return new Promise(res=>{
+    if(MODE==='viewer'){if(closedOids.has(oid))res();else viewerWait={oid,res};return}
+    setTimeout(()=>{closer=()=>{closer=null;emit('close',{oid});res()}},700);
+  });
+}
+async function message(title,sub,oid){
+  if(oid==null){oid=++OID;emit('msg',{title,sub,oid})}
+  const ov=$('#ov');$('#ovTitle').innerHTML=title;$('#ovSub').innerHTML=sub;$('#ovNum').textContent='';$('#ovNum').style.display='none';$('#ovHint').style.display='';
+  restart($('#ovTitle'),'x');ov.classList.add('show');
+  await waitClose(oid);ov.classList.remove('show');
+}
+async function countdown(title,sub){
+  const ov=$('#ov'),num=$('#ovNum');$('#ovTitle').innerHTML=title;$('#ovSub').innerHTML=sub;$('#ovHint').style.display='none';num.style.display='';num.textContent='';
+  ov.classList.add('show');sfx.round();
+  await sleep(1600);
+  for(const n of [3,2,1]){num.textContent=n;restart(num,'go');sfx.beep(false);await sleep(1000)}
+  num.textContent='START!';restart(num,'go');sfx.beep(true);await sleep(800);
+  ov.classList.remove('show');
+}
+
+/* ---------- sound ---------- */
+let AC=null;
+function ac(){try{if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume()}catch(e){}return AC}
+function tone(f,d,type,v,at,f2){
+  if(!soundOn())return;const c=ac();if(!c)return;
+  const t=c.currentTime+(at||0),o=c.createOscillator(),g=c.createGain();
+  o.type=type||'sine';o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);
+  g.gain.setValueAtTime(v||.15,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+  o.connect(g).connect(c.destination);o.start(t);o.stop(t+d+.03);
+}
+const sfx={
+  tick:h=>tone(h?700:1500,.04,'square',h?.07:.035),
+  out:all=>{tone(320,.45,'sawtooth',.12,0,70);tone(90,.4,'sine',.35);if(all){[392,370,349,294].forEach((f,i)=>tone(f,i===3?.9:.3,'triangle',.16,.35+i*.3))}},
+  beep:last=>tone(last?1320:880,last?.6:.2,'triangle',.22),
+  round:()=>[659,784,988,1319].forEach((f,i)=>tone(f,.35,'triangle',.15,i*.1)),
+  fanfare:()=>{[523,659,784,1047,784,1047].forEach((f,i)=>tone(f,i===5?1.4:.18,'triangle',.2,i*.14));tone(262,1.8,'sine',.14,.7);tone(392,1.8,'sine',.1,.7)}
+};
+
+/* ---------- canvas: snow + confetti ---------- */
+const snowC=$('#snow'),fxC=$('#fx'),sx=snowC.getContext('2d'),fx=fxC.getContext('2d');
+let W=0,H=0;const flakes=[],parts=[];
+const CC=['#ffd166','#ff4d6d','#4cc9f0','#80ed99','#ffffff','#b8a1ff','#ff9f1c'];
+function resizeCanvas(){W=innerWidth;H=innerHeight;const r=devicePixelRatio||1;for(const c of [snowC,fxC]){c.width=W*r;c.height=H*r;c.getContext('2d').setTransform(r,0,0,r,0,0)}}
+for(let i=0;i<90;i++)flakes.push({x:Math.random(),y:Math.random(),r:.8+Math.random()*2.2,s:.15+Math.random()*.5,w:Math.random()*6.28});
+function confetti(n,mode){
+  for(let i=0;i<n;i++){
+    let x,y,vx,vy;
+    if(mode==='sides'){const L=i%2===0;x=L?0:W;y=H*.85;vx=(L?1:-1)*(8+Math.random()*14);vy=-(12+Math.random()*16)}
+    else{x=W/2+(Math.random()-.5)*W*.25;y=H*.42;vx=(Math.random()-.5)*22;vy=-Math.random()*18-4}
+    parts.push({x,y,vx,vy,r:Math.random()*6.28,vr:(Math.random()-.5)*.4,c:CC[i%CC.length],w:7+Math.random()*8,h:4+Math.random()*6});
+  }
+}
+function frame(){
+  sx.clearRect(0,0,W,H);sx.fillStyle='rgba(255,255,255,.55)';
+  for(const f of flakes){f.y+=f.s/H*1.6;f.w+=.01;if(f.y>1.02){f.y=-.02;f.x=Math.random()}sx.beginPath();sx.arc(f.x*W+Math.sin(f.w)*14,f.y*H,f.r,0,6.28);sx.fill()}
+  fx.clearRect(0,0,W,H);
+  for(let i=parts.length-1;i>=0;i--){const q=parts[i];q.vy+=.38;q.vx*=.985;q.x+=q.vx;q.y+=q.vy;q.r+=q.vr;
+    if(q.y>H+30){parts.splice(i,1);continue}
+    fx.save();fx.translate(q.x,q.y);fx.rotate(q.r);fx.fillStyle=q.c;fx.fillRect(-q.w/2,-q.h/2,q.w,q.h*Math.abs(Math.cos(q.r*2)));fx.restore()}
+  requestAnimationFrame(frame);
+}
+
+/* ---------- settings ---------- */
+function openSettings(){
+  if(running||busy||loopAlive||starting){alert('진행을 일시정지한 뒤 설정을 열어주세요.');return}
+  const box=k=>{const g=S.groups[k],mm=M[k];return`<div class="gbox"><h3>${k}그룹</h3>
+    <label>제목</label><input id="s-${k}-title" value="${esc(g.title)}">
+    <div class="row3"><div><label>1차 탈락 응모권 수</label><input id="s-${k}-r1" type="number" min="1" value="${g.r1}"></div>
+    <div><label>2차 탈락 응모권 수</label><input id="s-${k}-r2" type="number" min="0" value="${g.r2}"></div></div>
+    <label>최종 경품 (한 줄에 1개 · 위에서부터 순서대로 추첨)</label><textarea id="s-${k}-prizes" rows="5">${esc(g.prizes)}</textarea>
+    <label>참가자 명단 (근무처,부서,성명,전체응모권)</label>
+    <div class="upl"><button class="btn" data-xl="${k}">📂 ${k}그룹 엑셀 불러오기</button></div>
+    <textarea id="s-${k}-data" rows="10">${esc(g.data)}</textarea>
+    <div class="ginfo" id="s-${k}-info"></div>
+    <div class="mbtns"><button class="btn danger" data-reset="${k}">${k}그룹 진행 초기화</button></div></div>`};
+  $('#setBody').innerHTML=`<h2>⚙ 추첨 설정</h2>
+  <div class="drop" id="s-drop">📂 <b>명단 엑셀 파일(.xlsx / .xls / .csv)</b>을 여기에 끌어놓거나 <b>클릭</b>해서 선택하세요 — A·B그룹 한 번에 불러옵니다<br>
+  <small>‘그룹’ 열(A/B)이 있으면 그 값으로, 없으면 표 순서(왼쪽·첫 시트 = A, 오른쪽·둘째 시트 = B)로 나눕니다. 보내주신 원본 표 형태 그대로도 인식합니다.</small>
+  <div class="upl" style="justify-content:center;margin-top:8px"><button class="btn" id="s-tpl">⬇ 명단 엑셀 양식 다운로드 (현재 명단 포함)</button></div></div>
+  <input type="file" id="s-file" accept=".xlsx,.xls,.csv" hidden>
+  <p class="help">· 명단은 엑셀의 <b>근무처 / 부서 / 성명 / 전체응모권</b> 4개 열을 복사해 붙여넣으면 됩니다. (원본 표의 NO~잔여응모권 전체를 붙여넣어도 인식합니다)<br>
+  · 진행 상황은 자동 저장되어(서버 사용 시 서버에, 파일로 열면 이 브라우저에) 새로고침해도 이어서 진행됩니다.<br>
+  · 단축키: <b>스페이스바</b> 시작/일시정지/다음 추첨, <b>F</b> 전체화면</p>
+  <div class="grid2">${box('A')}${box('B')}</div>
+  <div class="mbtns"><label class="chk"><input type="checkbox" id="s-one" ${S.onePrize?'checked':''}> 1인 1경품 (당첨되면 그 사람의 남은 응모권은 최종 추첨에서 제외)</label>
+  <span class="sp"></span><button class="btn" id="s-csv">결과 CSV 다운로드</button><button class="btn danger" id="s-factory">전체 기본값 복원</button>
+  <button class="btn" id="s-close">닫기</button><button class="btn ok" id="s-save">저장</button></div>`;
+  $('#setModal').classList.add('show');
+  const info=k=>{const v=id=>$(`#s-${k}-${id}`).value;const rows=parseData(v('data')),tot=rows.reduce((a,r)=>a+r.n,0);const fin=tot-(+v('r1')||0)-(+v('r2')||0);
+    $(`#s-${k}-info`).innerHTML=`인식된 명단 <b>${rows.length}</b>명 · 응모권 <b>${tot}</b>매 → 1차·2차 탈락 후 최종 추첨 대상 <b>${fin}</b>매 · 예상 발표시간 약 ${fmtTime(((+v('r1')||0)+(+v('r2')||0))*S.speed)}`};
+  KEYS.forEach(k=>{['data','r1','r2'].forEach(id=>$(`#s-${k}-${id}`).oninput=()=>info(k));info(k)});
+  let fileKey=null;const fi=$('#s-file');
+  fi.onchange=()=>{if(fi.files[0])importFile(fi.files[0],fileKey).then(()=>KEYS.forEach(info));fi.value=''};
+  const drop=$('#s-drop');
+  drop.onclick=e=>{if(e.target.id==='s-tpl')return;fileKey=null;fi.click()};
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};drop.ondragleave=()=>drop.classList.remove('over');
+  drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');const f=e.dataTransfer.files[0];if(f)importFile(f,null).then(()=>KEYS.forEach(info))};
+  $$('[data-xl]').forEach(b=>b.onclick=()=>{fileKey=b.dataset.xl;fi.click()});
+  $('#s-tpl').onclick=e=>{e.stopPropagation();exportXlsx()};
+  $('#s-close').onclick=closeSettings;
+  $('#s-save').onclick=saveSettings;
+  $('#s-csv').onclick=exportCSV;
+  $('#s-factory').onclick=()=>{if(!confirm('명단·설정·진행 상황을 모두 처음 상태로 되돌릴까요?'))return;S=fresh();KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});save();closeSettings();renderAll();emit('state')};
+  $$('[data-reset]').forEach(b=>b.onclick=()=>{const k=b.dataset.reset;if(!confirm(`${k}그룹의 추첨 진행 상황(탈락/당첨 기록)을 초기화할까요?`))return;S.prog[k]=null;ensureProg(k);save();closeSettings();renderAll();emit('state')});
+}
+function closeSettings(){$('#setModal').classList.remove('show')}
+function saveSettings(){
+  const next={};
+  for(const k of KEYS){
+    const v=id=>$(`#s-${k}-${id}`).value;
+    const data=v('data'),rows=parseData(data),total=rows.reduce((a,r)=>a+r.n,0);
+    const r1=parseInt(v('r1'),10),r2=parseInt(v('r2'),10)||0;
+    const prizes=v('prizes'),np=prizes.split(/\r?\n/).filter(s=>s.trim()).length;
+    if(!rows.length){alert(`${k}그룹 명단을 인식하지 못했습니다.`);return}
+    if(!(r1>=1)||r2<0||r1+r2>=total){alert(`${k}그룹: 1차+2차 탈락 수(${r1+r2})는 전체 응모권(${total})보다 작아야 합니다.`);return}
+    if(np<1){alert(`${k}그룹: 최종 경품을 1개 이상 입력해 주세요.`);return}
+    const changed=data.trim()!==String(S.groups[k].data).trim();
+    const pr=S.prog[k];
+    if(changed&&pr&&(pr.log.length||pr.winners.length)&&!confirm(`${k}그룹 명단이 바뀌었습니다. 진행 상황을 초기화하고 저장할까요?`))return;
+    next[k]={g:{title:v('title')||`${k}그룹`,r1,r2,prizes,data},changed};
+  }
+  S.onePrize=$('#s-one').checked;
+  for(const k of KEYS){S.groups[k]=next[k].g;if(next[k].changed)S.prog[k]=null;M[k]=build(k);ensureProg(k)}
+  save();closeSettings();renderAll();emit('state');
+}
+function exportCSV(){
+  const L=[['그룹','구분','순번','응모권번호','근무처','부서','성명','경품']];
+  for(const k of KEYS){const mm=M[k],p=S.prog[k];if(!p)continue;
+    p.log.forEach((e,i)=>{const t=mm.tickets[e.t];L.push([k,e.r+'차 탈락',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,''])});
+    p.winners.forEach((w,i)=>{const t=mm.tickets[w.t];L.push([k,'당첨',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,w.prize])});}
+  const csv='﻿'+L.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='연말경품추첨_결과.csv';a.click();
+}
+
+/* ---------- 엑셀 ---------- */
+const norm=v=>String(v==null?'':v).replace(/\s+/g,'');
+const NAME_RE=/^(성명|이름|성함)$/;
+function tablesFromRows(rows){
+  const hi=rows.findIndex(r=>r.some(c=>NAME_RE.test(norm(c))));
+  if(hi<0)return[];
+  const H=rows[hi].map(norm);
+  const nameCols=H.map((h,i)=>NAME_RE.test(h)?i:-1).filter(i=>i>=0);
+  return nameCols.map((nc,j)=>{
+    const lo=j?nameCols[j-1]:-1,up=j<nameCols.length-1?nameCols[j+1]:H.length;
+    const left=re=>{for(let i=nc-1;i>lo;i--)if(re.test(H[i]))return i;return-1};
+    const right=re=>{for(let i=nc+1;i<up;i++)if(re.test(H[i]))return i;return-1};
+    const dc=left(/부서|팀/),sc=left(/근무처|회사|사업장|법인|소속/),gc=left(/^(그룹|조|구분)$/);
+    let tc=right(/전체/);if(tc<0)tc=right(/^(?!.*(기본|추가|잔여)).*(응모권|매수|수량|티켓|장수)/);
+    const out=[];
+    for(let r=hi+1;r<rows.length;r++){
+      const row=rows[r],name=String(row[nc]??'').trim();
+      if(!name||NAME_RE.test(norm(name)))continue;
+      const n=tc<0?1:parseInt(String(row[tc]).replace(/[^0-9]/g,''),10);
+      if(!(n>0))continue;
+      const clean=v=>String(v??'').trim().replace(/,/g,' ');
+      out.push({group:gc<0?'':norm(row[gc]).toUpperCase(),site:sc<0?'':clean(row[sc]),dept:dc<0?'-':clean(row[dc])||'-',name:clean(name),n:Math.min(n,20)});
+    }
+    return{rows:out,hasGroup:gc>=0,noTicketCol:tc<0};
+  });
+}
+async function importFile(file,onlyKey){
+  let tables=[];
+  try{
+    if(/\.csv$/i.test(file.name)&&!window.XLSX){
+      const txt=await file.text();tables=tablesFromRows(txt.split(/\r?\n/).map(l=>l.split(l.includes('\t')?'\t':',')));
+    }else{
+      if(!window.XLSX){alert('엑셀 라이브러리(vendor/xlsx.full.min.js)를 불러오지 못했습니다. 명단을 복사해 텍스트 칸에 붙여넣어 주세요.');return}
+      const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+      for(const n of wb.SheetNames)tables.push(...tablesFromRows(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:false})));
+    }
+  }catch(e){alert('파일을 읽지 못했습니다: '+e.message);return}
+  tables=tables.filter(t=>t.rows.length);
+  if(!tables.length){alert('‘성명’ 열을 찾지 못했습니다. 첫 줄(머리글)에 근무처 / 부서 / 성명 / 응모권 열이 있는지 확인해 주세요.');return}
+  const out={A:[],B:[]};
+  tables.forEach((t,idx)=>t.rows.forEach(r=>{
+    let k=null;
+    if(t.hasGroup&&r.group){k=r.group.startsWith('A')?'A':r.group.startsWith('B')?'B':null}
+    if(!k&&!t.hasGroup)k=onlyKey&&tables.length===1?onlyKey:(idx===0?'A':idx===1?'B':null);
+    if(k)out[k].push(r);
+  }));
+  const keys=onlyKey?[onlyKey]:KEYS.filter(k=>out[k].length);
+  if(!keys.length||keys.every(k=>!out[k].length)){alert('불러올 명단이 없습니다. 그룹 열 값이 A 또는 B인지 확인해 주세요.');return}
+  const msg=[];
+  for(const k of keys){
+    if(!out[k].length)continue;
+    $(`#s-${k}-data`).value=out[k].map(r=>[r.site,r.dept,r.name,r.n].join(',')).join('\n');
+    msg.push(`${k}그룹: ${out[k].length}명 · 응모권 ${out[k].reduce((a,r)=>a+r.n,0)}매`);
+  }
+  const warn=tables.some(t=>t.noTicketCol)?'\n\n※ 응모권 열을 찾지 못한 표는 1인 1매로 처리했습니다.':'';
+  alert(`엑셀에서 불러왔습니다.\n\n${msg.join('\n')}${warn}\n\n내용 확인 후 [저장]을 눌러주세요.`);
+}
+function exportXlsx(){
+  if(!window.XLSX){alert('엑셀 라이브러리를 불러오지 못했습니다.');return}
+  const aoa=[['그룹','근무처','부서','성명','응모권']];
+  KEYS.forEach(k=>{const ta=$(`#s-${k}-data`);parseData(ta?ta.value:S.groups[k].data).forEach(r=>aoa.push([k,r.site,r.dept,r.name,r.n]))});
+  const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:6},{wch:12},{wch:16},{wch:12},{wch:8}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'명단');XLSX.writeFile(wb,'경품추첨_명단양식.xlsx');
+}
+
+/* ---------- 서버 동기화 (관람 모드) ---------- */
+function applyState(st){
+  if(!st||!st.groups)return;
+  const old=S;S=st;if(!S.prog)S.prog={};
+  for(const k of KEYS){if(!M[k]||!old||!old.groups||old.groups[k].data!==S.groups[k].data)M[k]=build(k);ensureProg(k)}
+  $('#speed').value=S.speed;renderAll();
+}
+const Q=[];let qBusy=false;
+function enqueue(msg){Q.push(msg);if(!qBusy)drain()}
+async function drain(){qBusy=true;while(Q.length){const msg=Q.shift();try{await handle(msg)}catch(e){console.error(e)}}qBusy=false}
+function needSync(st,key){return st&&(S.cur!==key||JSON.stringify(st.prog[key])!==JSON.stringify(S.prog[key]))}
+async function handle(msg){
+  const st=msg.state,d=msg.data||{};
+  switch(msg.event){
+    case'state':applyState(st);break;
+    case'sync':if(st){if(JSON.stringify(st.prog)!==JSON.stringify(S.prog)||st.cur!==S.cur)applyState(st);else{S.speed=st.speed;updateUI()}}break;
+    case'elim':if(needSync(st,d.key))applyState(st);busy=true;updateUI();await eliminateOne(d);busy=false;updateUI();break;
+    case'countdown':await countdown(d.title,d.sub);break;
+    case'msg':await message(d.title,d.sub,d.oid);resetStage();renderLog();updateUI();break;
+    case'win':if(needSync(st,d.key))applyState(st);await drawWinner(d);break;
+  }
+}
+function connectSSE(){
+  const es=new EventSource('api/events');let first=true;
+  es.onmessage=e=>{
+    let msg;try{msg=JSON.parse(e.data)}catch(x){return}
+    if(msg.event==='viewers'){$('#viewers').textContent=`👀 접속 화면 ${msg.data.n}개`;return}
+    if(MODE!=='viewer')return;
+    if(msg.event==='close'){closedOids.add(msg.data.oid);if(viewerWait&&viewerWait.oid===msg.data.oid){const r=viewerWait.res;viewerWait=null;r()}return}
+    enqueue(msg);
+  };
+  es.onopen=()=>{
+    if(MODE==='viewer'&&!first)fetch('api/state',{cache:'no-store'}).then(r=>r.json()).then(j=>{if(j.state)enqueue({event:'state',state:j.state})}).catch(()=>{});
+    first=false;
+  };
+}
+async function detectServer(){
+  if(!/^https?:$/.test(location.protocol))return null;
+  try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return j&&typeof j==='object'&&'state' in j?j:null}catch(e){return null}
+}
+
+/* ---------- events ---------- */
+function onMain(){
+  if(closer||starting)return;
+  ac();
+  const ph=P().phase;
+  if(ph==='r1'||ph==='r2'){if(running){running=false;updateUI()}else startRound()}
+  else if(ph==='final')drawWinner();
+}
+function toggleFS(){try{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}catch(e){}}
+async function init(){
+  load();
+  const srv=await detectServer();
+  if(srv){
+    if(HOSTKEY){
+      const ok=await fetch('api/check',{headers:{'x-host-key':HOSTKEY}}).then(r=>r.ok).catch(()=>false);
+      MODE=ok?'host':'viewer';if(!ok)alert('진행자 키가 올바르지 않아 관람 모드로 접속합니다.');
+    }else MODE='viewer';
+    if(srv.state&&srv.state.v===1&&srv.state.groups){const snd=S.sound;S=srv.state;if(!S.prog)S.prog={};S.sound=snd}
+  }
+  KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});save();
+  if(MODE==='viewer'){document.body.classList.add('viewer');$('#ovHint').textContent='진행자가 곧 다음 순서로 진행합니다';$('#fHint').textContent='진행자가 곧 다음 순서로 진행합니다'}
+  if(MODE!=='local'){$('#liveBadge').hidden=false;connectSSE()}
+  if(MODE==='host'&&!(srv.state&&srv.state.groups))emit('state');
+  const sp=$('#speed');[2,3,4,5,6,7,8,10,12,15].forEach(s=>sp.insertAdjacentHTML('beforeend',`<option value="${s}">⏱ ${s}초/매</option>`));
+  sp.value=S.speed;sp.onchange=()=>{S.speed=+sp.value;save();updateUI();sp.blur();emit('sync')};
+  $('#mainBtn').onclick=e=>{e.currentTarget.blur();onMain()};
+  $('#soundBtn').onclick=e=>{e.currentTarget.blur();if(MODE==='viewer'){viewerSound=!viewerSound;ac()}else{S.sound=!S.sound;save()}updateUI()};
+  $('#fsBtn').onclick=e=>{e.currentTarget.blur();toggleFS()};
+  $('#setBtn').onclick=e=>{e.currentTarget.blur();openSettings()};
+  $$('.tab').forEach(t=>t.onclick=()=>{t.blur();if(t.disabled||S.cur===t.dataset.g)return;S.cur=t.dataset.g;save();renderAll();emit('state')});
+  $('#ov').onclick=()=>closer&&closer();$('#finalOv').onclick=()=>closer&&closer();
+  addEventListener('keydown',e=>{
+    if(MODE==='viewer'){if(e.key==='f'||e.key==='F'||e.key==='ㄹ')toggleFS();return}
+    if($('#setModal').classList.contains('show')){if(e.key==='Escape')closeSettings();return}
+    if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+    if(e.code==='Space'||e.code==='Enter'||e.code==='NumpadEnter'){e.preventDefault();if(closer)closer();else onMain();return}
+    if(e.key==='Escape'&&closer){closer();return}
+    if(e.key==='f'||e.key==='F'||e.key==='ㄹ')toggleFS();
+  });
+  let rt;addEventListener('resize',()=>{resizeCanvas();clearTimeout(rt);rt=setTimeout(fitBoard,150)});
+  resizeCanvas();requestAnimationFrame(frame);
+  renderAll();
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitBoard);
+  window.__lottery={get S(){return S},M};
+}
+init();
+})();
+</script>
+</body>
+</html>
