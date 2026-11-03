@@ -46,8 +46,9 @@ const DEFAULTS = {
 function deepMerge(base, patch) {
   const out = { ...base };
   for (const [k, v] of Object.entries(patch || {})) {
-    if (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object') out[k] = deepMerge(base[k], v);
-    else if (v !== undefined) out[k] = v;
+    if (base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) {
+      if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = deepMerge(base[k], v);   // 객체 자리에 null·숫자 등이 오면 무시 (설정이 망가져 수집기가 멈추지 않게)
+    } else if (v !== undefined) out[k] = v;
   }
   return out;
 }
@@ -157,7 +158,7 @@ function create({ settingsFile, logDir, log = console.log }) {
   }
 
   function inQuiet(now = new Date()) {
-    const q = settings.quiet; if (!q.enabled) return false;
+    const q = settings.quiet; if (!q || !q.enabled || typeof q.from !== 'string' || typeof q.to !== 'string') return false;
     const [fh, fm] = q.from.split(':').map(Number), [th, tm] = q.to.split(':').map(Number);
     const cur = now.getHours() * 60 + now.getMinutes(), from = fh * 60 + fm, to = th * 60 + tm;
     return from <= to ? (cur >= from && cur < to) : (cur >= from || cur < to);

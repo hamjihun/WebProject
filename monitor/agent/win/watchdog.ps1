@@ -5,11 +5,22 @@ $TaskName = "IMSMonitoringAgent"
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
+function Get-OurProcs([string]$names = 'agent|tray') {
+  # 우리 에이전트만 고른다: 스크립트가 이 설치 폴더에 있거나, 그 파일 안에 우리 이름(IMSMonitoringAgent / 예전 ServerMonitorAgent)이 있을 때만.
+  # 다른 제품의 agent.ps1 · tray.ps1 은 건드리지 않는다 (경로를 못 읽으면 끄지 않는 쪽으로).
+  @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
+    $c = [string]$_.CommandLine
+    if ($c -notmatch ('"?([A-Za-z]:\\[^"]*?\\(' + $names + ')\.ps1)')) { return $false }
+    $p = $matches[1]
+    if ($p.StartsWith($Dir + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    try { return ([IO.File]::ReadAllText($p) -match 'IMSMonitoringAgent|ServerMonitorAgent') } catch { return $false }
+  })
+}
 function Log($m) { try { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} [감시자] {1}" -f (Get-Date), $m) } catch {} }
 
 if (Test-Path (Join-Path $DataDir "stopped.json")) { exit 0 }   # 관리자가 종료 비밀번호로 끈 상태 — 다시 켜지 않음
 try { $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop; if ($t.State -eq 'Disabled') { Enable-ScheduledTask -TaskName $TaskName -ErrorAction Stop | Out-Null; Log "에이전트 작업이 꺼져 있어 다시 켬" } } catch {}
-$procs = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\agent\.ps1' })
+$procs = @(Get-OurProcs 'agent')                    # 우리 agent.ps1 만 (다른 제품은 건드리지 않음)
 $reason = $null
 if ($procs.Count -eq 0) { $reason = "에이전트 프로세스 없음" }
 else {

@@ -79,7 +79,8 @@ echo [%STAMP%] 백업 시작 : %DST% >> "%LOG%"
 
 robocopy "%SRC%" "%DST%\daily\%YMD%" *.json *.log /R:2 /W:3 /NFL /NDL /NJH /NJS >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
-robocopy "%ROOT%" "%DST%\full" /E /XD .git node_modules /XF collector.log /R:2 /W:3 /NFL /NDL /NJH /NJS >> "%LOG%" 2>&1
+REM  full 에는 비밀번호·토큰 파일(backup-cred.txt, run-collector.cmd)을 넣지 않는다. 백업 위치가 monitor 안이어도 자기 자신을 복사하지 않게 /XD "%DST%"
+robocopy "%ROOT%" "%DST%\full" /E /XD .git node_modules "%DST%" /XF collector.log collector.old.log backup-cred.txt run-collector.cmd /R:2 /W:3 /NFL /NDL /NJH /NJS >> "%LOG%" 2>&1
 forfiles /p "%DST%\daily" /d -30 /c "cmd /c if @isdir==TRUE rd /s /q @path" >nul 2>&1
 
 if %RC% GEQ 8 (

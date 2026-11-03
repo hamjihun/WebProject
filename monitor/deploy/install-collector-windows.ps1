@@ -23,8 +23,42 @@ $TaskName = "ServerMonitorCollector"
 $BackupTask = "ServerMonitorBackup"
 $Root = Split-Path -Parent $PSScriptRoot          # monitor 폴더
 $Node = (Get-Command node -ErrorAction SilentlyContinue).Source
+$runner = Join-Path $Root "run-collector.cmd"
+
+# 지금 돌고 있는 '이 수집기'의 node.exe 만 끈다. 다른 Node 프로그램은 절대 건드리지 않는다.
+#  - run-collector.cmd(이 폴더)가 띄운 node.exe
+#  - 명령줄에 이 폴더의 server.js 전체 경로가 있는 node.exe
+#  - 수집기 포트(지금 값·예전 값)에서 대기 중이면서 명령줄이 server.js 인 node.exe (예전 실행 파일은 상대 경로 'server.js' 로 띄움)
+#  위에 안 맞는 프로그램이 그 포트를 쓰고 있으면 경고만 하고 끄지 않는다.
+#  작업을 멈추기(Stop-ScheduledTask) 전에 불러야 한다 — 멈추면 부모 cmd 가 먼저 사라져 알아볼 수 없다.
+function Stop-OurCollector([int[]]$ports) {
+  $rx = [regex]::Escape($runner); $sx = [regex]::Escape((Join-Path $Root "server.js"))
+  $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+  $cmds = @($all | Where-Object { $_.Name -eq 'cmd.exe' -and [string]$_.CommandLine -match $rx } | ForEach-Object { $_.ProcessId })
+  $listen = @()
+  foreach ($port in @($ports | Select-Object -Unique)) {
+    try { $listen += @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ port = $port; id = [int]$_.OwningProcess } }) } catch {}
+  }
+  $lids = @($listen | ForEach-Object { $_.id })
+  $ours = @($all | Where-Object {
+    $_.Name -eq 'node.exe' -and (
+      ([string]$_.CommandLine -match $sx) -or ($cmds -contains $_.ParentProcessId) -or
+      (($lids -contains [int]$_.ProcessId) -and [string]$_.CommandLine -match '(^|[\s"\\])server\.js"?\s*$'))
+  })
+  foreach ($p in $ours) { Write-Host "기존 수집기 종료 (PID $($p.ProcessId))"; Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+  $ids = @($ours | ForEach-Object { [int]$_.ProcessId })
+  foreach ($l in $listen) {
+    if ($ids -contains $l.id) { continue }
+    $o = $all | Where-Object { $_.ProcessId -eq $l.id } | Select-Object -First 1
+    Write-Warning "포트 $($l.port) 를 다른 프로그램($(if ($o) { $o.Name } else { '?' }), PID $($l.id))이 쓰고 있습니다. 끄지 않았습니다 — 수집기 포트를 바꾸거나 직접 확인하세요."
+  }
+}
+$oldPort = 0
+if (Test-Path $runner) { foreach ($l in @(Get-Content $runner -ErrorAction SilentlyContinue)) { if ($l -match '^\s*set\s+PORT=(\d+)') { $oldPort = [int]$matches[1] } } }
 
 if ($Uninstall) {
+  Stop-OurCollector @($Port, $oldPort | Where-Object { $_ -gt 0 })
+  try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
   Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $BackupTask -Confirm:$false -ErrorAction SilentlyContinue
   Write-Host "제거 완료: 작업 '$TaskName', '$BackupTask' (data 폴더와 백업본은 지우지 않았습니다)"
@@ -32,15 +66,22 @@ if ($Uninstall) {
 }
 if (-not $Node) { Write-Error "node.exe 를 찾을 수 없습니다. Node.js 를 설치한 뒤 PowerShell 을 다시 여세요."; exit 1 }
 
+# 기존 수집기 종료: 작업 중지 + 이 폴더의 수집기 node.exe 만 종료 (포트를 넘겨받기 위해). 실행 파일을 새로 쓰기 전에 해야 예전 것을 알아본다.
+Stop-OurCollector @($Port, $oldPort | Where-Object { $_ -gt 0 })
+try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
+Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
 # 환경 변수는 작업 스케줄러에 직접 못 넣으므로 실행용 cmd 파일을 만듭니다.
-$runner = Join-Path $Root "run-collector.cmd"
+# 시작할 때 collector.log 가 50MB 를 넘으면 collector.old.log 로 넘긴다 (디스크가 차지 않게, 최대 약 100MB)
 @"
 @echo off
 cd /d "$Root"
 set PORT=$Port
 set BIND=$Bind
 set TOKEN=$Token
-"$Node" server.js >> "$Root\collector.log" 2>&1
+for %%A in ("$Root\collector.log") do if %%~zA GTR 52428800 move /y "$Root\collector.log" "$Root\collector.old.log" >nul
+"$Node" "$Root\server.js" >> "$Root\collector.log" 2>&1
 "@ | Set-Content -Encoding ASCII $runner
 
 $action    = New-ScheduledTaskAction -Execute $runner
@@ -48,12 +89,6 @@ $trigger   = New-ScheduledTaskTrigger -AtStartup
 $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-# 기존 수집기 종료: 작업 중지 + 이 폴더의 server.js 를 실행 중인 node.exe 종료 (포트를 넘겨받기 위해)
-try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'server\.js' } |
-  ForEach-Object { Write-Host "기존 수집기 종료 (PID $($_.ProcessId))"; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-Start-Sleep -Seconds 2
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "서버 모니터 수집기 (:$Port)" | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 

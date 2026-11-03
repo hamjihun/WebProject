@@ -12,10 +12,20 @@ $RunName = "IMSMonitoringAgentTray"
 $LegacyRunNames = @("ServerMonitorAgentTray")
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 
+function Get-OurProcs([string]$names = 'agent|tray') {
+  # 우리 에이전트만 고른다: 스크립트가 이 설치 폴더에 있거나, 그 파일 안에 우리 이름(IMSMonitoringAgent / 예전 ServerMonitorAgent)이 있을 때만.
+  # 다른 제품의 agent.ps1 · tray.ps1 은 건드리지 않는다 (경로를 못 읽으면 끄지 않는 쪽으로).
+  @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
+    $c = [string]$_.CommandLine
+    if ($c -notmatch ('"?([A-Za-z]:\\[^"]*?\\(' + $names + ')\.ps1)')) { return $false }
+    $p = $matches[1]
+    if ($p.StartsWith($Dir + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    try { return ([IO.File]::ReadAllText($p) -match 'IMSMonitoringAgent|ServerMonitorAgent') } catch { return $false }
+  })
+}
 function Stop-AgentProcesses {
-  # 어느 경로에서 띄웠든 (예전 수동 설치 포함) agent.ps1 / tray.ps1 실행 중인 PowerShell 을 모두 종료
-  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\(agent|tray)\.ps1' } |
-    ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
+  # 우리 agent.ps1 / tray.ps1 (예전 수동 설치 경로 포함) 만 종료
+  Get-OurProcs | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
 }
 
 # ---- 종료·삭제 비밀번호 ----
@@ -57,7 +67,7 @@ if ($Stop) {                                         # 트레이에서 '에이�
   try { @{ at = (Get-Date).ToString('o'); by = "$env:USERDOMAIN\$env:USERNAME" } | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $DataDir "stopped.json") -Encoding UTF8 } catch {}   # 감시자·되살리기가 다시 켜지 않게
   Send-AgentEvent 'stop'
   try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
-  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match '\\agent\.ps1' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
+  Get-OurProcs 'agent' | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
   Write-AgentLog "관리자가 종료 비밀번호로 에이전트를 종료함 ($env:USERNAME)"
   exit 0
 }

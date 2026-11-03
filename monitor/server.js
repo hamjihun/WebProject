@@ -4,8 +4,9 @@
 // - GET / 에서 대시보드 화면을 보여줍니다.
 // 외부 패키지 없이 Node.js 내장 모듈만 사용합니다.
 
-const VERSION = '1.46.1';
+const VERSION = '1.46.2';
 const http = require('http');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -286,7 +287,7 @@ function normalizeEnv(e) {
   return { t: Math.round(t * 10) / 10, h: Math.round(h * 10) / 10 };
 }
 function normalize(raw, remoteIp) {
-  const host = String(raw.host || raw.hostname || remoteIp || 'unknown').trim();
+  const host = String(raw.host || raw.hostname || remoteIp || 'unknown').trim().slice(0, 128);   // 너무 긴 이름은 자름 (로그·메모리 보호)
   const memTotal = num(raw.mem_total);
   const memUsed = num(raw.mem_used);
   const disks = Array.isArray(raw.disks) ? raw.disks.map((d) => ({
@@ -535,11 +536,21 @@ function serveStatic(res, file) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
-  // 프록시(nginx/IIS/Apache) 뒤에 있으면 X-Real-IP / X-Forwarded-For 로 실제 에이전트 IP를 받음
-  const fwd = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  const remoteIp = (fwd || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+// 요청 하나에서 난 오류로 수집기 전체가 꺼지지 않게: 처리 중 예외는 500 으로 답하고 계속 돈다
+const server = http.createServer((req, res) => {
+  handle(req, res).catch((e) => {
+    console.error(`[${new Date().toLocaleTimeString()}] 요청 처리 오류 ${req.method} ${String(req.url).slice(0, 100)}:`, (e && e.message) || e);
+    try { if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' }); res.end('{"ok":false,"error":"server error"}'); } catch (_) {}
+  });
+});
+const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+const lastLog = new Map();                             // 메트릭 수신 로그: 서버마다 10분에 한 줄만 (collector.log 가 끝없이 커지지 않게)
+async function handle(req, res) {
+  let url; try { url = new URL(req.url, 'http://x'); } catch (_) { res.writeHead(400); return res.end('bad request'); }
+  // 프록시(nginx/IIS/Apache) 뒤에 있으면 X-Real-IP / X-Forwarded-For 로 실제 에이전트 IP를 받음 — 이 컴퓨터(프록시)에서 온 요청일 때만 믿는다 (위조 방지)
+  const sock = String(req.socket.remoteAddress || '');
+  const fwd = /^(127\.|::1$|::ffff:127\.)/.test(sock) ? String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim().slice(0, 64) : '';
+  const remoteIp = (fwd || sock).replace(/^::ffff:/, '');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Token', 'Access-Control-Allow-Methods': 'POST, GET, PUT' });
@@ -795,12 +806,17 @@ const server = http.createServer(async (req, res) => {
       const text = await readBody(req);
       const raw = JSON.parse(text || '{}');
       const token = req.headers['x-token'] || raw.token || '';
-      if (TOKEN && token !== TOKEN) {
-        console.log(`[${new Date().toLocaleTimeString()}] 토큰 불일치: ${raw.host || '?'} (${remoteIp}) - 에이전트 토큰과 수집기 TOKEN 이 다릅니다`);
+      if (TOKEN && !safeEq(token, TOKEN)) {
+        const k = 'bad|' + remoteIp;
+        if (!lastLog.has(k) || Date.now() - lastLog.get(k) > 600000) { lastLog.set(k, Date.now()); console.log(`[${new Date().toLocaleTimeString()}] 토큰 불일치: ${String(raw.host || '?').slice(0, 64)} (${remoteIp}) - 에이전트 토큰과 수집기 TOKEN 이 다릅니다 (같은 IP 는 10분에 한 번만 기록)`); }
         return json(res, 401, { ok: false, error: 'bad token' });
       }
       const m = ingest(raw, remoteIp);
-      console.log(`[${new Date().toLocaleTimeString()}] ${m.host} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}%`);
+      if (!lastLog.has(m.host) || Date.now() - lastLog.get(m.host) > 600000) {
+        if (lastLog.size > 2000) lastLog.clear();
+        lastLog.set(m.host, Date.now());
+        console.log(`[${new Date().toLocaleTimeString()}] ${String(m.host).slice(0, 64)} (${remoteIp}) cpu=${m.cpu}% mem=${m.mem_pct}% (서버마다 10분에 한 줄)`);
+      }
       const upd = agentupd.orderFor(m.host, m.agent);      // 배포 버전과 다르면 업데이트(또는 되돌리기) 지시
       const unl = agentupd.unlockOrder();                   // 종료·삭제 비밀번호 해시
       return json(res, 200, { ok: true, agent: { usb_window: String(alerter.getSettings().rules.usb_window || ''), usb_paths: String(alerter.getHostConf(m.host).usb_paths || ''), bl_guard: alerter.blGuard(m.host) ? '1' : '0', ...(upd ? { update: upd } : {}), ...(unl ? { unlock: unl } : {}) } });   // 에이전트로 내려보내는 설정 (USB 시간대, 이 서버의 USB 경로)
@@ -813,13 +829,19 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/api/unregister') {
     try {
       const raw = JSON.parse((await readBody(req)) || '{}');
-      const host = String(raw.host || '').trim();
+      // 삭제는 에이전트(토큰) 또는 화면에 로그인한 사용자만 — 예전엔 아무나 지울 수 있었음 (서버 기록 영구 삭제)
+      const user = auth.fromCookie(req.headers.cookie);
+      const viaToken = !user && (!TOKEN || safeEq(req.headers['x-token'] || raw.token || '', TOKEN));
+      if (!user && !viaToken) { console.log(`[${new Date().toLocaleTimeString()}] 목록 제거 거부 (토큰 없음): ${String(raw.host || '?').slice(0, 64)} (${remoteIp})`); return json(res, 401, { ok: false, error: 'bad token' }); }
+      if (user) raw.pwok = false;                       // 화면에서 지운 것은 '삭제 비밀번호 확인' 이 아님
+      const host = String(raw.host || '').trim().slice(0, 128);
       if (!host) return json(res, 400, { ok: false, error: 'host required' });
       const ent = store.get(host), hadSec = !!secmon.summary(host), nm = ent && ent.latest ? ent.latest.name : '';
       const removed = removeHost(host);
-      console.log(`[${new Date().toLocaleTimeString()}] 목록에서 제거: ${host} (${remoteIp})${removed ? '' : ' - 없던 호스트'}`);
+      console.log(`[${new Date().toLocaleTimeString()}] 목록에서 제거: ${host} (${remoteIp})${user ? ' 화면에서 ' + user.id : ''}${removed ? '' : ' - 없던 호스트'}`);
       // 에이전트 제거도 알린다: 공격자가 감시를 끄려고 지운 것일 수 있다 (보안 감시 중이던 서버는 위험)
-      if (removed && raw.pwok) alerter.securityEvents(host, nm, [{ sev: 'warn', msg: `에이전트가 제거되었습니다 (삭제 비밀번호 확인됨) — 이 서버는 더 이상 감시되지 않습니다 (요청 IP ${remoteIp})` }]);
+      if (removed && user) alerter.securityEvents(host, nm, [{ sev: 'warn', msg: `서버 현황 화면에서 ${user.id} 이(가) 목록에서 삭제했습니다 (요청 IP ${remoteIp})` }]);
+      else if (removed && raw.pwok) alerter.securityEvents(host, nm, [{ sev: 'warn', msg: `에이전트가 제거되었습니다 (삭제 비밀번호 확인됨) — 이 서버는 더 이상 감시되지 않습니다 (요청 IP ${remoteIp})` }]);
       else if (removed) alerter.securityEvents(host, nm, [{ sev: hadSec ? 'crit' : 'warn', msg: `에이전트가 제거되었습니다 — 이 서버는 더 이상 감시되지 않습니다${hadSec ? ' (보안 감시 포함)' : ''}. 직접 지운 게 아니면 바로 확인 (요청 IP ${remoteIp})` }]);
       saveState(false);
       return json(res, 200, { ok: true, removed });
@@ -1054,7 +1076,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && !url.pathname.includes('..')) return serveStatic(res, url.pathname.slice(1));
 
   res.writeHead(404); res.end('not found');
-});
+}
 
 loadState();
 loadHourly();
