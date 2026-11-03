@@ -6,7 +6,7 @@
 # agent.conf: SEC_CANARY=D:\공유;E:\자료 (미끼 폴더를 만들 곳, 0 = 안 만듦) · SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.10.9'
+$Ver = '1.10.10'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'
@@ -277,25 +277,52 @@ function Guard-Volume([string]$m, [int]$conv, [string]$why) {
   Log "BitLocker 자동 차단 $m : $($done -join ', ') ($why)"
   return ($done -join ', ')
 }
-$blAvail = $false; $vols = @()
-try { $vols = @(Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -ErrorAction Stop); $blAvail = $true } catch {}
+$blAvail = $false; $vols = @(); $blErr = $false
+try { $vols = @(Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -ErrorAction Stop); $blAvail = $true }
+catch {                                                # 기능이 정말 없을 때(네임스페이스 없음)만 '없음'. 잠깐 실패한 것은 예전 값을 그대로 둔다
+  if ([string]$_.Exception.NativeErrorCode -match 'InvalidNamespace|NotFound' -or $_.Exception.Message -match 'Invalid namespace|잘못된 네임스페이스') { $blAvail = $false }
+  else { $blErr = $true; $blAvail = $S.blAvail }
+}
+# USB 로 붙은 디스크(외장 HDD·USB 메모리)의 드라이브 문자 — 꽂을 때 '암호화 시작' 으로 보지 않고, 자동 차단도 하지 않는다 (알림만)
+function Get-UsbLetters {
+  $l = @()
+  try { $nums = @(Get-CimInstance -Namespace 'root/Microsoft/Windows/Storage' -ClassName MSFT_Disk -ErrorAction Stop | Where-Object { [int]$_.BusType -eq 7 } | ForEach-Object { [int]$_.Number })
+    if ($nums.Count) { $l += @(Get-CimInstance -Namespace 'root/Microsoft/Windows/Storage' -ClassName MSFT_Partition -ErrorAction Stop | Where-Object { $nums -contains [int]$_.DiskNumber -and [string]$_.DriveLetter -match '^[A-Za-z]$' } | ForEach-Object { "$($_.DriveLetter):" }) } } catch {}
+  try { foreach ($d in @(Get-CimInstance Win32_DiskDrive -ErrorAction Stop | Where-Object { $_.InterfaceType -eq 'USB' -or [string]$_.PNPDeviceID -like 'USBSTOR*' })) {
+      foreach ($p in @(Get-CimAssociatedInstance -InputObject $d -ResultClassName Win32_DiskPartition -ErrorAction SilentlyContinue)) {
+        $l += @(Get-CimAssociatedInstance -InputObject $p -ResultClassName Win32_LogicalDisk -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.DeviceID }) } } } catch {}
+  try { $l += @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=2' -ErrorAction Stop | ForEach-Object { [string]$_.DeviceID }) } catch {}
+  return @($l | Where-Object { $_ } | ForEach-Object { $_.ToUpper() } | Select-Object -Unique)
+}
+$usbL = @(); if ($vols.Count) { $usbL = @(Get-UsbLetters) }
 if ($blAvail -and $S.blAvail -eq $false) { Add-Ev "B:avail:$($now.ToString('yyyyMMddHHmm'))" 'warn' 'bitlocker' 'BitLocker 기능이 새로 생겼습니다 — 설치한 적이 없다면 확인하세요' }
 function Read-Vol($v) {
   $r = @{ conv = -1; pct = 0; keys = 0; prot = 0 }
   try { $v2 = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -Filter "DeviceID='$($v.DeviceID -replace '\\', '\\')'" -ErrorAction Stop; if ($v2) { $v = $v2 } } catch {}
   $r.prot = [int]$v.ProtectionStatus
-  try { $cs = Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop; $r.conv = [int]$cs.ConversionStatus; $r.pct = [int]$cs.EncryptionPercentage } catch {}
+  try { $cs = Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop; if ([int64]$cs.ReturnValue -eq 0 -and $null -ne $cs.ConversionStatus) { $r.conv = [int]$cs.ConversionStatus; $r.pct = [int]$cs.EncryptionPercentage } } catch {}   # 잠긴 볼륨·읽기 실패는 -1 (판단하지 않음)
   try { $kp = Invoke-CimMethod -InputObject $v -MethodName GetKeyProtectors -Arguments @{ KeyProtectorType = [uint32]0 } -ErrorAction Stop; $r.keys = @($kp.VolumeKeyProtectorID | Where-Object { $_ }).Count } catch {}
   return $r
 }
-$bl = @()
+$bl = @(); $seen = @()
 foreach ($v in $vols) {
   $m = [string]$v.DriveLetter; if (-not $m) { continue }
+  $vk = [string]$v.DeviceID; if (-not $vk) { $vk = $m }                   # 상태는 볼륨 ID 로 기억 (드라이브 문자는 USB 를 바꿔 꽂으면 같은 문자가 다른 디스크가 됨)
+  $seen += $vk
+  $usb = ($usbL -contains $m.ToUpper()) -or ([string]$v.VolumeType -eq '2')   # VolumeType 2 = 이동식(BitLocker To Go)
   $x = Read-Vol $v
-  $prev = $S.bl[$m]
-  if (-not $prev -and $S.blAvail -eq $false) { $prev = '0|0|0' }          # 기능이 막 생긴 서버: 예전엔 암호화 안 된 것으로 본다
-  if (-not $prev -and $blCmd -and @(1, 2, 4) -contains $x.conv) { $prev = '0|0|0' }   # 이번에 BitLocker 명령을 봤는데 처음 보는 볼륨이 암호화 중
-  if ($prev) {
+  if ($x.conv -lt 0) { $bl += [ordered]@{ m = $m; conv = $x.conv; pct = 0; prot = $x.prot; keys = $x.keys; guarded = [bool]$S.guard[$m]; usb = $usb }; continue }   # 잠김·읽기 실패: 판단도 저장도 안 함
+  $prev = $S.bl[$vk]
+  if (-not $prev -and -not $usb -and $S.bl[$m]) { $prev = $S.bl[$m] }      # 1.10.9 이전(드라이브 문자로 기억) 상태 이어받기 — 고정 디스크만
+  if (-not $usb) {
+    # 처음 보는 고정 디스크는 '지금 암호화 진행 중(2)' 일 때만 새로 시작된 것으로 본다 (이미 다 암호화된(1) 디스크를 잘못 끄지 않게)
+    if (-not $prev -and $S.blAvail -eq $false -and $x.conv -eq 2) { $prev = '0|0|0' }   # 기능이 막 생긴 서버
+    if (-not $prev -and $blCmd -and $x.conv -eq 2) { $prev = '0|0|0' }                   # 이번에 BitLocker 명령을 봤는데 처음 보는 볼륨이 암호화 중
+  }
+  if ($prev -and $usb) {                                                    # USB: 꽂혀 있는 동안 암호화 안 됨(0) → 암호화 진행 중(2) 으로 바뀔 때만 알림 (자동 차단 안 함)
+    $pc = [int](($prev -split '\|')[0])
+    if ($pc -eq 0 -and $x.conv -eq 2) { Add-Ev "B:$($m):usbenc:$($now.ToString('yyyyMMddHHmm'))" 'warn' 'bitlocker' "USB 디스크에서 BitLocker 암호화가 시작됐습니다: $m ($($x.pct)%) — 직접 한 게 아니면 확인 (USB 는 자동 차단하지 않음)" }
+  } elseif ($prev) {
     $pv = $prev -split '\|'; $pc = [int]$pv[0]; $pk = [int]$pv[1]; $pp = [int]$pv[2]
     $mine = [string]$S.guard[$m]
     $started = $pc -eq 0 -and @(1, 2, 4) -contains $x.conv
@@ -315,9 +342,10 @@ foreach ($v in $vols) {
     } elseif ($pp -eq 0 -and $x.prot -eq 1) { Add-Ev "B:$($m):prot:$($now.ToString('yyyyMMddHHmm'))" 'warn' 'bitlocker' "BitLocker 보호가 켜졌습니다: $m" }
   }
   if ($x.conv -eq 0 -and $S.guard.ContainsKey($m)) { $S.guard.Remove($m) }    # 해독이 끝나면 잊는다
-  $bl += [ordered]@{ m = $m; conv = $x.conv; pct = $x.pct; prot = $x.prot; keys = $x.keys; guarded = [bool]$S.guard[$m] }
-  $S.bl[$m] = "$($x.conv)|$($x.keys)|$($x.prot)"
+  $bl += [ordered]@{ m = $m; conv = $x.conv; pct = $x.pct; prot = $x.prot; keys = $x.keys; guarded = [bool]$S.guard[$m]; usb = $usb }
+  $S.bl[$vk] = "$($x.conv)|$($x.keys)|$($x.prot)"
 }
+if (-not $blErr) { foreach ($k in @($S.bl.Keys)) { if ($seen -notcontains $k) { $S.bl.Remove($k) } } }   # 빠진 볼륨(뺀 USB)·예전 드라이브 문자 기록은 잊는다 → 다시 꽂으면 처음 보는 디스크
 $S.blAvail = $blAvail
 
 # ---- 섀도 복사본 ---- (3개 이상 있던 것이 절반 이하로 줄면 삭제 의심. 백업 프로그램이 잠깐 만드는 1~2개는 무시)

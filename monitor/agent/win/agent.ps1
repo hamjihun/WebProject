@@ -10,7 +10,7 @@ param(
 )
 
 $Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$AgentVersion = "1.10.9"   # installer.nsi VERSION 과 같게 유지
+$AgentVersion = "1.10.10"   # installer.nsi VERSION 과 같게 유지
 $DataDir = Join-Path $env:ProgramData "IMSMonitoringAgent"
 $StatusFile = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "agent.log"
@@ -227,8 +227,8 @@ function Test-BlFast {
   $hit = $false
   foreach ($v in $vols) {
     if (-not $v.DriveLetter) { continue }
-    try { $c = [int](Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop).ConversionStatus } catch { continue }
-    $k = [string]$v.DriveLetter
+    try { $cs = Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction Stop; if ([int64]$cs.ReturnValue -ne 0 -or $null -eq $cs.ConversionStatus) { continue }; $c = [int]$cs.ConversionStatus } catch { continue }
+    $k = [string]$v.DeviceID; if (-not $k) { $k = [string]$v.DriveLetter }   # 볼륨 ID 로 기억 — 다른 USB 를 같은 문자에 꽂아도 '변화' 로 보지 않음
     if ($script:blFast.ContainsKey($k) -and $script:blFast[$k] -ne $c -and @(1, 2, 4) -contains $c) { $hit = $true }
     $script:blFast[$k] = $c
   }
