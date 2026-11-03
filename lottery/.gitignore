@@ -1,3 +1,6 @@
 state.json
 state.json.tmp
+config.json
+접속주소.txt
+node/
 node_modules/
