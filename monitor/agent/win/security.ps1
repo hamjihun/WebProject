@@ -6,7 +6,7 @@
 # agent.conf: SEC_FAIL=20 (1분에 이만큼 로그인 실패하면 알림)
 param([string]$ConfPath = '')
 $ErrorActionPreference = 'SilentlyContinue'
-$Ver = '1.10.11'
+$Ver = '1.10.12'
 $DataDir = Join-Path $env:ProgramData 'IMSMonitoringAgent'
 $Out = Join-Path $DataDir 'security.json'
 $StFile = Join-Path $DataDir 'security-state.json'
@@ -85,9 +85,11 @@ foreach ($e in @(Q 'Security' @(1102, 4720, 4728, 4732, 4756, 4698, 4699, 4701) 
     Add-Ev $id 'crit' 'tamper' "보안 로그가 지워졌습니다 (계정 $u) — 흔적 지우기 의심" $t
   } elseif ($e.Id -eq 4720) {
     Add-Ev $id 'warn' 'account' "새 계정 생성: $($d.TargetUserName) (만든 계정 $($d.SubjectUserName))" $t
-  } elseif ($e.Id -eq 4699 -or $e.Id -eq 4701) {         # 예약 작업 삭제·끄기: 모니터링 작업이면 위험 (설치·제거 중 15분은 뺌)
+  } elseif ($e.Id -eq 4699 -or $e.Id -eq 4701) {         # 예약 작업 삭제·끄기: 에이전트 작업이면 위험 (설치·제거 중 15분은 뺌)
     $tn = [string]$d.TaskName
-    if ($tn -match 'IMSMonitoring|ServerMonitor' -and -not ($instT -and [math]::Abs(($t - $instT).TotalMinutes) -lt 15)) {
+    # 에이전트·감시자 작업만 본다. 수집기(ServerMonitorCollector)·백업(ServerMonitorBackup)은 setup-collector.cmd 가 지웠다 다시 만들고,
+    # 트레이·업데이트(IMSMonitoringAgentTray/Update) 작업도 설치·업데이트 때 늘 지웠다 만든다 → 알림 안 함 (1.10.12)
+    if ($tn -match '^\\?(IMSMonitoringAgent|IMSMonitoringAgentWatchdog|ServerMonitorAgent)$' -and -not ($instT -and [math]::Abs(($t - $instT).TotalMinutes) -lt 15)) {
       Add-Ev $id 'crit' 'tamper' "모니터링 작업이 $(if ($e.Id -eq 4699) { '삭제' } else { '중지(사용 안 함)' })됐습니다: $tn (계정 $($d.SubjectUserName)) — 에이전트를 끄려는 시도일 수 있음" $t
     }
   } elseif ($e.Id -eq 4698) {
