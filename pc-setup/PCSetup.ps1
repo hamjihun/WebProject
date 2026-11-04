@@ -293,7 +293,25 @@ $Worker = {
         try { $winOff = $Window.Current.IsOffscreen } catch { }
         if ($winOff) { return $all }
         # 화면에 실제로 보이는 것만 (InstallShield 등은 다른 페이지의 [설치]/[닫기] 버튼을 숨긴 채 갖고 있음)
-        return @($all | Where-Object { try { -not $_.Current.IsOffscreen } catch { $false } })
+        return @($all | Where-Object { Test-UIVisible $_ })
+    }
+
+    # 숨겨진 버튼 걸러내기: UI 자동화의 '화면 밖' 표시 + 실제 창(Win32) 표시 여부 + 크기
+    function Test-UIVisible($El) {
+        try {
+            $c = $El.Current
+            if ($c.IsOffscreen) { return $false }
+            if ($c.BoundingRectangle.IsEmpty -or $c.BoundingRectangle.Width -le 0 -or $c.BoundingRectangle.Height -le 0) { return $false }
+            $h = [IntPtr]$c.NativeWindowHandle
+            if ($h -ne [IntPtr]::Zero) {
+                if (-not ('PCSetup.Vis' -as [type])) {
+                    Add-Type -Namespace PCSetup -Name Vis -MemberDefinition '[DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hWnd);'
+                }
+                if (-not [PCSetup.Vis]::IsWindowVisible($h)) { return $false }
+            }
+            return $true
+        }
+        catch { return $false }
     }
 
     # 창 제목줄의 최소화/최대화/닫기(X) 버튼인지 (이름이 '닫기' 라서 설치 창을 닫아버리는 것 방지)
@@ -1674,19 +1692,53 @@ public struct POINT { public int X; public int Y; }
             try { Set-Reg $key $name 1; Write-Log "엣지: $($items[$name])" 'OK' }
             catch { Write-Log "엣지: $($items[$name]) 실패 - $($_.Exception.Message)" 'ERROR' }
         }
-        # 도구 모음 '다운로드' 단추는 권장값을 엣지가 지원하지 않아 고정값으로 (항상 표시)
-        try {
-            Set-Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'ShowDownloadsToolbarButton' 1
-            Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended' -Name 'ShowDownloadsToolbarButton' -ErrorAction SilentlyContinue
-            Write-Log '엣지: 도구 모음에 다운로드 단추 항상 표시' 'OK'
+        # 도구 모음 '다운로드' 단추: 정책으로 넣으면 잠겨서 직원이 못 바꾸므로 정책은 지우고,
+        # 엣지 프로필 설정(Preferences)에 '표시' 로 넣음 (직원이 언제든 끌 수 있음)
+        foreach ($k in 'HKLM:\SOFTWARE\Policies\Microsoft\Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended') {
+            Remove-ItemProperty -LiteralPath $k -Name 'ShowDownloadsToolbarButton' -ErrorAction SilentlyContinue
         }
-        catch { Write-Log "엣지: 다운로드 단추 표시 실패 - $($_.Exception.Message)" 'ERROR' }
+        Set-EdgeDownloadButton
         Add-BrowserBookmarks 'edge' '엣지'
         New-EdgeDesktopLinks
         # 직원이 바꿀 수 있게: 예전에 고정값(조직에서 관리)으로 넣은 것과 셋팅 중에만 필요한 설정은 지움
         $extra = @('StartupBoostEnabled', 'BackgroundModeEnabled', 'ManagedFavorites')
         Clear-LockedPolicies 'edge' (@($items.Keys) + $extra) '엣지'
         Close-Browser 'msedge' '엣지'
+    }
+
+    # 엣지 프로필 설정 파일에 '도구 모음에 다운로드 단추 표시' 켜기 (엣지가 꺼져 있어야 함)
+    # 파일 전체를 다시 쓰지 않고 해당 값만 글자로 바꿈 (설정 파일이 깨지지 않도록)
+    function Set-EdgeDownloadButton {
+        $dir = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data\Default'
+        $file = Join-Path $dir 'Preferences'
+        Get-Process -Name msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        try {
+            $key = '"show_toolbar_downloads_button"'
+            if (Test-Path -LiteralPath $file) {
+                $txt = [IO.File]::ReadAllText($file)
+                if ($txt -match [regex]::Escape($key) + '\s*:\s*(true|false)') {
+                    $txt = [regex]::Replace($txt, [regex]::Escape($key) + '\s*:\s*(true|false)', "${key}:true")
+                }
+                elseif (($m = [regex]::Match($txt, '"browser"\s*:\s*\{')).Success) {
+                    # "browser":{ 바로 뒤에 값을 넣음 (빈 {} 이면 쉼표 없이)
+                    $rest = $txt.Substring($m.Index + $m.Length).TrimStart()
+                    $ins = if ($rest.StartsWith('}')) { "${key}:true" } else { "${key}:true," }
+                    $txt = $txt.Insert($m.Index + $m.Length, $ins)
+                }
+                else {
+                    $txt = $txt -replace '^\s*\{', ('{"browser":{' + "${key}:true},")
+                }
+                [IO.File]::WriteAllText($file, $txt, (New-Object System.Text.UTF8Encoding($false)))
+            }
+            else {
+                # 엣지를 아직 한 번도 열지 않은 새 PC
+                if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+                [IO.File]::WriteAllText($file, ('{"browser":{' + "${key}:true}}"), (New-Object System.Text.UTF8Encoding($false)))
+            }
+            Write-Log '엣지: 도구 모음에 다운로드 단추 표시 (직원이 바꿀 수 있음)' 'OK'
+        }
+        catch { Write-Log "엣지: 다운로드 단추 표시 실패 - $($_.Exception.Message)" 'WARN' }
     }
 
     # 바탕화면에 엣지로 여는 사이트 바로가기 (예: 그룹웨어) - config browser.desktopShortcuts
