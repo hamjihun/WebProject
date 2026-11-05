@@ -22,3 +22,11 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         with open(cfg, 'rb') as fh:
             z.writestr(info, fh.read())
 print(out, os.path.getsize(out) // 1024, 'KB')
+
+# C:\ims\event 같은 웹 폴더에 붙여넣기만 하는 단독 실행용 (서버 없음)
+static_out = os.path.join(ROOT, 'dist', 'event_paste.zip')
+with zipfile.ZipFile(static_out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+    for src, dst in [('index.html', 'index.html'), ('roster_template.xlsx', 'roster_template.xlsx'),
+                     ('vendor/xlsx.full.min.js', 'vendor/xlsx.full.min.js'), ('event_README.txt', 'README.txt')]:
+        z.write(os.path.join(ROOT, src), 'event/' + dst)
+print(static_out, os.path.getsize(static_out) // 1024, 'KB')

@@ -1101,7 +1101,7 @@ function openSettings(){
     <div style="font-size:13px;color:var(--dim);margin-bottom:6px">A·B그룹 최종 추첨이 모두 끝나면 진행됩니다. 비워두면 통합 추첨 없이 끝납니다.</div>
     <textarea id="s-grand" rows="2">${esc(S.grand.prizes)}</textarea></div>
   <div class="mbtns"><label class="chk"><input type="checkbox" id="s-one" ${S.onePrize?'checked':''}> 1인 1경품 (당첨되면 그 사람의 남은 응모권은 이후 추첨에서 제외)</label>
-  <span class="sp"></span><button class="btn" id="s-csv">결과 CSV 다운로드</button><button class="btn danger" id="s-factory">전체 초기화</button>
+  <span class="sp"></span><button class="btn" id="s-bak">💾 진행 백업 저장</button><button class="btn" id="s-res">📂 백업 불러오기</button><input type="file" id="s-resf" accept=".json" hidden><button class="btn" id="s-csv">결과 CSV 다운로드</button><button class="btn danger" id="s-factory">전체 초기화</button>
   <button class="btn" id="s-close">닫기</button><button class="btn ok" id="s-save">저장</button></div>
   <p class="help" style="margin-top:12px">· 진행 상황은 자동 저장되어(서버 사용 시 서버에, 파일로 열면 이 브라우저에) 새로고침·다음날에도 이어서 진행됩니다.<br>· 단축키: <b>스페이스바</b> 시작/일시정지/다음 추첨, <b>F</b> 전체화면</p>`;
   $('#setModal').classList.add('show');
@@ -1124,8 +1124,29 @@ function openSettings(){
   $('#s-close').onclick=closeSettings;
   $('#s-save').onclick=saveSettings;
   $('#s-csv').onclick=exportCSV;
+  $('#s-bak').onclick=backupState;
+  $('#s-res').onclick=()=>$('#s-resf').click();
+  $('#s-resf').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)restoreState(f)};
   $('#s-factory').onclick=()=>{const why=prompt('명단·설정·진행 기록을 모두 처음 상태로 되돌립니다.\n초기화 사유를 입력하세요 (추첨 로그에 남습니다).');if(why==null)return;const keepLog=S.audit;S=fresh();S.audit=keepLog;audit('전체초기화',`명단·설정·진행 기록 전체 초기화 · 사유: ${why||'(미입력)'}`);KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});save();closeSettings();renderAll();emit('state')};
   $$('[data-reset]').forEach(b=>b.onclick=()=>{const k=b.dataset.reset;const why=prompt(`${k}그룹의 탈락·당첨 기록을 지우고 처음부터 다시 합니다.\n초기화 사유를 입력하세요 (추첨 로그에 남습니다).`);if(why==null)return;const pr=S.prog[k];audit('초기화',`${k}그룹 진행 기록 초기화 (탈락 ${pr.log.length}매 · 당첨 ${pr.winners.length}명 기록 삭제) · 사유: ${why||'(미입력)'}`);S.prog[k]=null;S.grandWinners=S.grandWinners.filter(w=>w.k!==k);ensureProg(k);save();closeSettings();renderAll();emit('state')});
+}
+/* ---------- 진행 백업 (브라우저 저장소가 지워질 때 대비) ---------- */
+function backupState(){
+  const d=new Date(),name=`lottery_backup_${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}.json`;
+  audit('백업',`진행 백업 파일 저장 (${name})`);save();
+  saveBlob(new Blob([JSON.stringify(S)],{type:'application/json'}),name);
+  updateUI();
+}
+async function restoreState(file){
+  let x;try{x=JSON.parse(await file.text())}catch(e){alert('백업 파일을 읽지 못했습니다.');return}
+  if(!okState(x)){alert('이 프로그램의 백업 파일이 아닙니다.');return}
+  const n=KEYS.map(k=>{const p=(x.prog||{})[k];return`${k}그룹: 탈락 ${p?p.log.length:0}매 · 당첨 ${p?p.winners.length:0}명`}).join('\n');
+  if(!confirm(`백업 파일로 되돌립니다. 지금 화면의 진행 상황은 백업 내용으로 바뀝니다.\n\n${n}\n로그 ${(x.audit||[]).length}건\n\n계속할까요?`))return;
+  const snd=S.sound;S=x;fixState();S.sound=snd;
+  KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});
+  audit('백업복원',`백업 파일에서 복원 (${file.name}) · ${n.replace(/\n/g,' / ')}`);
+  save();closeSettings();renderAll();emit('state');
+  const v=verifyAudit();if(!v.ok)alert(`주의: 백업 파일의 로그 ${v.at}번 기록에서 해시가 맞지 않습니다. 파일이 수정되었을 수 있습니다.`);
 }
 function closeSettings(){$('#setModal').classList.remove('show')}
 function saveSettings(){
@@ -1162,12 +1183,13 @@ function exportCSV(){
     p.log.forEach((e,i)=>{const t=mm.tickets[e.t];L.push([k,e.r+'차 탈락',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,'',e.at?fmtISO(e.at):''])});
     p.winners.forEach((w,i)=>{const t=mm.tickets[w.t];L.push([k,'당첨',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,w.prize,w.at?fmtISO(w.at):''])});}
   S.grandWinners.forEach((w,i)=>{const t=M[w.k].tickets[w.t];L.push([w.k,'통합 당첨',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,w.prize,w.at?fmtISO(w.at):''])});
-  downloadCSV(L,'연말경품추첨_결과.csv');
+  downloadCSV(L,'lottery_result.csv');
 }
 function downloadCSV(L,name){
   const csv='\ufeff'+L.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\r\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=name;a.click();
+  saveBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}),name);
 }
+function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.style.display='none';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
 function openLog(){
   const v=verifyAudit(),L=S.audit;
   $('#logBody').innerHTML=`<h2>📜 추첨 로그</h2>
@@ -1180,7 +1202,7 @@ function openLog(){
   $('#logModal').classList.add('show');
   $('#l-close').onclick=()=>$('#logModal').classList.remove('show');
   $('#l-res').onclick=exportCSV;
-  $('#l-csv').onclick=()=>downloadCSV([['번호','일시','구분','내용','해시']].concat(L.map(e=>[e.seq,fmtISO(e.at),e.type,e.msg,e.h])),'연말경품추첨_로그.csv');
+  $('#l-csv').onclick=()=>downloadCSV([['번호','일시','구분','내용','해시']].concat(L.map(e=>[e.seq,fmtISO(e.at),e.type,e.msg,e.h])),'lottery_log.csv');
 }
 
 /* ---------- 엑셀 ---------- */
@@ -1261,7 +1283,7 @@ function exportXlsx(){
   const aoa=[['그룹','근무처','부서','성명','응모권']];
   KEYS.forEach(k=>{const ta=$(`#s-${k}-data`);parseData(ta?ta.value:S.groups[k].data).forEach(r=>aoa.push([k,r.site,r.dept,r.name,r.n]))});
   const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:6},{wch:12},{wch:16},{wch:12},{wch:8}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'명단');XLSX.writeFile(wb,'경품추첨_명단양식.xlsx');
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'명단');XLSX.writeFile(wb,'lottery_roster.xlsx');
 }
 
 /* ---------- 수신 (관람 / 현황판 창) ---------- */
