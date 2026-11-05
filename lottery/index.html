@@ -10,41 +10,89 @@
 :root{--bg:#070b1f;--line:rgba(255,255,255,.12);--panel:rgba(12,18,48,.72);--gold:#ffd166;--red:#ff4d6d;--text:#f4f6ff;--dim:#9aa3c7}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;color:var(--text);font-family:'Noto Sans KR',system-ui,'Malgun Gothic',sans-serif}
-body{background:radial-gradient(ellipse at 50% -10%,#24306e 0%,#0b1130 45%,#050816 100%);background-color:var(--bg)}
+body{background:linear-gradient(180deg,#0e1538 0%,#070b1f 100%);background-color:var(--bg)}
 button,select,input,textarea{font:inherit;color:inherit}
-#snow,#fx{position:fixed;inset:0;pointer-events:none;width:100vw;height:100vh}
-#snow{z-index:0}#fx{z-index:1000}
+#fx{position:fixed;inset:0;pointer-events:none;width:100vw;height:100vh;z-index:1000}
 #app{position:relative;z-index:1;height:100vh;display:grid;grid-template-rows:auto 1fr}
+#body{display:grid;grid-template-columns:var(--sw,300px) 1fr;min-height:0;transition:grid-template-columns .25s}
+body.side-hidden #body,body.viewer #body{--sw:0px}
+#body>main{grid-column:2;min-width:0}
+#left>*{min-width:0}
+.clock{font-size:1.05vw;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap;padding:.3em .8em;border-radius:.5em;background:rgba(255,255,255,.06)}
+.hsp{flex:1}
+/* 왼쪽 진행 패널 */
+#side{min-width:0;overflow:hidden auto;background:rgba(4,7,22,.75);border-right:1px solid var(--line);font-size:14px;display:flex;flex-direction:column}
+body.side-hidden #side{visibility:hidden}
+.sd-sec{padding:14px 16px;border-bottom:1px solid var(--line)}
+.sd-h{font-size:12px;color:var(--dim);font-weight:700;letter-spacing:.08em;margin-bottom:8px}
+.sd-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.sd-tabs .tab{font-size:14px;padding:8px 0}
+.sd-title{font-weight:900;font-size:15px;margin-bottom:4px}
+.sd-next{color:var(--dim);font-size:13px;margin-bottom:12px;line-height:1.5}
+.sd-next b{color:var(--gold)}
+#mainBtn{width:100%;font-size:17px;font-weight:900;padding:14px 10px;border:none;border-radius:10px;cursor:pointer;background:#e63950;color:#fff}
+#mainBtn:hover{filter:brightness(1.1)}
+#mainBtn.gold{background:#ffc233;color:#3a2500}
+#mainBtn.pause{background:#3d4a8f}
+#mainBtn:disabled{opacity:.5;cursor:default;filter:none}
+.sd-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;color:var(--dim);font-size:13px}
+.sd-row .btn{font-size:13px;padding:5px 8px}
+.rec{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px;line-height:1.5;margin-bottom:8px}
+.rec dt{font-weight:700;white-space:nowrap}
+.rec dd{margin:0;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+.rec dd.ok{color:#80ed99}.rec dd.now{color:var(--gold)}
+.sd-roster{font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:10px}
+.sd-roster b{color:var(--text)}
+.sd-roster code{color:var(--gold);font-size:13px}
+.sd-roster .warn{color:#ffb3c1}
+.btn.wide{display:block;width:100%;text-align:left;font-size:13.5px;padding:9px 12px;margin-top:6px}
+.sd-foot{margin-top:auto;padding:12px 16px;font-size:12px;color:var(--dim);line-height:1.6}
+#sideToggle{font-size:1.1vw;padding:.35em .6em}
+/* 기록 표 */
+.logtbl{width:100%;border-collapse:collapse;font-size:13px}
+.logtbl th,.logtbl td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left;vertical-align:top}
+.logtbl th{color:var(--dim);font-weight:700;position:sticky;top:0;background:#121a3f}
+.logtbl td.t{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
+.logtbl td.h{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--dim)}
+.logwrap{max-height:58vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.verify{padding:8px 12px;border-radius:8px;margin:8px 0 12px;font-size:14px}
+.login{width:min(380px,92vw)}
+.login label{display:block;font-size:13px;color:var(--dim);margin:10px 0 0}
+.login input{display:block;width:100%;margin-top:4px;background:#0a1030;border:1px solid var(--line);border-radius:6px;padding:9px 10px;font-size:15px}
+.lgmsg{min-height:1.4em;margin-top:10px;color:#ffb3c1;font-size:13px}
+.verify.ok{background:rgba(128,237,153,.12);color:#80ed99}.verify.bad{background:rgba(255,77,109,.15);color:#ffb3c1}
 .bigfont{font-family:'Black Han Sans','Noto Sans KR',sans-serif;font-weight:400}
 
 /* header */
-header{display:flex;align-items:center;gap:1.1vw;padding:.9vh 1.2vw;background:rgba(0,0,0,.38);border-bottom:1px solid var(--line)}
-.brand{font-size:1.7vw;color:var(--gold);white-space:nowrap;text-shadow:0 0 1.2vw rgba(255,209,102,.55)}
-.tabs{display:flex;gap:.4vw}
-.tab{white-space:nowrap;font-size:1.05vw;font-weight:900;padding:.45em 1em;border-radius:.6em;border:1px solid var(--line);background:rgba(255,255,255,.06);cursor:pointer}
-.tab.active{background:var(--gold);color:#2b1d00;border-color:var(--gold)}
+header{display:flex;align-items:center;gap:.9vw;padding:.7vh 1vw .7vh 1.2vw;background:rgba(0,0,0,.4);border-bottom:1px solid var(--line);min-width:0}
+.brand{font-size:1.45vw;color:var(--gold);white-space:nowrap}
+.tabs,.views{display:flex;gap:.3vw}
+.tab,.vbtn{white-space:nowrap;font-size:.9vw;font-weight:900;padding:.42em .85em;border-radius:.6em;border:1px solid var(--line);background:rgba(255,255,255,.06);cursor:pointer}
+.tab.active,.vbtn.active{background:var(--gold);color:#2b1d00;border-color:var(--gold)}
+.vbtn{font-weight:700}
 .tab:disabled{cursor:not-allowed}.tab:disabled:not(.active){opacity:.35}
-.phase{font-size:1.1vw;font-weight:900;padding:.35em .9em;border-radius:99px;background:rgba(255,77,109,.18);border:1px solid rgba(255,77,109,.6);color:#ffb3c1;white-space:nowrap}
+.phase{font-size:1vw;font-weight:900;padding:.32em .85em;border-radius:99px;background:rgba(255,77,109,.18);border:1px solid rgba(255,77,109,.6);color:#ffb3c1;white-space:nowrap}
 .phase.final{background:rgba(255,209,102,.16);border-color:var(--gold);color:var(--gold)}
-.stats{display:flex;gap:1.4vw;margin-left:auto}
+.phase.live{background:rgba(255,0,60,.25);border-color:#ff3355;color:#fff;animation:blink 1.6s infinite}
+.viewers{font-size:.85vw;color:var(--dim);white-space:nowrap}
+.stats{display:flex;gap:1.1vw;margin-left:auto}
 .stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05}
-.stat small{font-size:.72vw;color:var(--dim);white-space:nowrap}
-.stat b{white-space:nowrap;font-size:1.75vw;font-variant-numeric:tabular-nums}
+.stat small{font-size:.7vw;color:var(--dim);white-space:nowrap}
+.stat b{font-size:1.6vw;font-variant-numeric:tabular-nums;white-space:nowrap}
 .stat b.g{color:var(--gold)}
-.stat span{font-size:.8vw;color:var(--dim)}
-.controls{display:flex;gap:.4vw;align-items:center}
-.btn{font-size:.95vw;padding:.5em .8em;border-radius:.6em;border:1px solid var(--line);background:rgba(255,255,255,.08);cursor:pointer;white-space:nowrap}
+.stat span{font-size:.75vw;color:var(--dim)}
+.controls{display:flex;gap:.35vw;align-items:center}
+.btn{font-size:.9vw;padding:.5em .75em;border-radius:.6em;border:1px solid var(--line);background:rgba(255,255,255,.08);cursor:pointer;white-space:nowrap}
 .btn:hover{background:rgba(255,255,255,.16)}
-select.btn{appearance:none;padding-right:.8em}
+select.btn{appearance:none}
 select.btn option{color:#000}
-#mainBtn{font-size:1.25vw;font-weight:900;padding:.55em 1.2em;border:none;background:linear-gradient(180deg,#ff6b81,#e63950);box-shadow:0 0 1.4vw rgba(255,77,109,.55);min-width:15vw}
-#mainBtn.gold{background:linear-gradient(180deg,#ffe08a,#ffb703);color:#3a2500;box-shadow:0 0 1.4vw rgba(255,209,102,.6)}
-#mainBtn.pause{background:linear-gradient(180deg,#5b6bb5,#36428a);box-shadow:none}
-#mainBtn:disabled{opacity:.55;cursor:default}
+body.viewer .host-only{display:none!important}
+body.local .server-only{display:none!important}
 
 /* layout */
-main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:0}
+main{display:grid;grid-template-columns:31vw 1fr;grid-template-rows:1fr;gap:1vw;padding:1vw;min-height:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:1vw;backdrop-filter:blur(4px)}
+#banner{display:none}
 #left{display:grid;grid-template-rows:auto 1fr;gap:1vw;min-height:0}
 #stage{padding:1.4vh 1.2vw 1.6vh}
 .stage-label{font-size:1.15vw;font-weight:900;color:var(--gold);text-align:center;letter-spacing:.05em}
@@ -72,6 +120,10 @@ main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:
 .prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff4d6d,#ffd166);transition:width .6s}
 .ptext{display:flex;justify-content:space-between;font-size:1vw;color:var(--dim);margin-top:.6vh;font-variant-numeric:tabular-nums}
 .ptext b{color:var(--text)}
+.reg{margin-top:1.4vh;text-align:center;font-size:1vw;color:var(--dim);line-height:1.6}
+.reg b{color:var(--gold)}
+.reg .warn{color:#ffb3c1}
+.reg .btn{font-size:1vw;margin-top:.6vh}
 
 #logWrap{display:flex;flex-direction:column;min-height:0;padding:1.2vh 1vw;overflow:hidden}
 .log-title{font-size:1.15vw;font-weight:900;color:var(--gold);margin-bottom:.8vh;display:flex;justify-content:space-between}
@@ -81,31 +133,40 @@ main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:
 #log li .no{color:var(--dim);font-variant-numeric:tabular-nums}
 #log li .nm{font-weight:900}
 #log li .dp{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#log li .rd{font-size:.8em;color:#ffb3c1}
+#log li .tm{font-size:.78em;color:var(--dim);font-variant-numeric:tabular-nums}
 #log li.new{animation:slideIn .6s}
-#log li.win{grid-template-columns:auto 1fr auto;background:linear-gradient(90deg,rgba(255,209,102,.22),rgba(255,209,102,.04));margin-bottom:.4em;font-size:1.3vw}
+#log li.win{grid-template-columns:auto 1fr auto;background:linear-gradient(90deg,rgba(255,209,102,.22),rgba(255,209,102,.04));margin-bottom:.4em;font-size:1.2vw}
 #log li.win .pz{color:var(--gold);font-weight:900}
+#log li.win.grand{background:linear-gradient(90deg,rgba(255,255,255,.35),rgba(255,209,102,.15))}
 @keyframes slideIn{0%{transform:translateX(-30%);opacity:0;background:var(--red)}40%{transform:none;opacity:1;background:rgba(255,77,109,.7)}100%{background:transparent}}
 
 /* board */
 #boardWrap{padding:.8vw;min-height:0;min-width:0;overflow:hidden}
-#board{height:100%;column-width:11.5em;column-gap:.6em;column-fill:auto;font-size:18px}
-.dept{break-inside:avoid;margin-bottom:.5em;padding:.3em .4em .35em;border-radius:.5em;background:rgba(255,255,255,.045);border-left:.26em solid var(--c);transition:background .4s}
+#board{height:100%;display:flex;gap:.9em;font-size:18px}
+.gb{display:flex;flex-direction:column;min-width:0;min-height:0}
+.gbh{display:none;align-items:baseline;flex-wrap:wrap;gap:.2em .8em;padding:.1em .3em .4em;margin-bottom:.4em;border-bottom:2px solid rgba(255,209,102,.4);white-space:nowrap;overflow:hidden;min-width:0}
+.gbh b{font-size:1.15em;color:var(--gold)}
+.gbh .gph{font-size:.8em;padding:.05em .6em;border-radius:99px;border:1px solid rgba(255,77,109,.6);color:#ffb3c1}
+.gbh span{font-size:.85em;color:var(--dim)}
+.gbh .g{color:var(--gold);font-size:1.15em}.gbh .r{color:var(--red);font-size:1.15em}
+.gbh .fp{margin-left:auto;font-size:.7em;font-family:ui-monospace,Consolas,monospace}
+.gcols{flex:1;min-height:0;column-width:11.5em;column-gap:.6em;column-fill:auto}
+.dept{break-inside:avoid;margin-bottom:.5em;padding:.3em .4em .35em;border-radius:.5em;background:rgba(255,255,255,.045);border-left:.26em solid var(--c)}
 .dept.flash{animation:dflash 1.6s}
 @keyframes dflash{0%{background:rgba(255,77,109,.45)}100%{background:rgba(255,255,255,.045)}}
-.dept.wiped{opacity:.45}
+.dept.wiped{opacity:.5}
 .dh{display:flex;justify-content:space-between;align-items:baseline;gap:.4em;font-weight:900;font-size:.9em;line-height:1.2}
 .dh em{font-style:normal;font-weight:400;font-size:.75em;color:var(--c);margin-left:.35em}
 .dc{font-size:.78em;color:var(--dim);font-weight:400;white-space:nowrap;font-variant-numeric:tabular-nums}
 .dc b{color:var(--gold);font-weight:900}
+.dc i{font-style:normal;color:var(--red);font-weight:700;margin-left:.3em}
 .bar{height:.16em;margin:.2em 0 .25em;border-radius:9px;background:rgba(255,255,255,.08);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--c);transition:width .8s}
 .chips{display:flex;flex-wrap:wrap;gap:.18em}
-.chip{position:relative;display:inline-flex;align-items:center;gap:.28em;padding:.08em .32em;border-radius:.35em;background:rgba(255,255,255,.08);font-size:.8em;line-height:1.4;white-space:nowrap;transition:opacity .8s}
+.chip{position:relative;display:inline-flex;align-items:center;gap:.28em;padding:.08em .32em;border-radius:.35em;background:rgba(255,255,255,.08);font-size:.8em;line-height:1.4;white-space:nowrap;transition:opacity .8s,background .8s}
 .pips{display:inline-flex;gap:.12em}
 .pips i{width:.42em;height:.42em;border-radius:50%;background:var(--gold);box-shadow:0 0 .3em rgba(255,209,102,.75);transition:background .5s}
-.pips i.x{background:#4a4f6e;box-shadow:none}
-.pips i.v{background:#4a4f6e;box-shadow:none}
+.pips i.x,.pips i.v{background:#4a4f6e;box-shadow:none}
 .pips i.w{background:#fff;box-shadow:0 0 .5em #fff}
 .chip.dead{opacity:.3}
 .chip.dead .nm{text-decoration:line-through;text-decoration-thickness:.12em;text-decoration-color:var(--red)}
@@ -116,10 +177,52 @@ main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:
 .chip.whit{animation:whit 3s;z-index:5}
 @keyframes whit{0%{transform:scale(2);box-shadow:0 0 2em #fff}100%{transform:none}}
 
+/* ===== 화면 1: 추첨 화면 ===== */
+body.view-draw #boardWrap{display:none}
+body.view-draw main{grid-template-columns:1fr}
+body.view-draw #left{grid-template-columns:1.8fr 1fr;grid-template-rows:1fr}
+body.view-draw #stage{display:flex;flex-direction:column;justify-content:center;padding:3vh 3vw}
+body.view-draw .stage-label{font-size:2vw}
+body.view-draw .reel{padding:6vh 1vw 5vh;margin:2.5vh 0 2vh}
+body.view-draw .rname{font-size:10.5vw}
+body.view-draw .rdept{font-size:2.5vw}
+body.view-draw .stamp{font-size:4.4vw;right:2vw;top:2vh}
+body.view-draw .rsub{font-size:2.1vw}
+body.view-draw .prog{height:1.6vh;margin-top:3vh}
+body.view-draw .ptext{font-size:1.5vw}
+body.view-draw .reg{font-size:1.3vw}
+body.view-draw .reg .btn{font-size:1.2vw}
+body.view-draw .log-title{font-size:1.6vw}
+body.view-draw #log li{font-size:1.45vw;grid-template-columns:2.8em 5.2em 1fr auto}
+body.view-draw #log li.win{font-size:1.5vw}
+
+/* ===== 화면 2: 탈락 현황판 ===== */
+body.view-board #left{display:none}
+body.view-board main{grid-template-columns:1fr;grid-template-rows:auto 1fr;gap:.8vw}
+body.view-board #banner{display:flex}
+body.view-board .gbh{display:flex}
+body.view-board .chip.dead{opacity:.9;background:rgba(255,77,109,.3);color:#ffc2cd}
+body.view-board .chip.hit{animation:hit 4s}
+.banner{align-items:center;gap:1.4vw;padding:1vh 1.6vw;border-radius:1vw;background:linear-gradient(90deg,rgba(255,77,109,.22),rgba(12,18,48,.72) 60%);border:1px solid rgba(255,77,109,.45);font-size:1.5vw;white-space:nowrap;overflow:hidden}
+.banner .bt{font-weight:900;color:#fff;background:var(--red);padding:.15em .7em;border-radius:.4em;font-size:.85em}
+.banner b{font-size:1.6em;font-family:'Black Han Sans','Noto Sans KR',sans-serif;font-weight:400}
+.banner .bd{color:var(--dim)}
+.banner .bx{color:var(--gold)}
+.banner .bx.red{color:var(--red)}
+.banner .bp{margin-left:auto;color:var(--dim);font-size:.85em}
+.banner .bp b{font-size:1.2em;font-family:inherit;color:var(--text)}
+.banner.win{background:linear-gradient(90deg,rgba(255,209,102,.35),rgba(12,18,48,.72) 60%);border-color:var(--gold)}
+.banner.win .bt{background:var(--gold);color:#3a2500}
+.banner.win b{color:var(--gold)}
+.banner.idle{background:var(--panel);border-color:var(--line)}
+.banner.idle .bt{background:rgba(255,255,255,.12)}
+.banner.flash{animation:bflash 1.2s}
+@keyframes bflash{0%{filter:brightness(2.2)}100%{filter:none}}
+
 /* overlays */
 .ov{position:fixed;inset:0;z-index:900;display:none;align-items:center;justify-content:center;text-align:center;background:rgba(3,5,18,.86);backdrop-filter:blur(6px);cursor:pointer}
 .ov.show{display:flex}
-.ov h1{margin:0;font-size:6.5vw;color:var(--gold);text-shadow:0 0 3vw rgba(255,209,102,.5);animation:pop .6s cubic-bezier(.2,1.5,.4,1)}
+.ov h1{margin:0;font-size:6vw;color:var(--gold);text-shadow:0 0 3vw rgba(255,209,102,.5);animation:pop .6s cubic-bezier(.2,1.5,.4,1)}
 .ov p{font-size:2.3vw;margin:2vh 0 0;line-height:1.5}
 .ov p b{color:var(--gold)}
 .ov p small{font-size:.7em;color:var(--dim)}
@@ -127,12 +230,13 @@ main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:
 .ov .num.go{animation:pop .9s ease-out}
 .hint{margin-top:4vh;font-size:1.1vw;color:var(--dim)}
 @keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+@keyframes blink{50%{opacity:.35}}
 .final{background:radial-gradient(ellipse at 50% 40%,rgba(40,30,90,.92),rgba(2,3,12,.97) 70%);overflow:hidden}
 .spot{position:absolute;left:50%;top:45%;width:220vmax;height:220vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,rgba(255,209,102,.07) 0 8deg,transparent 8deg 16deg);animation:rot 40s linear infinite;opacity:.5}
 .final.won .spot{opacity:1;background:repeating-conic-gradient(from 0deg,rgba(255,209,102,.16) 0 8deg,transparent 8deg 16deg);animation-duration:14s}
 @keyframes rot{to{transform:translate(-50%,-50%) rotate(360deg)}}
 .f-in{position:relative}
-.f-rank{font-size:1.6vw;color:var(--dim);letter-spacing:.2em}
+.f-rank{font-size:1.6vw;color:var(--dim);letter-spacing:.15em}
 .f-prize{font-size:5.5vw;color:var(--gold);margin:.5vh 0 3vh;text-shadow:0 0 2vw rgba(255,209,102,.6)}
 .f-reel{min-width:56vw;padding:3vh 3vw;border-radius:2vw;border:.3vw solid rgba(255,255,255,.3);background:rgba(0,0,0,.35)}
 .f-reel #fName{font-size:11vw;line-height:1.1;white-space:nowrap}
@@ -145,57 +249,75 @@ main{display:grid;grid-template-columns:31vw 1fr;gap:1vw;padding:1vw;min-height:
 .f-msg small{display:block;font-size:.4em;color:var(--dim);margin-top:.6vh}
 .final:not(.won) .hint{visibility:hidden}
 .final:not(.won) .f-msg{animation:blink 1s infinite}
-@keyframes blink{50%{opacity:.35}}
 
 /* settings */
 .modal{position:fixed;inset:0;z-index:950;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7)}
 .modal.show{display:flex}
-.modal-in{width:min(1200px,94vw);max-height:92vh;overflow:auto;background:#121a3f;border:1px solid var(--line);border-radius:14px;padding:22px 26px;font-size:15px}
-.modal-in h2{margin:0 0 6px;color:var(--gold)}
+.modal-in{width:min(1240px,95vw);max-height:93vh;overflow:auto;background:#121a3f;border:1px solid var(--line);border-radius:14px;padding:22px 26px;font-size:15px}
+.modal-in h2{margin:0 0 10px;color:var(--gold)}
 .modal-in .help{color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 14px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .gbox{border:1px solid var(--line);border-radius:10px;padding:14px;background:rgba(255,255,255,.03)}
 .gbox h3{margin:0 0 10px;font-size:17px}
 .gbox label{display:block;font-size:13px;color:var(--dim);margin:8px 0 4px}
-.gbox input,.gbox textarea{width:100%;background:#0a1030;border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:14px}
+.gbox input,.gbox textarea,.gbox2 textarea{width:100%;background:#0a1030;border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:14px}
 .gbox textarea{resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
 .row3{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.ginfo{font-size:13px;color:var(--gold);margin-top:6px}
-.mbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;align-items:center}
-.mbtns .btn{font-size:14px}
+.ginfo{font-size:13px;color:var(--text);margin-top:8px;line-height:1.7;background:rgba(255,209,102,.07);border-radius:6px;padding:6px 9px}
+.ginfo b{color:var(--gold)}
+.ginfo .bad{color:var(--red);font-weight:700}
+.mbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.mbtns .btn,.upl .btn{font-size:13.5px}
 .mbtns .sp{flex:1}
 .btn.danger{border-color:rgba(255,77,109,.6);color:#ffb3c1}
 .btn.ok{background:var(--gold);color:#2b1d00;font-weight:900;border-color:var(--gold)}
 .chk{display:flex;align-items:center;gap:8px;font-size:14px}
-.phase.live{background:rgba(255,0,60,.25);border-color:#ff3355;color:#fff;animation:blink 1.6s infinite}
-.viewers{font-size:.9vw;color:var(--dim);white-space:nowrap}
-.reg{margin-top:1.4vh;text-align:center;font-size:1vw;color:var(--dim)}
-.reg .btn{font-size:1vw;margin-top:.6vh}
-body.viewer .host-only{display:none!important}
 .upl{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.upl .btn{font-size:13px}
-.drop{border:2px dashed rgba(255,209,102,.5);border-radius:10px;padding:14px;text-align:center;color:var(--dim);margin-bottom:14px}
+.drop{border:2px dashed rgba(255,209,102,.5);border-radius:10px;padding:14px;text-align:center;color:var(--dim);margin-bottom:14px;cursor:pointer}
 .drop.over{background:rgba(255,209,102,.1)}
 .drop b{color:var(--gold)}
+.gbox2{border:1px solid rgba(255,209,102,.4);border-radius:10px;padding:12px 14px;margin-top:16px;background:rgba(255,209,102,.05)}
+.gbox2 h3{margin:0 0 6px;font-size:16px;color:var(--gold)}
+.gbox2 textarea{font-size:14px}
 </style>
 </head>
 <body>
-<canvas id="snow"></canvas>
 <div id="app">
   <header>
+    <button class="btn host-only" id="sideToggle" title="진행 패널 숨기기/보이기 (H)">☰</button>
     <div class="brand bigfont">🎁 연말 경품 추첨</div>
-    <div class="tabs"><button class="tab" data-g="A">A그룹</button><button class="tab" data-g="B">B그룹</button></div>
-    <div class="phase" id="phaseLabel"></div><div class="phase live" id="liveBadge" hidden>● LIVE</div><div class="viewers host-only" id="viewers"></div>
-    <div class="stats" id="stats"></div>
-    <div class="controls">
-      <select class="btn host-only" id="speed" title="응모권 1매당 발표 간격"></select>
-      <button class="btn host-only" id="mainBtn"></button>
-      <button class="btn" id="soundBtn" title="소리">🔊</button>
-      <button class="btn" id="fsBtn" title="전체화면 (F)">⛶</button>
-      <button class="btn host-only" id="setBtn" title="설정">⚙</button>
+    <div class="clock" id="clock"></div>
+    <div class="phase live" id="liveBadge" hidden>● LIVE</div>
+    <div class="viewers host-only server-only" id="viewers"></div>
+    <div class="hsp"></div>
+    <div class="views">
+      <button class="vbtn" data-v="draw" title="화면 1: 추첨 화면">🎰 추첨 화면</button>
+      <button class="vbtn" data-v="board" title="화면 2: 탈락 현황판">📋 탈락 현황판</button>
     </div>
+    <button class="btn" id="soundBtn" title="소리">🔊</button>
+    <button class="btn" id="fsBtn" title="전체화면 (F)">⛶</button>
+    <button class="btn" id="loginBtn" hidden>🔒 관리자</button>
   </header>
+  <div id="body">
+  <aside id="side" class="host-only">
+    <div class="sd-sec">
+      <div class="sd-tabs"><button class="tab" data-g="A">A그룹</button><button class="tab" data-g="B">B그룹</button></div>
+      <div class="sd-title" id="sdTitle"></div>
+      <div class="sd-next" id="sdNext"></div>
+      <button id="mainBtn"></button>
+      <div class="sd-row"><span>발표 간격 (1매당)</span><select class="btn" id="speed"></select></div>
+    </div>
+    <div class="sd-sec"><div class="sd-h">진행 기록 (자동 저장)</div><div id="sdRec"></div></div>
+    <div class="sd-sec"><div class="sd-h">명단 · 기록</div><div class="sd-roster" id="sdRoster"></div>
+      <button class="btn wide" id="setBtn">📂 명단 등록 · 설정</button>
+      <button class="btn wide" id="logBtn">📜 추첨 로그 보기 · 다운로드</button>
+      <button class="btn wide" id="winBtn">📺 현황판 새 창으로 열기</button>
+      <button class="btn wide" id="logoutBtn" hidden>🔓 관리자 로그아웃</button>
+    </div>
+    <div class="sd-foot">Space 시작·일시정지 / 다음 추첨<br>H 이 패널 숨기기 · F 전체화면</div>
+  </aside>
   <main>
+    <div id="banner" class="banner idle"></div>
     <section id="left">
       <div id="stage" class="panel">
         <div id="stageLabel" class="stage-label"></div>
@@ -203,7 +325,6 @@ body.viewer .host-only{display:none!important}
         <div id="reelSub" class="rsub"></div>
         <div class="prog"><i id="progBar"></i></div>
         <div id="progText" class="ptext"></div>
-        <div id="regBox" class="reg host-only"></div>
       </div>
       <div id="logWrap" class="panel">
         <div class="log-title"><div id="logTitle">최근 탈락</div><span id="logCount"></span></div>
@@ -212,7 +333,9 @@ body.viewer .host-only{display:none!important}
     </section>
     <section id="boardWrap" class="panel"><div id="board"></div></section>
   </main>
+  </div>
 </div>
+
 
 <div id="ov" class="ov"><div><h1 id="ovTitle" class="bigfont"></h1><div id="ovNum" class="num bigfont"></div><p id="ovSub"></p><div class="hint" id="ovHint">스페이스바 또는 클릭하여 계속</div></div></div>
 
@@ -225,6 +348,15 @@ body.viewer .host-only{display:none!important}
 </div></div>
 
 <div id="setModal" class="modal"><div class="modal-in" id="setBody"></div></div>
+<div id="logModal" class="modal"><div class="modal-in" id="logBody"></div></div>
+<div id="loginModal" class="modal"><form class="modal-in login" id="loginForm" autocomplete="on">
+  <h2>🔒 관리자 로그인</h2>
+  <p class="help">관리자만 추첨을 진행할 수 있습니다. 그 외 접속자는 시청만 가능합니다.</p>
+  <label>아이디<input id="lgUser" name="username" autocomplete="username" required></label>
+  <label>비밀번호<input id="lgPw" name="password" type="password" autocomplete="current-password" required></label>
+  <div id="lgMsg" class="lgmsg"></div>
+  <div class="mbtns"><span class="sp"></span><button type="button" class="btn" id="lgCancel">취소</button><button type="submit" class="btn ok">로그인</button></div>
+</form></div>
 <canvas id="fx"></canvas>
 
 <script src="vendor/xlsx.full.min.js"></script>
@@ -232,326 +364,331 @@ body.viewer .host-only{display:none!important}
 (()=>{
 'use strict';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const LS='yearend-lottery-v1';
-const KEYS=['A','B'];
+const LS='yearend-lottery-v2',KEYS=['A','B'],MAXT=4;
+const QS=new URLSearchParams(location.search);
 const DEF={
-  A:{title:'A그룹 · 일산전자 + ISEMM',r1:100,r2:80,prizes:'5등 경품\n4등 경품\n3등 경품\n2등 경품\n1등 경품',data:`일산전자,경영총괄,하재기,4
-일산전자,경영총괄,박영일,1
-일산전자,경영총괄,하지현,4
-일산전자,개발담당,이대귀,4
-일산전자,영업담당,강성영,4
-일산전자,경영기획담당,이동협,4
-일산전자,경영기획팀,정송조,1
-일산전자,경영기획팀,이소정,4
-일산전자,경영기획팀,김슬일,4
-일산전자,경영기획팀,이주원,4
-일산전자,경영기획팀,김승범,4
-일산전자,경영기획팀,이재열,4
-일산전자,경영기획팀,정경순,4
-일산전자,경영기획팀,전주아,4
-일산전자,경영기획팀,전동일,4
-일산전자,구매팀,박준홍,4
-일산전자,구매팀,허지범,4
-일산전자,구매팀,강한별,4
-일산전자,구매팀,박준현,4
-일산전자,구매팀,장수원,4
-일산전자,자재팀,김태영,4
-일산전자,자재팀,김정주,4
-일산전자,자재팀,전영우,4
-일산전자,자재팀,조형제,4
-일산전자,자재팀,김성민,4
-일산전자,QA팀,박민상,4
-일산전자,QA팀,피승훈,4
-일산전자,QA팀,이지은,4
-일산전자,QA팀,이종수,4
-일산전자,QA팀,강민재,4
-일산전자,QA팀,이태영,4
-일산전자,생산팀,우권택,4
-일산전자,생산팀,최성필,4
-일산전자,생산팀,장유리,4
-일산전자,생산팀,김진광,4
-일산전자,생산팀,정대근,4
-일산전자,SMT,한채우,4
-일산전자,SMT,송영환,4
-일산전자,SMT,장수환,4
-일산전자,영업팀,백승호,4
-일산전자,영업팀,한유빈,4
-일산전자,영업팀,김도영,4
-일산전자,영업팀,손만욱,4
-일산전자,영업팀,김태욱,4
-일산전자,개발팀,김건,4
-일산전자,개발팀,서영진,4
-일산전자,개발팀,이현모,4
-일산전자,개발팀,한보윤,4
-일산전자,개발팀,윤성호,4
-일산전자,개발팀,노경호,4
-일산전자,개발팀,전태경,4
-일산전자,개발팀,변수민,4
-일산전자,개발팀,정현욱,4
-일산전자,개발팀,이원진,4
-일산전자,MAIN,임선자,4
-일산전자,MAIN,김동욱,4
-일산전자,MAIN,김미연,4
-일산전자,MAIN,강수경,4
-일산전자,MAIN,김다숙,4
-일산전자,MAIN,윤종남,4
-일산전자,MAIN,이오남,1
-일산전자,MAIN,유수미,4
-일산전자,MAIN,권정희,4
-일산전자,MAIN,이금애,4
-일산전자,MAIN,윤재문,1
-일산전자,MAIN,양진관,1
-일산전자,MAIN,박순애,1
-일산전자,MAIN,유옥순,4
-일산전자,MAIN,김미영M,4
-일산전자,MAIN,이화섭,1
-일산전자,MAIN,윤지인,1
-일산전자,MAIN,김현숙,4
-일산전자,MAIN,제은경,1
-일산전자,MAIN,이영주,4
-일산전자,MAIN,장은자,4
-일산전자,MAIN,조현아,1
-일산전자,MAIN,최지은,4
-일산전자,MAIN,송성민,4
-일산전자,MAIN,김인영,1
-일산전자,MAIN,최혜경,4
-일산전자,MAIN,임경복,1
-일산전자,MAIN,임성숙,4
-일산전자,MAIN,손재분,1
-일산전자,MAIN,김태경,1
-일산전자,MAIN,백은찬,4
-일산전자,MAIN,이영지,4
-일산전자,MAIN,김지민,4
-일산전자,EMS,표순옥,4
-일산전자,EMS,곽숙미,4
-일산전자,EMS,김미영E,4
-일산전자,EMS,김경희,4
-일산전자,EMS,손일순,1
-일산전자,EMS,최명숙,4
-일산전자,EMS,강경미,4
-일산전자,EMS,정지우,1
-일산전자,EMS,박연주,4
-일산전자,EMS,이세비가,4
-일산전자,EMS,오은화,4
-일산전자,EMS,강동훈,4
-일산전자,DP,유영미,4
-일산전자,DP,정귀순,4
-일산전자,DP,박외숙,4
-일산전자,DP,오금정,4
-일산전자,DP,하문옥,4
-일산전자,DP,이채린,4
-일산전자,DP,남상희,4
-일산전자,DP,이혜정,4
-일산전자,DP,백순화,4
-일산전자,MICOM,김성희,4
-일산전자,MICOM,이향숙,3
-일산전자,MICOM,최현숙,4
-일산전자,MICOM,강희연,4
-일산전자,SMD,박기성,4
-일산전자,SMD,전민석,4
-일산전자,SMD,이승형,4
-일산전자,SMD,양승수,1
-일산전자,SMD,조준호,1
-일산전자,SMD,김승우,1
-일산전자,SMD,권민지,1
-일산전자,SMD,임정호,1
-일산전자,SMD,장지원,4
-일산전자,SMD,문정빈,4
-일산전자,SMD,류진우,4
-일산전자,SMD,박기태,4
-일산전자,SMD,이춘옥,4
-일산전자,SMD,김소영,1
-일산전자,SMD,하정빈,4
-일산전자,SMD,강성진,4
-일산전자,SMD,오유근,4
-일산전자,IMD,이원호,4
-일산전자,IMD,김지훈,1
-일산전자,IMD,고민혁,1
-일산전자,QA(직접),이정애,4
-일산전자,QA(직접),김영숙,4
-일산전자,QA(직접),배은희,4
-일산전자,QA(직접),박임숙,4
-일산전자,QA(직접),한향란,4
-일산전자,QA(직접),고선덕,4
-일산전자,QA(직접),이동숙,4
-일산전자,QA(직접),최영옥,4
-일산전자,QA(직접),오영옥,4
-일산전자,QA(직접),최성미,4
-일산전자,QA(직접),소윤희,4
-일산전자,QA(직접),탁수미,4
-일산전자,QA(직접),윤아영,1
-일산전자,QA(직접),김정미,1
-일산전자,QA(직접),정민기,1
-일산전자,QA(직접),류경범,1
-일산전자,QA(직접),박숙혜,4
-일산전자,QA(직접),김송자,4
-일산전자,QA(직접),강이은,4
-일산전자,QA(직접),안미란,4
-일산전자,QA(직접),권문경,4
-일산전자,QA(직접),박규영,4
-일산전자,QA(직접),이현정,4
-일산전자,영업(직접),최석진,4
-일산전자,영업(직접),정동식,4
-일산전자,영업(직접),정규재,4
-일산전자,자재(직접),정혜순,4
-일산전자,자재(직접),이금자,4
-일산전자,자재(직접),성유리,4
-일산전자,자재(직접),조준희,4
-일산전자,자재(직접),박세한,4
-일산전자,자재(직접),오용현,4
-일산전자,자재(직접),김선민,4
-일산전자,자재(직접),김민재,4
-ISEMM,ISEMM,장호근,4
-ISEMM,ISEMM,백승민,4
-ISEMM,ISEMM,김동주,4
-ISEMM,ISEMM,김병찬,4
-ISEMM,ISEMM,이병섭,4
-ISEMM,ISEMM,손인호,4
-ISEMM,ISEMM,니콜라스,4`},
-  B:{title:'B그룹 · 일산 + 우리전자 + 네오스텍',r1:70,r2:50,prizes:'5등 경품\n4등 경품\n3등 경품\n2등 경품\n1등 경품',data:`일산,가공실,정미옥,4
-일산,가공실,이무수,4
-일산,가공실,이덕성,4
-일산,가공실,안성곤,4
-일산,가공실,박미선,4
-일산,가공실,태애숙,4
-일산,가공실,김복민,4
-일산,가공실,박영임,4
-일산,기술연구소,황봉수,1
-일산,기술연구소,강상국,4
-일산,기술연구소,민병삼,4
-일산,기술연구소,최수현,1
-일산,기술연구소,김상진,4
-일산,기술연구소,지정환,4
-일산,기술연구소,오성문,4
-일산,기술연구소,김수민,1
-일산,우주기업,송필남,4
-일산,그린푸드,강말이,3
-일산,생산(Insul),김대현,4
-일산,라벨실,구성일,4
-일산,라벨실,성종경,4
-일산,라벨실,이현민,1
-일산,생산팀,서덕윤,4
-일산,생산팀,박효홍,4
-일산,생산팀,안준우,4
-일산,영업팀,황상복,4
-일산,영업팀,이호석,4
-일산,영업팀,한성민,4
-일산,영업팀,고인준,4
-일산,영업팀,이정수,4
-일산,영업팀,신화석,4
-일산,영업팀,이정은,4
-일산,영업팀,박인철,4
-일산,유전체(간접),백성순,4
-일산,유전체(간접),김정재,4
-일산,유전체(간접),최명옥,4
-일산,유전체(간접),남궁선,4
-일산,유전체(간접),서하나,4
-일산,유전체(간접),백희수,4
-일산,유전체(간접),김성애,4
-일산,유전체(간접),강민지,4
-일산,유전체(간접),이은진,4
-일산,자재팀,조성윤,4
-일산,자재팀,최지엉,4
-일산,자재팀,편상필,4
-일산,지원팀,함지훈,4
-일산,지원팀,박지영,4
-일산,지원팀,신영기,4
-일산,지원팀,김태형,4
-일산,지원팀,이종백,4
-일산,지원팀,양기호,4
-일산,지원팀,박기태,4
-일산,탈취필터,정성윤,4
-일산,탈취필터,이선혜,4
-일산,품질팀(간접),임찬형,4
-일산,품질팀(간접),안진우,4
-일산,품질팀(직접),이혜정,4
-우리전자,총괄,남기현,4
-우리전자,자재팀,이상엽,4
-우리전자,관리팀,변윤진,4
-우리전자,품질팀,오경훈,4
-우리전자,생산팀,박종희,4
-우리전자,생산팀,황은정,4
-우리전자,생산팀,김선정,1
-우리전자,생산팀,백필순,4
-우리전자,생산팀,이영주,4
-우리전자,생산팀,이양자,2
-우리전자,생산팀,이희정,4
-우리전자,생산팀,박지인,4
-우리전자,생산팀,오보영,4
-우리전자,생산팀,성우용,4
-우리전자,생산팀,정경숙,4
-우리전자,생산팀,조행란,1
-우리전자,생산팀,조경화,3
-우리전자,생산팀,박미숙,4
-우리전자,생산팀,우정숙,4
-우리전자,생산팀,김재선,1
-우리전자,생산팀,조혜원,4
-우리전자,생산팀,김경희,4
-우리전자,생산팀,김매자,4
-우리전자,생산팀,이나경,4
-우리전자,생산팀,서윤인,4
-우리전자,생산팀,김소영,4
-우리전자,생산팀,임하정,1
-우리전자,생산팀,신영휘,1
-우리전자,생산팀,김미화,4
-우리전자,생산팀,조영아,4
-우리전자,생산팀,김진영,1
-우리전자,생산팀,황선례,1
-우리전자,생산팀,손시현,4
-우리전자,생산팀,김지영,1
-우리전자,생산팀,박숙정,1
-우리전자,생산팀,박현정,4
-우리전자,생산팀,김정택,1
-우리전자,생산팀,곽민서,1
-우리전자,생산팀,김민선,4
-우리전자,영업팀,이현걸,4
-우리전자,물류팀,전성엉,4
-우리전자,물류팀,정태봉,4
-우리전자,물류팀,우승범,4
-우리전자,물류팀,김동수,1
-우리전자,생산팀,차선규,4
-우리전자,경영총괄,이정희,1
-네오스텍,네오스텍,이재경,1
-네오스텍,네오스텍,주영민,4
-네오스텍,네오스텍,박희정,4
-네오스텍,네오스텍,배정범,4
-네오스텍,네오스텍,김지민,4
-네오스텍,네오스텍,조성구,4
-네오스텍,네오스텍,이종봉,4
-네오스텍,네오스텍,김정태,4
-네오스텍,네오스텍,김인철,4
-네오스텍,네오스텍,유종택,4
-네오스텍,네오스텍,최성식,4
-네오스텍,네오스텍,박상준,4
-네오스텍,네오스텍,코아,4
-네오스텍,네오스텍,정희곤,4
-네오스텍,네오스텍,진근호,4
-네오스텍,네오스텍,한대성,4
-네오스텍,네오스텍,푸옌,4`}
+  A:{title:'A그룹 · 일산전자 + ISEMM',r1:0,keep:45,prizes:'5등 상품권 10만원 x5\n4등 상품권 20만원 x5\n3등 상품권 30만원 x3\n2등 상품 x3',data:`일산전자,경영지원팀,최서준,3
+일산전자,경영지원팀,안지안,4
+일산전자,경영지원팀,윤태윤,2
+일산전자,경영지원팀,홍건우,1
+일산전자,경영지원팀,류건우,1
+일산전자,경영지원팀,류다은,4
+일산전자,경영지원팀,김현우,4
+일산전자,경영지원팀,최지유,4
+일산전자,구매팀,권민준,1
+일산전자,구매팀,한예준,1
+일산전자,구매팀,장채원,4
+일산전자,구매팀,서하린,3
+일산전자,구매팀,박하린,4
+일산전자,구매팀,박건우,3
+일산전자,자재팀,임지유,1
+일산전자,자재팀,정태윤,2
+일산전자,자재팀,임민준,4
+일산전자,자재팀,오다은,1
+일산전자,자재팀,박지민,2
+일산전자,자재팀,송은우,4
+일산전자,QA팀,신소율,2
+일산전자,QA팀,황지민,3
+일산전자,QA팀,장수빈,1
+일산전자,QA팀,류나연,1
+일산전자,QA팀,안소율,4
+일산전자,QA팀,류수아,4
+일산전자,QA팀,이준서,3
+일산전자,생산팀,최준서,2
+일산전자,생산팀,신은우,4
+일산전자,생산팀,황태윤,4
+일산전자,생산팀,최지안,1
+일산전자,생산팀,황준서,3
+일산전자,생산팀,장건우,1
+일산전자,생산팀,임건우,3
+일산전자,생산팀,황민서,1
+일산전자,영업팀,신예준,4
+일산전자,영업팀,장민준,4
+일산전자,영업팀,정지안,2
+일산전자,영업팀,권민서,3
+일산전자,영업팀,황채원,4
+일산전자,영업팀,장준서,1
+일산전자,영업팀,권소율,1
+일산전자,개발팀,신건우,4
+일산전자,개발팀,임서준,1
+일산전자,개발팀,최다은,3
+일산전자,개발팀,장다은,4
+일산전자,개발팀,신지훈,1
+일산전자,개발팀,박지안,4
+일산전자,개발팀,최예준,1
+일산전자,개발팀,정다은,4
+일산전자,개발팀,박민준,1
+일산전자,개발팀,박현우,4
+일산전자,개발팀,윤하은,2
+일산전자,개발팀,이우진,3
+일산전자,MAIN,장윤서,4
+일산전자,MAIN,정민준,4
+일산전자,MAIN,류예린,1
+일산전자,MAIN,정건우,4
+일산전자,MAIN,황예린,4
+일산전자,MAIN,홍태윤,3
+일산전자,MAIN,임도윤,1
+일산전자,MAIN,강나연,4
+일산전자,MAIN,류지유,3
+일산전자,MAIN,신지민,4
+일산전자,MAIN,안민서,4
+일산전자,MAIN,서민준,4
+일산전자,MAIN,서태윤,4
+일산전자,MAIN,이지훈,4
+일산전자,MAIN,오나연,4
+일산전자,MAIN,김소율,1
+일산전자,MAIN,한윤서,4
+일산전자,MAIN,권서준,4
+일산전자,MAIN,황다은,2
+일산전자,MAIN,홍민서,4
+일산전자,MAIN,정예린,3
+일산전자,MAIN,조유준,2
+일산전자,MAIN,한다은,2
+일산전자,MAIN,윤윤서,4
+일산전자,MAIN,송지민,4
+일산전자,MAIN,조지안,4
+일산전자,MAIN,이지안,3
+일산전자,MAIN,이다은,4
+일산전자,MAIN,김시우,3
+일산전자,MAIN,조민서,3
+일산전자,EMS,정지호,4
+일산전자,EMS,서하준,1
+일산전자,EMS,송유준,4
+일산전자,EMS,서지유,4
+일산전자,EMS,오지호,4
+일산전자,EMS,권은우,1
+일산전자,EMS,임다은,4
+일산전자,EMS,한소율,1
+일산전자,EMS,권하은,3
+일산전자,EMS,장지훈,4
+일산전자,EMS,조수아,4
+일산전자,EMS,박태윤,1
+일산전자,SMD,한유준,3
+일산전자,SMD,강민준,4
+일산전자,SMD,강채원,3
+일산전자,SMD,류민서,3
+일산전자,SMD,조하은,2
+일산전자,SMD,류하린,4
+일산전자,SMD,류하준,3
+일산전자,SMD,정하은,4
+일산전자,SMD,최유준,4
+일산전자,SMD,최윤서,4
+일산전자,SMD,오하린,4
+일산전자,SMD,최소율,4
+일산전자,SMD,장예린,4
+일산전자,SMD,임나연,4
+일산전자,SMD,강하준,4
+일산전자,SMD,신수빈,4
+일산전자,SMD,신민준,4
+일산전자,SMD,최수아,4
+일산전자,QA(직접),임하은,4
+일산전자,QA(직접),송예린,4
+일산전자,QA(직접),한우진,1
+일산전자,QA(직접),홍지안,2
+일산전자,QA(직접),이나연,1
+일산전자,QA(직접),한현우,4
+일산전자,QA(직접),홍다은,1
+일산전자,QA(직접),오수빈,3
+일산전자,QA(직접),장지민,4
+일산전자,QA(직접),오서연,1
+일산전자,QA(직접),김지유,4
+일산전자,QA(직접),임하린,4
+일산전자,QA(직접),임우진,1
+일산전자,QA(직접),한예린,4
+일산전자,QA(직접),송서준,4
+일산전자,QA(직접),송서연,4
+일산전자,QA(직접),강현우,4
+일산전자,QA(직접),최서연,4
+일산전자,QA(직접),안채원,2
+일산전자,QA(직접),신예린,4
+일산전자,자재(직접),오유준,1
+일산전자,자재(직접),서수아,1
+일산전자,자재(직접),윤우진,4
+일산전자,자재(직접),강건우,4
+일산전자,자재(직접),송윤서,3
+일산전자,자재(직접),장민서,4
+일산전자,자재(직접),윤민준,4
+일산전자,자재(직접),황유준,4
+ISEMM,ISEMM,한시우,2
+ISEMM,ISEMM,박지훈,4
+ISEMM,ISEMM,안지훈,4
+ISEMM,ISEMM,한지안,3
+ISEMM,ISEMM,한서연,4
+ISEMM,ISEMM,윤은우,4`,sample:true},
+  B:{title:'B그룹 · 일산 + 우리전자 + 네오스텍',r1:0,keep:34,prizes:'5등 상품권 10만원 x4\n4등 상품권 20만원 x4\n3등 상품권 30만원 x2\n2등 상품 x2',data:`일산,가공실,안수빈,4
+일산,가공실,서준서,4
+일산,가공실,윤건우,4
+일산,가공실,한수빈,4
+일산,가공실,오채원,1
+일산,가공실,권건우,1
+일산,가공실,조지호,1
+일산,가공실,정은우,4
+일산,기술연구소,오지훈,3
+일산,기술연구소,신민서,4
+일산,기술연구소,강도윤,4
+일산,기술연구소,오건우,4
+일산,기술연구소,정준서,4
+일산,기술연구소,김건우,4
+일산,기술연구소,류서연,1
+일산,기술연구소,서건우,3
+일산,영업팀,강소율,4
+일산,영업팀,박시우,1
+일산,영업팀,한건우,4
+일산,영업팀,임서연,2
+일산,영업팀,송지유,4
+일산,영업팀,정지민,4
+일산,영업팀,김수빈,2
+일산,영업팀,오민서,3
+일산,유전체(간접),강하린,3
+일산,유전체(간접),김지호,4
+일산,유전체(간접),송시우,4
+일산,유전체(간접),김태윤,4
+일산,유전체(간접),안윤서,4
+일산,유전체(간접),오도윤,4
+일산,유전체(간접),임예준,3
+일산,유전체(간접),정현우,2
+일산,유전체(간접),윤시우,4
+일산,지원팀,한은우,4
+일산,지원팀,장현우,4
+일산,지원팀,최채원,1
+일산,지원팀,황하은,3
+일산,지원팀,안수아,4
+일산,지원팀,권나연,2
+일산,지원팀,박우진,4
+일산,품질팀,황우진,4
+일산,품질팀,장우진,4
+일산,품질팀,강서준,1
+일산,품질팀,안건우,4
+우리전자,관리팀,한나연,1
+우리전자,관리팀,서서준,4
+우리전자,관리팀,권수아,4
+우리전자,생산팀,류지민,4
+우리전자,생산팀,류윤서,4
+우리전자,생산팀,신하준,4
+우리전자,생산팀,권하준,4
+우리전자,생산팀,송지안,4
+우리전자,생산팀,윤서준,4
+우리전자,생산팀,송우진,4
+우리전자,생산팀,장지유,2
+우리전자,생산팀,권지안,1
+우리전자,생산팀,송준서,4
+우리전자,생산팀,신서준,4
+우리전자,생산팀,황나연,3
+우리전자,생산팀,안예준,1
+우리전자,생산팀,오지안,4
+우리전자,생산팀,장시우,4
+우리전자,생산팀,류지안,2
+우리전자,생산팀,황수빈,1
+우리전자,생산팀,한민준,4
+우리전자,생산팀,윤지안,4
+우리전자,생산팀,장서준,4
+우리전자,생산팀,조건우,4
+우리전자,생산팀,최시우,4
+우리전자,생산팀,윤다은,4
+우리전자,생산팀,홍윤서,4
+우리전자,생산팀,류유준,3
+우리전자,생산팀,김하준,1
+우리전자,생산팀,이지호,3
+우리전자,생산팀,황윤서,4
+우리전자,생산팀,한채원,4
+우리전자,생산팀,홍은우,4
+우리전자,생산팀,한지훈,4
+우리전자,생산팀,황시우,4
+우리전자,생산팀,오하준,1
+우리전자,생산팀,조채원,4
+우리전자,생산팀,조예린,4
+우리전자,생산팀,임은우,2
+우리전자,생산팀,박수빈,3
+우리전자,생산팀,안현우,4
+우리전자,생산팀,황서준,4
+우리전자,생산팀,강우진,4
+우리전자,물류팀,서지안,4
+우리전자,물류팀,홍예준,4
+우리전자,물류팀,안시우,3
+우리전자,물류팀,홍하린,3
+우리전자,물류팀,조시우,2
+네오스텍,네오스텍,정하린,4
+네오스텍,네오스텍,정민서,2
+네오스텍,네오스텍,이민서,4
+네오스텍,네오스텍,임지훈,4
+네오스텍,네오스텍,정하준,3
+네오스텍,네오스텍,오시우,1
+네오스텍,네오스텍,강지호,4
+네오스텍,네오스텍,강윤서,4
+네오스텍,네오스텍,신지안,2
+네오스텍,네오스텍,송민준,4
+네오스텍,네오스텍,윤소율,4
+네오스텍,네오스텍,송도윤,1
+네오스텍,네오스텍,신시우,4
+네오스텍,네오스텍,안서연,1
+네오스텍,네오스텍,김서연,4
+네오스텍,네오스텍,오예린,4
+네오스텍,네오스텍,박유준,1`,sample:true}
 };
+const DEF_GRAND='1등 상품 x1';
 const SITE_COLORS=['#ffd166','#4cc9f0','#ff7eb6','#80ed99','#b8a1ff','#ff9f1c'];
-const PHASE_NAME={r1:'1차 탈락자 발표',r2:'2차 탈락자 발표',final:'최종 경품 추첨',done:'추첨 완료'};
+const PHASE_NAME={r1:'1차 탈락자 발표',r2:'2차 탈락자 발표',final:'최종 경품 추첨',done:'그룹 추첨 완료'};
 
 let S,M={};
 let running=false,busy=false,starting=false,loopAlive=false,closer=null;
-
-/* ---------- 실행 모드: local(파일 단독) / host(서버·진행자) / viewer(서버·관람) ---------- */
-const QS=new URLSearchParams(location.search);
-let MODE='local',HOSTKEY=QS.get('host')||'',viewerSound=false,OID=0,viewerWait=null;
+let MODE='local',SERVER=false,viewerSound=false,OID=0,viewerWait=null;
+const FORCE_VIEW=QS.get('viewer')==='1';
+let VIEW=['draw','board'].includes(QS.get('view'))?QS.get('view'):'draw';
+const PIN=KEYS.includes(String(QS.get('group')||'').toUpperCase())?String(QS.get('group')).toUpperCase():null;
 const closedOids=new Set();
-let emitChain=Promise.resolve();
+let emitChain=Promise.resolve(),bc=null;
+try{bc=new BroadcastChannel('yearend-lottery')}catch(e){bc=null}
+
+/* ---------- 동기화 송신 (서버 또는 같은 PC의 다른 창) ---------- */
+function ck(){return S.cur+'|'+KEYS.map(k=>{const p=S.prog[k];return p?p.phase+':'+p.log.length+':'+p.winners.length:'-'}).join('|')+'|'+S.grandWinners.length}
 function emit(event,data){
-  if(MODE!=='host')return;
-  const body=JSON.stringify({event,data:data||{},state:S});
-  emitChain=emitChain.then(()=>fetch('api/emit',{method:'POST',headers:{'content-type':'application/json','x-host-key':HOSTKEY},body})).catch(()=>{});
+  if(MODE==='viewer')return;
+  data=Object.assign({},data||{},{ck:data&&data.ck||ck(),speed:S.speed});
+  if(MODE==='host'){const body=JSON.stringify({event,data,state:S});emitChain=emitChain.then(()=>fetch('api/emit',{method:'POST',headers:{'content-type':'application/json'},body}).then(r=>{if(r.status===403)authLost()})).catch(()=>{})}
+  else if(bc){try{bc.postMessage(JSON.stringify({event,data,state:event==='state'?S:null}))}catch(e){}}
 }
 const soundOn=()=>MODE==='viewer'?viewerSound:S.sound;
 
 /* ---------- state ---------- */
-function fresh(){return{v:1,cur:'A',speed:6,sound:true,onePrize:true,groups:JSON.parse(JSON.stringify(DEF)),prog:{}}}
-function load(){try{const j=localStorage.getItem(LS);if(j)S=JSON.parse(j)}catch(e){S=null}if(!S||S.v!==1||!S.groups||!S.groups.A||!S.groups.B)S=fresh();if(!S.prog)S.prog={}}
+function fresh(){return{v:2,cur:'A',speed:3.5,sound:true,onePrize:true,groups:JSON.parse(JSON.stringify(DEF)),grand:{prizes:DEF_GRAND},grandWinners:[],prog:{},audit:[]}}
+const okState=x=>!!(x&&x.v===2&&x.groups&&x.groups.A&&x.groups.B);
+function fixState(){if(!S.prog)S.prog={};if(!Array.isArray(S.audit))S.audit=[];if(!S.grand)S.grand={prizes:DEF_GRAND};if(!Array.isArray(S.grandWinners))S.grandWinners=[];if(!KEYS.includes(S.cur))S.cur='A';if(!(+S.speed>0))S.speed=3.5}
+function load(){let x=null;try{const j=localStorage.getItem(LS);if(j)x=JSON.parse(j)}catch(e){x=null}S=okState(x)?x:fresh();fixState()}
 function save(){if(MODE==='viewer')return;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
-function rand(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
+// 암호학적 난수 + 거절 샘플링(모듈로 편향 없음): 모든 응모권이 정확히 같은 확률
+function rand(n){const lim=Math.floor(4294967296/n)*n,a=new Uint32Array(1);do{crypto.getRandomValues(a)}while(a[0]>=lim);return a[0]%n}
+/* ---------- SHA-256 (로그 위변조 확인 · 명단 지문) ---------- */
+const SHA_K=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function sha256(str){
+  const msg=new TextEncoder().encode(str),l=msg.length,n=((l+9+63)>>6)<<6,b=new Uint8Array(n);b.set(msg);b[l]=0x80;
+  const dv=new DataView(b.buffer),bits=l*8;dv.setUint32(n-4,bits>>>0);dv.setUint32(n-8,Math.floor(bits/4294967296));
+  const H=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]),w=new Uint32Array(64);
+  const rr=(x,r)=>(x>>>r)|(x<<(32-r));
+  for(let o=0;o<n;o+=64){
+    for(let i=0;i<16;i++)w[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){const s0=rr(w[i-15],7)^rr(w[i-15],18)^(w[i-15]>>>3),s1=rr(w[i-2],17)^rr(w[i-2],19)^(w[i-2]>>>10);w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0}
+    let a=H[0],bb=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+    for(let i=0;i<64;i++){const t1=(h+(rr(e,6)^rr(e,11)^rr(e,25))+((e&f)^(~e&g))+SHA_K[i]+w[i])>>>0,t2=((rr(a,2)^rr(a,13)^rr(a,22))+((a&bb)^(a&c)^(bb&c)))>>>0;h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=bb;bb=a;a=(t1+t2)>>>0}
+    H[0]+=a;H[1]+=bb;H[2]+=c;H[3]+=d;H[4]+=e;H[5]+=f;H[6]+=g;H[7]+=h;
+  }
+  return[...H].map(x=>x.toString(16).padStart(8,'0')).join('');
+}
+function fp(k){const x=sha256(parseData(S.groups[k].data).map(r=>[r.site,r.dept,r.name,r.n].join(',')).join('\n')).slice(0,8).toUpperCase();return x.slice(0,4)+'-'+x.slice(4)}
+/* ---------- 시각 ---------- */
+const DOW='일월화수목금토';
+const p2=n=>String(n).padStart(2,'0');
+function fmtFull(ts){const d=new Date(ts);return`${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DOW[d.getDay()]}) ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`}
+function fmtDT(ts){const d=new Date(ts);return`${d.getMonth()+1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`}
+function fmtT(ts){const d=new Date(ts);return`${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`}
+function fmtISO(ts){const d=new Date(ts);return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${fmtT(ts)}`}
+/* ---------- 추첨 로그 (해시 체인: 중간 기록을 고치거나 지우면 검증에서 드러남) ---------- */
+function auditLine(prev,e){return sha256([prev,e.seq,e.at,e.type,e.msg].join('|')).slice(0,16)}
+function audit(type,msg){
+  if(MODE==='viewer')return;
+  const L=S.audit,prev=L.length?L[L.length-1].h:'GENESIS';
+  const e={seq:L.length?L[L.length-1].seq+1:1,at:Date.now(),type,msg};e.h=auditLine(prev,e);L.push(e);
+}
+function verifyAudit(){let prev='GENESIS';for(let i=0;i<S.audit.length;i++){const e=S.audit[i];if(e.seq!==(i?S.audit[i-1].seq+1:e.seq)||auditLine(prev,e)!==e.h)return{ok:false,at:e.seq};prev=e.h}return{ok:true}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -559,14 +696,13 @@ function parseData(txt){
   const out=[];
   for(const raw of String(txt||'').split(/\r?\n/)){
     const line=raw.trim();if(!line)continue;
-    let c=(line.includes('\t')?line.split('\t'):line.split(',')).map(s=>s.trim());
+    const c=(line.includes('\t')?line.split('\t'):line.split(',')).map(s=>s.trim());
     let site,dept,name,n;
-    if(c.length>=7&&/^\d+$/.test(c[0])){site=c[1];dept=c[2];name=c[3];n=parseInt(c[6],10)}   // 원본 엑셀 그대로 붙여넣기 (NO,근무처,부서,성명,기본,추가,전체,…)
-    else if(c.length>=4){site=c[0];dept=c[1];name=c[2];n=parseInt(c[3],10)}
+    if(c.length>=4){site=c[0];dept=c[1];name=c[2];n=parseInt(c[3],10)}
     else if(c.length===3){site='';dept=c[0];name=c[1];n=parseInt(c[2],10)}
     else continue;
     if(!name||!(n>0))continue;
-    out.push({site,dept:dept||'-',name,n:Math.min(n,20)});
+    out.push({site,dept:dept||'-',name,n:Math.min(n,MAXT)});
   }
   return out;
 }
@@ -576,79 +712,122 @@ function build(key){
   for(const r of rows){
     const dk=r.site+'|'+r.dept;let d=dmap[dk];
     if(!d){if(!sites.includes(r.site))sites.push(r.site);
-      d=dmap[dk]={idx:depts.length,site:r.site,dept:r.dept,people:[],tickets:[],color:SITE_COLORS[sites.indexOf(r.site)%SITE_COLORS.length]};depts.push(d)}
-    const p={id:people.length,name:r.name,site:r.site,d,tickets:[]};people.push(p);d.people.push(p);
+      d=dmap[dk]={key,idx:depts.length,site:r.site,dept:r.dept,people:[],tickets:[],color:SITE_COLORS[sites.indexOf(r.site)%SITE_COLORS.length]};depts.push(d)}
+    const p={key,id:people.length,name:r.name,site:r.site,d,tickets:[]};people.push(p);d.people.push(p);
     for(let i=0;i<r.n;i++){const t={id:tickets.length,no:tickets.length+1,p};tickets.push(t);p.tickets.push(t);d.tickets.push(t)}
   }
   return{people,tickets,depts};
 }
 function ensureProg(key){
-  let P=S.prog[key];
-  if(!P||!Array.isArray(P.status)||P.status.length!==M[key].tickets.length){
-    P=S.prog[key]={phase:'r1',status:new Array(M[key].tickets.length).fill(0),log:[],winners:[]};
-  }
+  const P0=S.prog[key];
+  if(!P0||!Array.isArray(P0.status)||P0.status.length!==M[key].tickets.length)
+    S.prog[key]={phase:'r1',status:new Array(M[key].tickets.length).fill(0),log:[],winners:[],rounds:{}};
+  if(!S.prog[key].rounds)S.prog[key].rounds={};
   normalizePhase(key);
 }
 function normalizePhase(key){
-  const P=S.prog[key],g=S.groups[key];
-  const nPrize=prizeList(key).length,alive=P.status.filter(s=>s===0).length;
-  if(P.phase==='r2'&&+g.r2<=0)P.phase='final';
-  if(P.phase==='final'&&(P.winners.length>=nPrize||!alive))P.phase='done';
-  if(P.phase==='done'&&P.winners.length<nPrize&&alive)P.phase='final';
+  const P0=S.prog[key],nPrize=prizeList(key).length,alive=aliveIdx(key).length;
+  if(P0.phase==='r1'&&r1Count(key)<=0)P0.phase='r2';
+  if(P0.phase==='r2'&&r2Count(key)<=0)P0.phase='final';
+  if(P0.phase==='final'&&(P0.winners.length>=nPrize||!alive))P0.phase='done';
+  if(P0.phase==='done'&&P0.winners.length<nPrize&&alive)P0.phase='final';
 }
 const m=()=>M[S.cur],P=()=>S.prog[S.cur],G=()=>S.groups[S.cur];
-function prizeList(key){return String(S.groups[key||S.cur].prizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean)}
-function aliveList(){const st=P().status,a=[];for(let i=0;i<st.length;i++)if(st[i]===0)a.push(i);return a}
-function aliveCount(p){const st=P().status;return p.tickets.filter(t=>st[t.id]===0).length}
-function alivePeople(){return m().people.filter(p=>aliveCount(p)>0).length}
-function target(){const ph=P().phase;return ph==='r1'?+G().r1:ph==='r2'?+G().r2:prizeList().length}
+function expandPrizes(txt){
+  const out=[];
+  for(const raw of String(txt||'').split(/\r?\n/)){
+    const l=raw.trim();if(!l)continue;
+    const mm=l.match(/^(.*?)\s*[x×X*]\s*(\d+)\s*(명|개)?$/);
+    if(mm&&mm[1].trim())for(let i=0;i<Math.min(+mm[2],300);i++)out.push(mm[1].trim());
+    else out.push(l);
+  }
+  return out;
+}
+const prizeList=key=>expandPrizes(S.groups[key||S.cur].prizes);
+const grandList=()=>expandPrizes(S.grand.prizes);
+const totalT=key=>M[key].tickets.length;
+const keepOf=key=>Math.max(1,parseInt(S.groups[key].keep,10)||1);
+function r1Count(key){const t=totalT(key),r=+S.groups[key].r1>0?+S.groups[key].r1:Math.floor(t/2);return Math.max(0,Math.min(r,t-keepOf(key)))}
+function r2Count(key){return Math.max(0,totalT(key)-r1Count(key)-keepOf(key))}
+function aliveIdx(key){const st=S.prog[key]?S.prog[key].status:[],a=[];for(let i=0;i<st.length;i++)if(st[i]===0)a.push(i);return a}
+const aliveList=()=>aliveIdx(S.cur);
+function aliveCount(p){const st=S.prog[p.key].status;return p.tickets.filter(t=>st[t.id]===0).length}
+function isWinner(p){const st=S.prog[p.key].status;return p.tickets.some(t=>st[t.id]===3)}
+const alivePeople=key=>M[key].people.filter(p=>aliveCount(p)>0).length;
+const outPeople=key=>M[key].people.filter(p=>!aliveCount(p)&&!isWinner(p)).length;
+function target(){const ph=P().phase;return ph==='r1'?r1Count(S.cur):ph==='r2'?r2Count(S.cur):prizeList().length}
 function doneCount(){const p=P();if(p.phase==='final'||p.phase==='done')return p.winners.length;const r=p.phase==='r1'?1:2;return p.log.filter(e=>e.r===r).length}
+const grandLeft=()=>grandList().length-S.grandWinners.length;
+const allDone=()=>KEYS.every(k=>S.prog[k].phase==='done');
+const grandAlive=()=>KEYS.reduce((a,k)=>a+aliveIdx(k).length,0);
+const inGrand=()=>P().phase==='done'&&allDone()&&grandLeft()>0&&grandAlive()>0;
 const fullDept=d=>d.site&&d.site!==d.dept?`${d.site} · ${d.dept}`:d.dept;
-const fmtTime=s=>{s=Math.max(0,Math.round(s));const mm=Math.floor(s/60),ss=s%60;return mm?`${mm}분 ${String(ss).padStart(2,'0')}초`:`${ss}초`};
+const fmtTime=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),mm=Math.floor(s%3600/60),ss=s%60;return h?`${h}시간 ${mm}분`:mm?`${mm}분 ${String(ss).padStart(2,'0')}초`:`${ss}초`};
+function tierLabel(list,i){const n=list[i];let a=0,b=0;list.forEach((x,j)=>{if(x===n){b++;if(j<=i)a++}});return b>1?`${n} (${a}/${b})`:n}
 
-/* ---------- board ---------- */
+/* ---------- 현황판 ---------- */
+const boardKeys=()=>VIEW==='board'?(PIN?[PIN]:KEYS):[S.cur];
 function renderBoard(){
   let h='';
-  for(const d of m().depts){
-    h+=`<div class="dept" style="--c:${d.color}" id="d-${d.idx}"><div class="dh"><span>${esc(d.dept)}${d.site&&d.site!==d.dept?`<em>${esc(d.site)}</em>`:''}</span><span class="dc"></span></div><div class="bar"><i></i></div><div class="chips">`;
-    for(const p of d.people)h+=`<span class="chip" id="p-${p.id}"><span class="nm">${esc(p.name)}</span><span class="pips">${p.tickets.map(t=>`<i id="t-${t.id}"></i>`).join('')}</span></span>`;
+  for(const k of boardKeys()){
+    const mm=M[k];
+    h+=`<div class="gb" style="flex:${Math.max(1,mm.people.length+mm.depts.length*1.5)} 1 0"><div class="gbh" id="${k}gh"></div><div class="gcols">`;
+    for(const d of mm.depts){
+      h+=`<div class="dept" style="--c:${d.color}" id="${k}d${d.idx}"><div class="dh"><span>${esc(d.dept)}${d.site&&d.site!==d.dept?`<em>${esc(d.site)}</em>`:''}</span><span class="dc"></span></div><div class="bar"><i></i></div><div class="chips">`;
+      for(const p of d.people)h+=`<span class="chip" id="${k}p${p.id}"><span class="nm">${esc(p.name)}</span><span class="pips">${p.tickets.map(t=>`<i id="${k}t${t.id}"></i>`).join('')}</span></span>`;
+      h+='</div></div>';
+    }
     h+='</div></div>';
   }
   $('#board').innerHTML=h;
-  m().people.forEach(updChip);m().depts.forEach(updDept);
+  for(const k of boardKeys()){M[k].people.forEach(updChip);M[k].depts.forEach(updDept);updGroupHead(k)}
   fitBoard();
 }
+function updGroupHead(k){
+  const el=document.getElementById(k+'gh');if(!el)return;
+  const pr=S.prog[k];
+  el.innerHTML=`<b>${esc(S.groups[k].title)}</b><span class="gph">${PHASE_NAME[pr.phase]}</span><span>생존 응모권 <b class="g">${aliveIdx(k).length}</b> / ${totalT(k)}매</span><span>탈락 <b class="r">${outPeople(k)}</b>명</span><span class="fp">명단 지문 ${fp(k)}</span>`;
+}
 function updChip(p){
-  const st=P().status,el=document.getElementById('p-'+p.id);if(!el)return;
+  const st=S.prog[p.key].status,el=document.getElementById(p.key+'p'+p.id);if(!el)return;
   let alive=0,won=false;
-  for(const t of p.tickets){const s=st[t.id];const pe=document.getElementById('t-'+t.id);if(pe)pe.className=s===0?'':s===3?'w':s===4?'v':'x';if(s===0)alive++;if(s===3)won=true}
+  for(const t of p.tickets){const s=st[t.id],pe=document.getElementById(p.key+'t'+t.id);if(pe)pe.className=s===0?'':s===3?'w':s===4?'v':'x';if(s===0)alive++;if(s===3)won=true}
   el.classList.toggle('dead',!alive&&!won);el.classList.toggle('winner',won);
 }
 function updDept(d){
-  const st=P().status,el=document.getElementById('d-'+d.idx);if(!el)return;
+  const st=S.prog[d.key].status,el=document.getElementById(d.key+'d'+d.idx);if(!el)return;
   const alive=d.tickets.filter(t=>st[t.id]===0).length,won=d.tickets.some(t=>st[t.id]===3);
-  el.querySelector('.dc').innerHTML=`<b>${alive}</b>/${d.tickets.length}매`;
+  const out=d.people.filter(p=>!aliveCount(p)&&!isWinner(p)).length;
+  el.querySelector('.dc').innerHTML=`<b>${alive}</b>/${d.tickets.length}매${out?`<i>탈락 ${out}명</i>`:''}`;
   el.querySelector('.bar i').style.width=(d.tickets.length?alive/d.tickets.length*100:0)+'%';
   el.classList.toggle('wiped',!alive&&!won);
 }
 function restart(el,cls){if(!el)return;el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls)}
 function fitBoard(){
-  const b=$('#board');if(!b)return;
-  let fs=Math.min(34,innerWidth/50);b.style.fontSize=fs+'px';
-  let guard=0;
-  while((b.scrollWidth>b.clientWidth+1||b.scrollHeight>b.clientHeight+1)&&fs>7&&guard++<300){fs-=.3;b.style.fontSize=fs+'px'}
+  const b=$('#board');if(!b||!b.offsetParent)return;
+  let fs=Math.min(34,innerWidth/46);b.style.fontSize=fs+'px';
+  const over=()=>[...b.querySelectorAll('.gcols')].some(c=>c.scrollWidth>c.clientWidth+1||c.scrollHeight>c.clientHeight+1);
+  let g=0;while(over()&&fs>7&&g++<300){fs-=.3;b.style.fontSize=fs+'px'}
 }
+function setBanner(html,cls){const b=$('#banner');b.className='banner '+(cls||'');b.innerHTML=html;if(cls!=='idle')restart(b,'flash')}
+function bannerProgress(){
+  const p=P(),T=target(),D=doneCount();
+  if(p.phase==='r1'||p.phase==='r2')return`<span class="bp">${S.cur}그룹 ${p.phase==='r1'?1:2}차 탈락 <b>${D}</b> / ${T}매</span>`;
+  if(inGrand())return`<span class="bp">1등 통합 추첨 · 남은 응모권 <b>${grandAlive()}</b>매</span>`;
+  return`<span class="bp">${S.cur}그룹 당첨 <b>${D}</b> / ${T}명</span>`;
+}
+function idleBanner(){setBanner(`<span class="bt">진행 안내</span><b>${esc(G().title)}</b><span class="bd">${inGrand()?'1등 통합 추첨 (A+B)':PHASE_NAME[P().phase]}</span>${bannerProgress()}`,'idle')}
 
-/* ---------- log ---------- */
-function liOut(e,i){const t=m().tickets[e.t];return`<li><span class="no">${i+1}</span><span class="nm">${esc(t.p.name)}</span><span class="dp">${esc(fullDept(t.p.d))}</span><span class="rd">${e.r}차</span></li>`}
-function liWin(w){const t=m().tickets[w.t];return`<li class="win"><span class="pz">${esc(w.prize)}</span><span class="nm">${esc(t.p.name)}</span><span class="dp">${esc(fullDept(t.p.d))}</span></li>`}
+/* ---------- 기록 목록 ---------- */
+function liOut(e,i){const t=m().tickets[e.t];return`<li><span class="no">${i+1}</span><span class="nm">${esc(t.p.name)}</span><span class="dp">${esc(t.p.d.dept)}</span><span class="tm">${e.at?fmtT(e.at):e.r+'차'}</span></li>`}
+function liWin(k,w,grand){const t=M[k].tickets[w.t];return`<li class="win${grand?' grand':''}"><span class="pz">${grand?'🥇 ':''}${esc(w.prize)}</span><span class="nm">${esc(t.p.name)}</span><span class="dp">${grand?k+'그룹 · ':''}${esc(fullDept(t.p.d))}${w.at?' · '+fmtT(w.at):''}</span></li>`}
 function renderLog(){
   const p=P(),ol=$('#log');
   if(p.phase==='final'||p.phase==='done'){
-    $('#logTitle').textContent='🏆 당첨자';$('#logCount').textContent=`${p.winners.length} / ${prizeList().length}`;
-    ol.innerHTML=p.winners.map(liWin).reverse().join('');
+    $('#logTitle').textContent=`🏆 ${S.cur}그룹 당첨자`;$('#logCount').textContent=`${p.winners.length} / ${prizeList().length}`;
+    ol.innerHTML=S.grandWinners.map(w=>liWin(w.k,w,true)).join('')+p.winners.map(w=>liWin(S.cur,w,false)).reverse().join('');
   }else{
-    $('#logTitle').textContent='최근 탈락';$('#logCount').textContent=`총 ${p.log.length}매 탈락`;
+    $('#logTitle').textContent=`${S.cur}그룹 최근 탈락`;$('#logCount').textContent=`총 ${p.log.length}매 탈락`;
     const s=Math.max(0,p.log.length-40);ol.innerHTML=p.log.slice(s).map((e,i)=>liOut(e,s+i)).reverse().join('');
   }
 }
@@ -660,80 +839,97 @@ function addLog(e,i){
 
 /* ---------- UI ---------- */
 function resetStage(){
-  const p=P();
+  const p=P(),g=inGrand();
   $('#reel').className='reel';
-  $('#stageLabel').textContent=G().title;
-  $('#reelName').textContent=p.phase==='done'?'🎉 THE END':p.phase==='final'?'🏆 FINAL':'READY';
-  $('#reelDept').textContent=PHASE_NAME[p.phase];
-  $('#reelSub').innerHTML=p.phase==='done'?'모든 추첨이 끝났습니다':'<span style="color:var(--dim)">스페이스바 또는 시작 버튼을 눌러주세요</span>';
+  $('#stageLabel').textContent=g?'🥇 1등 통합 추첨 (A+B)':G().title;
+  $('#reelName').textContent=g?'🥇 1등':p.phase==='done'?(allDone()&&grandLeft()<=0?'🎉 THE END':'✔ 완료'):p.phase==='final'?'🏆 FINAL':'READY';
+  $('#reelDept').textContent=g?`A+B 남은 응모권 ${grandAlive()}매`:PHASE_NAME[p.phase];
+  $('#reelSub').innerHTML=p.phase==='done'&&!g?(allDone()?'모든 추첨이 끝났습니다':'다른 그룹 추첨을 진행해 주세요'):(MODE==='viewer'?'<span style="color:var(--dim)">곧 시작합니다</span>':'<span style="color:var(--dim)">왼쪽 패널의 [탈락자 발표 시작] 또는 스페이스바</span>');
 }
+function roundRec(k,r){const p=S.prog[k],R=(p.rounds||{})[r],T=r===1?r1Count(k):r2Count(k),D=p.log.filter(e=>e.r===r).length;
+  if(!R||!R.start)return`<dt>${r}차 탈락</dt><dd>${T?`대기 · ${T}매 예정`:'없음'}</dd>`;
+  return`<dt>${r}차 탈락</dt><dd class="${R.end?'ok':'now'}">${R.end?'✔ ':''}${D}/${T}매 · ${fmtDT(R.start)}~${R.end?fmtT(R.end).slice(0,5):'진행 중'}</dd>`}
 function updateUI(){
   const p=P(),locked=running||busy||starting||loopAlive;
   $$('.tab').forEach(t=>{t.classList.toggle('active',t.dataset.g===S.cur);t.disabled=(locked||MODE==='viewer')&&t.dataset.g!==S.cur});
-  const pl=$('#phaseLabel');pl.textContent=PHASE_NAME[p.phase];pl.classList.toggle('final',p.phase==='final'||p.phase==='done');
-  const alive=aliveList().length;
-  $('#stats').innerHTML=`<div class="stat"><small>전체 응모권</small><b>${m().tickets.length}</b></div><div class="stat"><small>생존 응모권</small><b class="g">${alive}</b></div><div class="stat"><small>생존 인원</small><b>${alivePeople()}<span>/${m().people.length}명</span></b></div>`;
-  const T=target(),D=doneCount();
+  $$('.vbtn').forEach(b=>b.classList.toggle('active',b.dataset.v===VIEW));
+  const alive=aliveList().length,T=target(),D=doneCount();
   $('#progBar').style.width=(T?Math.min(100,D/T*100):100)+'%';
-  if(p.phase==='r1'||p.phase==='r2'){
-    $('#progText').innerHTML=`<span>${p.phase==='r1'?1:2}차 탈락 <b>${D}</b> / ${T}매</span><span>남은 시간 약 <b>${fmtTime((T-D)*S.speed)}</b></span>`;
-  }else{
-    $('#progText').innerHTML=`<span>당첨 <b>${D}</b> / ${T}명</span><span>추첨 대상 응모권 <b>${alive}</b>매</span>`;
-  }
-  const b=$('#mainBtn');b.className='btn host-only';b.disabled=false;
+  if(p.phase==='r1'||p.phase==='r2')$('#progText').innerHTML=`<span>${p.phase==='r1'?1:2}차 탈락 <b>${D}</b> / ${T}매 · 생존 응모권 <b>${alive}</b>매</span><span>남은 시간 약 <b>${fmtTime((T-D)*S.speed)}</b></span>`;
+  else if(inGrand())$('#progText').innerHTML=`<span>1등 <b>${S.grandWinners.length}</b> / ${grandList().length}명</span><span>A+B 남은 응모권 <b>${grandAlive()}</b>매</span>`;
+  else $('#progText').innerHTML=`<span>당첨 <b>${D}</b> / ${T}명</span><span>남은 응모권 <b>${alive}</b>매</span>`;
+  // 왼쪽 패널
+  $('#sdTitle').textContent=G().title;
+  const b=$('#mainBtn');b.className='';b.disabled=false;let next='';
   if(p.phase==='r1'||p.phase==='r2'){
     const n=p.phase==='r1'?1:2;
+    next=`다음 순서 : <b>${n}차 탈락자 발표</b><br>${D?`${D}매 발표됨 · `:''}${T-D}매 남음 · 약 ${fmtTime((T-D)*S.speed)}`;
     if(starting){b.textContent='⏳ 곧 시작합니다';b.disabled=true}
-    else if(running){b.textContent='⏸ 일시정지';b.classList.add('pause')}
-    else b.textContent=D===0?`▶ ${n}차 탈락 발표 시작`:`▶ 계속하기 (${D}/${T})`;
+    else if(running){b.textContent='⏸ 일시정지';b.className='pause'}
+    else b.textContent=D===0?'▶ 탈락자 발표 시작':'▶ 이어서 발표';
   }else if(p.phase==='final'){
-    b.classList.add('gold');
-    if(busy){b.textContent='🥁 추첨 중…';b.disabled=true}
-    else b.textContent=`🏆 ${D+1}번째 추첨 · ${prizeList()[D]||''}`;
-  }else{b.classList.add('gold');b.textContent='🎉 추첨 완료';b.disabled=true}
+    b.className='gold';next=`다음 순서 : <b>${tierLabel(prizeList(),D)}</b><br>남은 응모권 ${alive}매 · 당첨 ${D}/${T}명`;
+    if(busy){b.textContent='🥁 추첨 중…';b.disabled=true}else b.textContent='🏆 경품 추첨';
+  }else{
+    b.className='gold';
+    if(inGrand()){next=`다음 순서 : <b>${tierLabel(grandList(),S.grandWinners.length)}</b> (A+B 통합)<br>남은 응모권 ${grandAlive()}매`;if(busy){b.textContent='🥁 추첨 중…';b.disabled=true}else b.textContent='🥇 1등 통합 추첨'}
+    else if(grandLeft()>0&&!allDone()){next=`이 그룹은 끝났습니다. <b>${KEYS.filter(k=>S.prog[k].phase!=='done').join(',')}그룹</b>을 진행하세요.`;b.textContent='✔ 그룹 추첨 완료';b.disabled=true}
+    else{next='모든 추첨이 끝났습니다.';b.textContent='🎉 추첨 완료';b.disabled=true}
+  }
+  $('#sdNext').innerHTML=next;
+  const lastWin=p.winners.length?p.winners[p.winners.length-1].at:0;
+  $('#sdRec').innerHTML=`<dl class="rec">${roundRec(S.cur,1)}${roundRec(S.cur,2)}<dt>최종 추첨</dt><dd class="${p.phase==='done'?'ok':p.winners.length?'now':''}">${p.phase==='done'?'✔ ':''}${p.winners.length}/${prizeList().length}명${lastWin?' · '+fmtDT(lastWin):''}</dd>${grandList().length?`<dt>1등 통합</dt><dd class="${grandLeft()<=0?'ok':''}">${grandLeft()<=0?'✔ ':''}${S.grandWinners.length}/${grandList().length}명</dd>`:''}</dl>`;
+  $('#sdRoster').innerHTML=`${G().sample?'<span class="warn">⚠ 예시 명단입니다. 실제 명단을 등록하세요.</span><br>':''}<b>${m().people.length}</b>명 · 응모권 <b>${m().tickets.length}</b>매<br>1차 ${r1Count(S.cur)}매 → 2차 ${r2Count(S.cur)}매 → 최종 ${keepOf(S.cur)}매<br>명단 지문 <code>${fp(S.cur)}</code>`;
+  $('#setBtn').disabled=locked;
   $('#soundBtn').textContent=soundOn()?'🔊':'🔇';
-  const rb=$('#regBox');
-  if(p.phase==='r1'&&!p.log.length&&!locked)rb.innerHTML=`참가자 <b style="color:var(--gold)">${m().people.length}</b>명 · 응모권 <b style="color:var(--gold)">${m().tickets.length}</b>매 등록됨 (오른쪽 팀별 현황에서 확인)<br><button class="btn" id="regBtn">📂 엑셀로 명단 등록 / 수정</button>`;
-  else rb.innerHTML='';
-  const rbt=$('#regBtn');if(rbt)rbt.onclick=e=>{e.currentTarget.blur();openSettings()};
 }
-function renderAll(){renderBoard();renderLog();resetStage();updateUI()}
+function renderAll(){renderBoard();renderLog();resetStage();idleBanner();updateUI()}
+function setView(v){
+  VIEW=v;['draw','board'].forEach(x=>document.body.classList.toggle('view-'+x,x===v));
+  try{const u=new URL(location.href);u.searchParams.set('view',v);history.replaceState(null,'',u)}catch(e){}
+  renderAll();
+}
 
-/* ---------- reel ---------- */
+/* ---------- 릴 애니메이션 ---------- */
+// 긴 이름은 칸에 맞게 글자 크기를 줄임
+function setName(el,txt){el.textContent=txt;el.style.fontSize='';const box=el.parentElement;if(!box)return;const w=box.clientWidth*.92;if(el.scrollWidth>w&&el.scrollWidth>0){const fs=parseFloat(getComputedStyle(el).fontSize);el.style.fontSize=Math.max(12,fs*w/el.scrollWidth)+'px'}}
 function spin(pool,final,dur,nameEl,deptEl,box,heavy){
   return new Promise(res=>{
     box.classList.remove('landed','stamped');box.classList.add('spinning');
     const t0=performance.now();let last=null;
     (function step(){
       const e=(performance.now()-t0)/dur;
-      if(e>=1){nameEl.textContent=final.name;deptEl.textContent=fullDept(final.d);box.classList.remove('spinning');res();return}
+      if(e>=1){setName(nameEl,final.name);deptEl.textContent=fullDept(final.d);box.classList.remove('spinning');res();return}
       let q=pool[rand(pool.length)];if(pool.length>1){let g=0;while(q===last&&g++<10)q=pool[rand(pool.length)]}
-      last=q;nameEl.textContent=q.name;deptEl.textContent=fullDept(q.d);sfx.tick(heavy);
+      last=q;setName(nameEl,q.name);deptEl.textContent=fullDept(q.d);sfx.tick(heavy);
       setTimeout(step,35+(heavy?460:300)*e*e*e);
     })();
   });
 }
 
-/* ---------- elimination rounds ---------- */
+/* ---------- 1차 / 2차 탈락 ---------- */
 async function eliminateOne(forced){
   const p=P(),mm=m(),alive=aliveList();
   const ti=forced?forced.ti:alive[rand(alive.length)],t=mm.tickets[ti];
   const pool=[...new Set(alive.map(x=>mm.tickets[x].p))];
   const r=forced?forced.r:(p.phase==='r1'?1:2);
-  const spinMs=forced?forced.spinMs:Math.round(Math.min(3200,Math.max(700,S.speed*500)));
-  if(!forced)emit('elim',{key:S.cur,ti,r,spinMs});
-  $('#stageLabel').textContent=`${r}차 탈락 · ${doneCount()+1}번째 응모권`;
+  const spinMs=forced?forced.spinMs:Math.round(Math.min(3200,Math.max(600,S.speed*500)));
+  if(!forced)emit('elim',{key:S.cur,ti,r,spinMs,at:Date.now()+spinMs});
+  $('#stageLabel').textContent=`${S.cur}그룹 ${r}차 탈락자 발표 · ${doneCount()+1}번째`;
   $('#reelSub').innerHTML='&nbsp;';
   await spin(pool,t.p,spinMs,$('#reelName'),$('#reelDept'),$('#reel'),false);
-  p.status[ti]=r;p.log.push({t:ti,r});save();
+  const at=forced&&forced.at?forced.at:Date.now();
+  p.status[ti]=r;p.log.push({t:ti,r,at});
   const rem=aliveCount(t.p);
+  audit('탈락',`${S.cur}그룹 ${r}차 ${p.log.filter(e=>e.r===r).length}번째 · 응모권 No.${t.no} · ${t.p.name} (${fullDept(t.p.d)}) · 남은 ${rem}매`);save();
   $('#reel').classList.add('landed','stamped');
-  $('#reelSub').innerHTML=rem?`응모권 No.${t.no} 탈락 · 남은 응모권 <b>${rem}</b>매`:`<b class="red">응모권 모두 소진!</b> 아쉽지만 다음 기회에 😢`;
+  $('#reelSub').innerHTML=(rem?`응모권 No.${t.no} 탈락 · 남은 응모권 <b>${rem}</b>매`:`<b class="red">응모권 모두 소진!</b> 아쉽지만 다음 기회에 😢`)+` <span style="color:var(--dim);font-size:.75em">· ${fmtT(at)}</span>`;
   sfx.out(!rem);
-  updChip(t.p);updDept(t.p.d);
-  restart(document.getElementById('p-'+t.p.id),'hit');restart(document.getElementById('d-'+t.p.d.idx),'flash');
-  addLog({t:ti,r},p.log.length-1);updateUI();
-  emit('sync');
+  updChip(t.p);updDept(t.p.d);updGroupHead(S.cur);
+  restart(document.getElementById(S.cur+'p'+t.p.id),'hit');restart(document.getElementById(S.cur+'d'+t.p.d.idx),'flash');
+  setBanner(`<span class="bt">방금 탈락</span><b>${esc(t.p.name)}</b><span class="bd">${esc(fullDept(t.p.d))}</span><span class="bx${rem?'':' red'}">${rem?`남은 응모권 ${rem}매`:'응모권 모두 소진'}</span><span class="bd">${fmtT(at)}</span>${bannerProgress()}`);
+  addLog({t:ti,r,at},p.log.length-1);updateUI();
+  emit('sync',{at});
   return spinMs;
 }
 async function loop(){
@@ -746,60 +942,79 @@ async function loop(){
       const spinMs=await eliminateOne();
       busy=false;updateUI();
       if(doneCount()>=target()){running=false;updateUI();await sleep(1800);await finishRound();break}
-      const t0=performance.now(),gap=Math.max(400,S.speed*1000-spinMs);
-      while(running&&performance.now()-t0<gap)await sleep(80);
+      const t0=performance.now(),gap=Math.max(350,S.speed*1000-spinMs);
+      while(running&&performance.now()-t0<gap)await sleep(60);
     }
   }finally{loopAlive=false;busy=false;updateUI()}
 }
 async function startRound(){
   if(starting)return;
+  const r=P().phase==='r1'?1:2;
   if(!loopAlive&&doneCount()===0){
     starting=true;updateUI();
-    emit('countdown',{title:PHASE_NAME[P().phase],sub:`응모권 <b>${target()}</b>매가 탈락합니다`});
-    await countdown(PHASE_NAME[P().phase],`응모권 <b>${target()}</b>매가 탈락합니다`);
+    const now=Date.now();P().rounds[r]={start:now,end:0};
+    audit('발표시작',`${S.cur}그룹 ${r}차 탈락자 발표 시작 · ${target()}매 예정 · 생존 ${aliveList().length}매 · 명단 지문 ${fp(S.cur)}`);save();
+    const title=`${S.cur}그룹 ${r}차 탈락자 발표`,sub=`응모권 <b>${target()}</b>매가 탈락합니다<br><small>${fmtFull(now)}</small>`;
+    emit('countdown',{title,sub});
+    await countdown(title,sub);
     starting=false;
-  }
+  }else if(!loopAlive){audit('재개',`${S.cur}그룹 ${r}차 발표 재개 (${doneCount()}/${target()}매)`);save()}
   running=true;updateUI();
   if(!loopAlive)loop();
 }
 async function finishRound(){
   const p=P(),n=p.phase==='r1'?1:2;
-  p.phase=n===1&&+G().r2>0?'r2':'final';normalizePhase(S.cur);save();emit('state');
-  renderLog();updateUI();sfx.round();confetti(180);
-  await message(`${n}차 탈락자 발표 완료!`,`생존 응모권 <b>${aliveList().length}</b>매 · <b>${alivePeople()}</b>명<br><small>다음 순서 : ${PHASE_NAME[p.phase]}</small>`);
-  resetStage();updateUI();
+  const R=p.rounds[n]||(p.rounds[n]={start:0}),cnt=p.log.filter(e=>e.r===n).length;R.end=Date.now();
+  audit('발표완료',`${S.cur}그룹 ${n}차 탈락 완료 · ${cnt}매 탈락 · 생존 ${aliveList().length}매 / ${alivePeople(S.cur)}명`);
+  p.phase=n===1?'r2':'final';normalizePhase(S.cur);save();emit('state');
+  renderBoard();renderLog();updateUI();sfx.round();confetti(180);
+  await message(`${S.cur}그룹 ${n}차 탈락자 발표 완료!`,`생존 응모권 <b>${aliveList().length}</b>매 · <b>${alivePeople(S.cur)}</b>명<br><small>${R.start?fmtISO(R.start)+' ~ '+fmtT(R.end):''} · 다음 순서 : ${PHASE_NAME[p.phase]}</small>`);
+  resetStage();idleBanner();updateUI();
 }
 
-/* ---------- final draw ---------- */
+/* ---------- 최종 / 1등 통합 추첨 ---------- */
 async function drawWinner(forced){
   if(busy&&!forced)return;
-  const p=P(),pz=prizeList(),i=p.winners.length,alive=aliveList();
-  if(i>=pz.length||!alive.length){normalizePhase(S.cur);save();renderAll();return}
+  const grand=forced?!!forced.grand:inGrand();
+  const list=grand?grandList():prizeList(),i=grand?S.grandWinners.length:P().winners.length;
+  const pairs=[];for(const k of grand?KEYS:[S.cur])for(const ti of aliveIdx(k))pairs.push([k,ti]);
+  if(i>=list.length||!pairs.length){KEYS.forEach(normalizePhase);save();renderAll();return}
   busy=true;updateUI();
-  const mm=m(),ti=forced?forced.ti:alive[rand(alive.length)],t=mm.tickets[ti];
+  let k,ti;if(forced){k=forced.key;ti=forced.ti}else[k,ti]=pairs[rand(pairs.length)];
+  const t=M[k].tickets[ti];
+  const pool=[...new Set(pairs.map(([kk,x])=>M[kk].tickets[x].p))];
   const oid=forced?forced.oid:++OID;
-  if(!forced)emit('win',{key:S.cur,ti,oid});
-  const pool=[...new Set(alive.map(x=>mm.tickets[x].p))];
+  if(!forced)emit('win',{key:k,ti,oid,grand});
   const ov=$('#finalOv');ov.classList.remove('won');
-  $('#fRank').textContent=`최종 추첨 ${i+1} / ${pz.length}`;$('#fPrize').textContent=pz[i];
+  $('#fRank').textContent=grand?`1등 통합 추첨 · A+B 남은 응모권 ${pairs.length}매`:`${G().title} · 최종 추첨 ${i+1} / ${list.length}`;
+  $('#fPrize').textContent=tierLabel(list,i);
   $('#fName').textContent='?';$('#fDept').textContent='';$('#fMsg').textContent='두구두구두구…';
   ov.classList.add('show');
   await sleep(1500);
-  await spin(pool,t.p,6500,$('#fName'),$('#fDept'),$('#fReel'),true);
-  p.status[ti]=3;
-  if(S.onePrize)t.p.tickets.forEach(x=>{if(p.status[x.id]===0)p.status[x.id]=4});
-  p.winners.push({t:ti,prize:pz[i]});normalizePhase(S.cur);save();emit('sync');
+  await spin(pool,t.p,grand?8000:6500,$('#fName'),$('#fDept'),$('#fReel'),true);
+  const st=S.prog[k].status;st[ti]=3;
+  if(S.onePrize)t.p.tickets.forEach(x=>{if(st[x.id]===0)st[x.id]=4});
+  const at=Date.now();
+  if(grand)S.grandWinners.push({k,t:ti,prize:list[i],at});else P().winners.push({t:ti,prize:list[i],at});
+  audit(grand?'통합당첨':'당첨',`${grand?'A+B 통합':k+'그룹'} ${tierLabel(list,i)} · 응모권 No.${t.no} · ${t.p.name} (${k}그룹 · ${fullDept(t.p.d)}) · 대상 ${pairs.length}매 중`);
+  KEYS.forEach(normalizePhase);save();emit('sync',{at});
   ov.classList.add('won');
-  $('#fMsg').innerHTML=`🎉 축하합니다! 🎉<small>응모권 No.${t.no}</small>`;
-  sfx.fanfare();confetti(260);setTimeout(()=>confetti(200,'sides'),500);setTimeout(()=>confetti(160,'sides'),1300);
-  updChip(t.p);updDept(t.p.d);renderLog();
+  $('#fDept').textContent=(grand?k+'그룹 · ':'')+fullDept(t.p.d);
+  $('#fMsg').innerHTML=`🎉 축하합니다! 🎉<small>응모권 No.${t.no} · 추첨 일시 ${fmtFull(at)}</small>`;
+  sfx.fanfare();confetti(grand?400:260);setTimeout(()=>confetti(200,'sides'),500);setTimeout(()=>confetti(160,'sides'),1300);
+  updChip(t.p);updDept(t.p.d);updGroupHead(k);renderLog();
+  setBanner(`<span class="bt">${grand?'🥇 1등':'🏆 당첨'}</span><b>${esc(t.p.name)}</b><span class="bd">${k}그룹 · ${esc(fullDept(t.p.d))}</span><span class="bx">${esc(list[i])}</span><span class="bd">${fmtT(at)}</span>${bannerProgress()}`,'win');
   await waitClose(oid);
   ov.classList.remove('show');
-  restart(document.getElementById('p-'+t.p.id),'whit');
-  $('#stageLabel').textContent=`🏆 ${pz[i]} 당첨`;$('#reel').className='reel';
-  $('#reelName').textContent=t.p.name;$('#reelDept').textContent=fullDept(t.p.d);$('#reelSub').innerHTML=`<b>축하합니다!</b>`;
+  restart(document.getElementById(k+'p'+t.p.id),'whit');
+  $('#stageLabel').textContent=`🏆 ${list[i]} 당첨`;$('#reel').className='reel';
+  setName($('#reelName'),t.p.name);$('#reelDept').textContent=(grand?k+'그룹 · ':'')+fullDept(t.p.d);$('#reelSub').innerHTML='<b>축하합니다!</b>';
   busy=false;updateUI();
-  if(p.phase==='done'&&!forced){sfx.round();confetti(220);await message('모든 추첨이 끝났습니다',`${esc(G().title)}<br>당첨자 <b>${p.winners.length}</b>명 · 축하드립니다!`);updateUI()}
+  if(!forced){
+    if(grand&&grandLeft()<=0){sfx.round();confetti(240);await message('모든 추첨이 끝났습니다','참여해 주신 모든 분께 감사드립니다! 🎊')}
+    else if(!grand&&P().phase==='done'){sfx.round();confetti(200);await message(`${S.cur}그룹 추첨 완료`,allDone()&&grandLeft()>0?'이제 <b>1등 통합 추첨 (A+B)</b>만 남았습니다':`당첨자 <b>${P().winners.length}</b>명 · 축하드립니다!`)}
+    updateUI();
+  }
 }
 
 /* ---------- overlays ---------- */
@@ -836,18 +1051,17 @@ function tone(f,d,type,v,at,f2){
 }
 const sfx={
   tick:h=>tone(h?700:1500,.04,'square',h?.07:.035),
-  out:all=>{tone(320,.45,'sawtooth',.12,0,70);tone(90,.4,'sine',.35);if(all){[392,370,349,294].forEach((f,i)=>tone(f,i===3?.9:.3,'triangle',.16,.35+i*.3))}},
+  out:all=>{tone(320,.45,'sawtooth',.12,0,70);tone(90,.4,'sine',.35);if(all)[392,370,349,294].forEach((f,i)=>tone(f,i===3?.9:.3,'triangle',.16,.35+i*.3))},
   beep:last=>tone(last?1320:880,last?.6:.2,'triangle',.22),
   round:()=>[659,784,988,1319].forEach((f,i)=>tone(f,.35,'triangle',.15,i*.1)),
   fanfare:()=>{[523,659,784,1047,784,1047].forEach((f,i)=>tone(f,i===5?1.4:.18,'triangle',.2,i*.14));tone(262,1.8,'sine',.14,.7);tone(392,1.8,'sine',.1,.7)}
 };
 
-/* ---------- canvas: snow + confetti ---------- */
-const snowC=$('#snow'),fxC=$('#fx'),sx=snowC.getContext('2d'),fx=fxC.getContext('2d');
-let W=0,H=0;const flakes=[],parts=[];
+/* ---------- canvas: confetti ---------- */
+const fxC=$('#fx'),fx=fxC.getContext('2d');
+let W=0,H=0;const parts=[];
 const CC=['#ffd166','#ff4d6d','#4cc9f0','#80ed99','#ffffff','#b8a1ff','#ff9f1c'];
-function resizeCanvas(){W=innerWidth;H=innerHeight;const r=devicePixelRatio||1;for(const c of [snowC,fxC]){c.width=W*r;c.height=H*r;c.getContext('2d').setTransform(r,0,0,r,0,0)}}
-for(let i=0;i<90;i++)flakes.push({x:Math.random(),y:Math.random(),r:.8+Math.random()*2.2,s:.15+Math.random()*.5,w:Math.random()*6.28});
+function resizeCanvas(){W=innerWidth;H=innerHeight;const r=devicePixelRatio||1;fxC.width=W*r;fxC.height=H*r;fx.setTransform(r,0,0,r,0,0)}
 function confetti(n,mode){
   for(let i=0;i<n;i++){
     let x,y,vx,vy;
@@ -857,8 +1071,6 @@ function confetti(n,mode){
   }
 }
 function frame(){
-  sx.clearRect(0,0,W,H);sx.fillStyle='rgba(255,255,255,.55)';
-  for(const f of flakes){f.y+=f.s/H*1.6;f.w+=.01;if(f.y>1.02){f.y=-.02;f.x=Math.random()}sx.beginPath();sx.arc(f.x*W+Math.sin(f.w)*14,f.y*H,f.r,0,6.28);sx.fill()}
   fx.clearRect(0,0,W,H);
   for(let i=parts.length-1;i>=0;i--){const q=parts[i];q.vy+=.38;q.vx*=.985;q.x+=q.vx;q.y+=q.vy;q.r+=q.vr;
     if(q.y>H+30){parts.splice(i,1);continue}
@@ -866,35 +1078,41 @@ function frame(){
   requestAnimationFrame(frame);
 }
 
-/* ---------- settings ---------- */
+/* ---------- 설정 ---------- */
 function openSettings(){
   if(running||busy||loopAlive||starting){alert('진행을 일시정지한 뒤 설정을 열어주세요.');return}
-  const box=k=>{const g=S.groups[k],mm=M[k];return`<div class="gbox"><h3>${k}그룹</h3>
+  const box=k=>{const g=S.groups[k];return`<div class="gbox"><h3>${k}그룹</h3>
     <label>제목</label><input id="s-${k}-title" value="${esc(g.title)}">
-    <div class="row3"><div><label>1차 탈락 응모권 수</label><input id="s-${k}-r1" type="number" min="1" value="${g.r1}"></div>
-    <div><label>2차 탈락 응모권 수</label><input id="s-${k}-r2" type="number" min="0" value="${g.r2}"></div></div>
-    <label>최종 경품 (한 줄에 1개 · 위에서부터 순서대로 추첨)</label><textarea id="s-${k}-prizes" rows="5">${esc(g.prizes)}</textarea>
-    <label>참가자 명단 (근무처,부서,성명,전체응모권)</label>
+    <div class="row3"><div><label>1차 탈락 응모권 수 (비우면 전체의 절반)</label><input id="s-${k}-r1" type="number" min="0" placeholder="자동 (절반)" value="${+g.r1>0?g.r1:''}"></div>
+    <div><label>최종 추첨까지 남길 응모권 수</label><input id="s-${k}-keep" type="number" min="1" value="${keepOf(k)}"></div></div>
+    <label>최종 경품 (한 줄에 하나 · <b>x개수</b>로 인원 지정 · 위에서부터 순서대로 추첨)</label><textarea id="s-${k}-prizes" rows="4">${esc(g.prizes)}</textarea>
+    <label>참가자 명단 (근무처,부서,성명,응모권 — 1인 최대 ${MAXT}매)</label>
     <div class="upl"><button class="btn" data-xl="${k}">📂 ${k}그룹 엑셀 불러오기</button></div>
-    <textarea id="s-${k}-data" rows="10">${esc(g.data)}</textarea>
+    <textarea id="s-${k}-data" rows="8">${esc(g.data)}</textarea>
     <div class="ginfo" id="s-${k}-info"></div>
     <div class="mbtns"><button class="btn danger" data-reset="${k}">${k}그룹 진행 초기화</button></div></div>`};
   $('#setBody').innerHTML=`<h2>⚙ 추첨 설정</h2>
-  <div class="drop" id="s-drop">📂 <b>명단 엑셀 파일(.xlsx / .xls / .csv)</b>을 여기에 끌어놓거나 <b>클릭</b>해서 선택하세요 — A·B그룹 한 번에 불러옵니다<br>
-  <small>‘그룹’ 열(A/B)이 있으면 그 값으로, 없으면 표 순서(왼쪽·첫 시트 = A, 오른쪽·둘째 시트 = B)로 나눕니다. 보내주신 원본 표 형태 그대로도 인식합니다.</small>
+  <div class="drop" id="s-drop">📂 <b>명단 엑셀 파일(.xlsx / .xls / .csv)</b>을 여기에 끌어놓거나 <b>클릭</b>해서 선택하세요 — A·B그룹을 한 번에 불러옵니다<br>
+  <small>작년 명단처럼 A·B 표가 좌우로 나란히 있는 형태, 또는 ‘그룹’ 열(A/B)이 있는 한 줄 목록 형태 모두 됩니다. 응모권은 ‘전체응모권’ 열(없으면 기본+추가)을 읽습니다.</small>
   <div class="upl" style="justify-content:center;margin-top:8px"><button class="btn" id="s-tpl">⬇ 명단 엑셀 양식 다운로드 (현재 명단 포함)</button></div></div>
   <input type="file" id="s-file" accept=".xlsx,.xls,.csv" hidden>
-  <p class="help">· 명단은 엑셀의 <b>근무처 / 부서 / 성명 / 전체응모권</b> 4개 열을 복사해 붙여넣으면 됩니다. (원본 표의 NO~잔여응모권 전체를 붙여넣어도 인식합니다)<br>
-  · 진행 상황은 자동 저장되어(서버 사용 시 서버에, 파일로 열면 이 브라우저에) 새로고침해도 이어서 진행됩니다.<br>
-  · 단축키: <b>스페이스바</b> 시작/일시정지/다음 추첨, <b>F</b> 전체화면</p>
   <div class="grid2">${box('A')}${box('B')}</div>
-  <div class="mbtns"><label class="chk"><input type="checkbox" id="s-one" ${S.onePrize?'checked':''}> 1인 1경품 (당첨되면 그 사람의 남은 응모권은 최종 추첨에서 제외)</label>
-  <span class="sp"></span><button class="btn" id="s-csv">결과 CSV 다운로드</button><button class="btn danger" id="s-factory">전체 기본값 복원</button>
-  <button class="btn" id="s-close">닫기</button><button class="btn ok" id="s-save">저장</button></div>`;
+  <div class="gbox2"><h3>🥇 1등 통합 추첨 (A+B 남은 응모권을 합쳐서 추첨)</h3>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:6px">A·B그룹 최종 추첨이 모두 끝나면 진행됩니다. 비워두면 통합 추첨 없이 끝납니다.</div>
+    <textarea id="s-grand" rows="2">${esc(S.grand.prizes)}</textarea></div>
+  <div class="mbtns"><label class="chk"><input type="checkbox" id="s-one" ${S.onePrize?'checked':''}> 1인 1경품 (당첨되면 그 사람의 남은 응모권은 이후 추첨에서 제외)</label>
+  <span class="sp"></span><button class="btn" id="s-csv">결과 CSV 다운로드</button><button class="btn danger" id="s-factory">전체 초기화</button>
+  <button class="btn" id="s-close">닫기</button><button class="btn ok" id="s-save">저장</button></div>
+  <p class="help" style="margin-top:12px">· 진행 상황은 자동 저장되어(서버 사용 시 서버에, 파일로 열면 이 브라우저에) 새로고침·다음날에도 이어서 진행됩니다.<br>· 단축키: <b>스페이스바</b> 시작/일시정지/다음 추첨, <b>F</b> 전체화면</p>`;
   $('#setModal').classList.add('show');
-  const info=k=>{const v=id=>$(`#s-${k}-${id}`).value;const rows=parseData(v('data')),tot=rows.reduce((a,r)=>a+r.n,0);const fin=tot-(+v('r1')||0)-(+v('r2')||0);
-    $(`#s-${k}-info`).innerHTML=`인식된 명단 <b>${rows.length}</b>명 · 응모권 <b>${tot}</b>매 → 1차·2차 탈락 후 최종 추첨 대상 <b>${fin}</b>매 · 예상 발표시간 약 ${fmtTime(((+v('r1')||0)+(+v('r2')||0))*S.speed)}`};
-  KEYS.forEach(k=>{['data','r1','r2'].forEach(id=>$(`#s-${k}-${id}`).oninput=()=>info(k));info(k)});
+  const info=k=>{
+    const v=id=>$(`#s-${k}-${id}`).value;
+    const rows=parseData(v('data')),tot=rows.reduce((a,r)=>a+r.n,0),keep=Math.max(1,parseInt(v('keep'),10)||1);
+    let r1=parseInt(v('r1'),10)>0?parseInt(v('r1'),10):Math.floor(tot/2);r1=Math.max(0,Math.min(r1,tot-keep));
+    const r2=Math.max(0,tot-r1-keep),np=expandPrizes(v('prizes')).length;
+    $(`#s-${k}-info`).innerHTML=`명단 <b>${rows.length}</b>명 · 응모권 <b>${tot}</b>매<br>→ 1차 <b>${r1}</b>매 탈락 (약 ${fmtTime(r1*S.speed)}) → 2차 <b>${r2}</b>매 탈락 (약 ${fmtTime(r2*S.speed)}) → 최종 <b>${keep}</b>매 남김<br>→ 최종 경품 <b>${np}</b>개${np>keep?' <span class="bad">· 남길 응모권보다 경품이 많습니다</span>':''}${tot<=keep?' <span class="bad">· 남길 응모권이 전체보다 많습니다</span>':''} <span style="color:var(--dim)">(발표 간격 ${S.speed}초/매 기준)</span>`;
+  };
+  KEYS.forEach(k=>{['data','r1','keep','prizes'].forEach(id=>$(`#s-${k}-${id}`).oninput=()=>info(k));info(k)});
   let fileKey=null;const fi=$('#s-file');
   fi.onchange=()=>{if(fi.files[0])importFile(fi.files[0],fileKey).then(()=>KEYS.forEach(info));fi.value=''};
   const drop=$('#s-drop');
@@ -906,8 +1124,8 @@ function openSettings(){
   $('#s-close').onclick=closeSettings;
   $('#s-save').onclick=saveSettings;
   $('#s-csv').onclick=exportCSV;
-  $('#s-factory').onclick=()=>{if(!confirm('명단·설정·진행 상황을 모두 처음 상태로 되돌릴까요?'))return;S=fresh();KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});save();closeSettings();renderAll();emit('state')};
-  $$('[data-reset]').forEach(b=>b.onclick=()=>{const k=b.dataset.reset;if(!confirm(`${k}그룹의 추첨 진행 상황(탈락/당첨 기록)을 초기화할까요?`))return;S.prog[k]=null;ensureProg(k);save();closeSettings();renderAll();emit('state')});
+  $('#s-factory').onclick=()=>{const why=prompt('명단·설정·진행 기록을 모두 처음 상태로 되돌립니다.\n초기화 사유를 입력하세요 (추첨 로그에 남습니다).');if(why==null)return;const keepLog=S.audit;S=fresh();S.audit=keepLog;audit('전체초기화',`명단·설정·진행 기록 전체 초기화 · 사유: ${why||'(미입력)'}`);KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});save();closeSettings();renderAll();emit('state')};
+  $$('[data-reset]').forEach(b=>b.onclick=()=>{const k=b.dataset.reset;const why=prompt(`${k}그룹의 탈락·당첨 기록을 지우고 처음부터 다시 합니다.\n초기화 사유를 입력하세요 (추첨 로그에 남습니다).`);if(why==null)return;const pr=S.prog[k];audit('초기화',`${k}그룹 진행 기록 초기화 (탈락 ${pr.log.length}매 · 당첨 ${pr.winners.length}명 기록 삭제) · 사유: ${why||'(미입력)'}`);S.prog[k]=null;S.grandWinners=S.grandWinners.filter(w=>w.k!==k);ensureProg(k);save();closeSettings();renderAll();emit('state')});
 }
 function closeSettings(){$('#setModal').classList.remove('show')}
 function saveSettings(){
@@ -915,85 +1133,128 @@ function saveSettings(){
   for(const k of KEYS){
     const v=id=>$(`#s-${k}-${id}`).value;
     const data=v('data'),rows=parseData(data),total=rows.reduce((a,r)=>a+r.n,0);
-    const r1=parseInt(v('r1'),10),r2=parseInt(v('r2'),10)||0;
-    const prizes=v('prizes'),np=prizes.split(/\r?\n/).filter(s=>s.trim()).length;
+    const r1=parseInt(v('r1'),10)>0?parseInt(v('r1'),10):0,keep=parseInt(v('keep'),10);
+    const prizes=v('prizes'),np=expandPrizes(prizes).length;
     if(!rows.length){alert(`${k}그룹 명단을 인식하지 못했습니다.`);return}
-    if(!(r1>=1)||r2<0||r1+r2>=total){alert(`${k}그룹: 1차+2차 탈락 수(${r1+r2})는 전체 응모권(${total})보다 작아야 합니다.`);return}
+    if(!(keep>=1)||keep>=total){alert(`${k}그룹: 남길 응모권 수(${v('keep')})는 1 이상, 전체 응모권(${total})보다 작아야 합니다.`);return}
+    if(r1&&r1+keep>total){alert(`${k}그룹: 1차 탈락(${r1}) + 남길 응모권(${keep})이 전체(${total})보다 많습니다.`);return}
     if(np<1){alert(`${k}그룹: 최종 경품을 1개 이상 입력해 주세요.`);return}
+    if(np>keep&&!confirm(`${k}그룹: 경품(${np}개)이 남길 응모권(${keep}매)보다 많습니다. 그대로 저장할까요?`))return;
     const changed=data.trim()!==String(S.groups[k].data).trim();
     const pr=S.prog[k];
-    if(changed&&pr&&(pr.log.length||pr.winners.length)&&!confirm(`${k}그룹 명단이 바뀌었습니다. 진행 상황을 초기화하고 저장할까요?`))return;
-    next[k]={g:{title:v('title')||`${k}그룹`,r1,r2,prizes,data},changed};
+    if(changed&&pr&&(pr.log.length||pr.winners.length)&&!confirm(`${k}그룹 명단이 바뀌었습니다. 진행 기록을 초기화하고 저장할까요?`))return;
+    next[k]={g:{title:v('title')||`${k}그룹`,r1,keep,prizes,data,sample:changed?false:!!S.groups[k].sample},changed};
   }
-  S.onePrize=$('#s-one').checked;
-  for(const k of KEYS){S.groups[k]=next[k].g;if(next[k].changed)S.prog[k]=null;M[k]=build(k);ensureProg(k)}
+  if(S.onePrize!==$('#s-one').checked)audit('설정',`1인 1경품 ${$('#s-one').checked?'켬':'끔'}`);
+  if(S.grand.prizes!==$('#s-grand').value)audit('설정',`1등 통합 경품: ${expandPrizes($('#s-grand').value).join(', ')||'없음'}`);
+  S.onePrize=$('#s-one').checked;S.grand={prizes:$('#s-grand').value};
+  for(const k of KEYS){
+    const old=S.groups[k],g=next[k].g;
+    S.groups[k]=g;if(next[k].changed){S.prog[k]=null;S.grandWinners=S.grandWinners.filter(w=>w.k!==k)}M[k]=build(k);ensureProg(k);
+    if(next[k].changed)audit('명단등록',`${k}그룹 명단 등록 · ${M[k].people.length}명 · 응모권 ${M[k].tickets.length}매 · 명단 지문 ${fp(k)}`);
+    if(next[k].changed||old.r1!==g.r1||old.keep!==g.keep||old.prizes!==g.prizes)audit('설정',`${k}그룹 · 1차 ${r1Count(k)}매 / 2차 ${r2Count(k)}매 탈락 / 최종 ${keepOf(k)}매 · 경품: ${[...new Set(prizeList(k))].map(x=>x+'×'+prizeList(k).filter(y=>y===x).length).join(', ')}`);
+  }
   save();closeSettings();renderAll();emit('state');
 }
 function exportCSV(){
-  const L=[['그룹','구분','순번','응모권번호','근무처','부서','성명','경품']];
+  const L=[['그룹','구분','순번','응모권번호','근무처','부서','성명','경품','일시']];
   for(const k of KEYS){const mm=M[k],p=S.prog[k];if(!p)continue;
-    p.log.forEach((e,i)=>{const t=mm.tickets[e.t];L.push([k,e.r+'차 탈락',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,''])});
-    p.winners.forEach((w,i)=>{const t=mm.tickets[w.t];L.push([k,'당첨',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,w.prize])});}
-  const csv='﻿'+L.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\r\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='연말경품추첨_결과.csv';a.click();
+    p.log.forEach((e,i)=>{const t=mm.tickets[e.t];L.push([k,e.r+'차 탈락',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,'',e.at?fmtISO(e.at):''])});
+    p.winners.forEach((w,i)=>{const t=mm.tickets[w.t];L.push([k,'당첨',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,w.prize,w.at?fmtISO(w.at):''])});}
+  S.grandWinners.forEach((w,i)=>{const t=M[w.k].tickets[w.t];L.push([w.k,'통합 당첨',i+1,t.no,t.p.site,t.p.d.dept,t.p.name,w.prize,w.at?fmtISO(w.at):''])});
+  downloadCSV(L,'연말경품추첨_결과.csv');
+}
+function downloadCSV(L,name){
+  const csv='\ufeff'+L.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=name;a.click();
+}
+function openLog(){
+  const v=verifyAudit(),L=S.audit;
+  $('#logBody').innerHTML=`<h2>📜 추첨 로그</h2>
+  <p class="help">명단 등록, 발표 시작·종료, 응모권 1매 탈락, 당첨, 설정 변경, 초기화가 모두 초 단위로 기록됩니다. 각 줄은 앞 줄의 해시를 이어받기 때문에(해시 체인) 중간 기록을 고치거나 지우면 아래 검증에서 드러납니다.${SERVER?' 서버 PC의 logs 폴더에도 같은 기록이 날짜별 파일로 쌓입니다.':''}</p>
+  <div class="verify ${v.ok?'ok':'bad'}">${v.ok?`✔ 무결성 확인 : 정상 · 기록 ${L.length}건 · 마지막 해시 <code>${L.length?L[L.length-1].h:'-'}</code>`:`✖ ${v.at}번 기록에서 해시가 맞지 않습니다. 기록이 변경되었을 수 있습니다.`}</div>
+  <div class="logwrap"><table class="logtbl"><thead><tr><th>#</th><th>일시</th><th>구분</th><th>내용</th><th>해시</th></tr></thead><tbody>
+  ${L.slice().reverse().map(e=>`<tr><td>${e.seq}</td><td class="t">${fmtISO(e.at)}</td><td>${esc(e.type)}</td><td>${esc(e.msg)}</td><td class="h">${e.h}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--dim)">아직 기록이 없습니다.</td></tr>'}
+  </tbody></table></div>
+  <div class="mbtns"><span class="sp"></span><button class="btn" id="l-csv">로그 CSV 다운로드</button><button class="btn" id="l-res">결과 CSV 다운로드</button><button class="btn ok" id="l-close">닫기</button></div>`;
+  $('#logModal').classList.add('show');
+  $('#l-close').onclick=()=>$('#logModal').classList.remove('show');
+  $('#l-res').onclick=exportCSV;
+  $('#l-csv').onclick=()=>downloadCSV([['번호','일시','구분','내용','해시']].concat(L.map(e=>[e.seq,fmtISO(e.at),e.type,e.msg,e.h])),'연말경품추첨_로그.csv');
 }
 
 /* ---------- 엑셀 ---------- */
 const norm=v=>String(v==null?'':v).replace(/\s+/g,'');
 const NAME_RE=/^(성명|이름|성함)$/;
 function tablesFromRows(rows){
-  const hi=rows.findIndex(r=>r.some(c=>NAME_RE.test(norm(c))));
+  const hi=rows.findIndex(r=>(r||[]).some(c=>NAME_RE.test(norm(c))));
   if(hi<0)return[];
-  const H=rows[hi].map(norm);
-  const nameCols=H.map((h,i)=>NAME_RE.test(h)?i:-1).filter(i=>i>=0);
+  const width=Math.max(...rows.slice(0,hi+1).map(r=>(r||[]).length));
+  const top=Math.max(0,hi-2);
+  // 머리글이 2~3줄로 나뉜 경우(병합 셀)도 합쳐서 본다
+  const H=[];
+  for(let i=0;i<width;i++){const toks=[];for(let r=top;r<=hi;r++){const v=norm(rows[r]&&rows[r][i]);if(v&&!/^[\d.,]+$/.test(v))toks.push(v)}H.push(toks)}
+  const has=(i,re)=>H[i]&&H[i].some(t=>re.test(t));
+  const nameCols=H.map((_,i)=>has(i,NAME_RE)?i:-1).filter(i=>i>=0);
   return nameCols.map((nc,j)=>{
-    const lo=j?nameCols[j-1]:-1,up=j<nameCols.length-1?nameCols[j+1]:H.length;
-    const left=re=>{for(let i=nc-1;i>lo;i--)if(re.test(H[i]))return i;return-1};
-    const right=re=>{for(let i=nc+1;i<up;i++)if(re.test(H[i]))return i;return-1};
-    const dc=left(/부서|팀/),sc=left(/근무처|회사|사업장|법인|소속/),gc=left(/^(그룹|조|구분)$/);
-    let tc=right(/전체/);if(tc<0)tc=right(/^(?!.*(기본|추가|잔여)).*(응모권|매수|수량|티켓|장수)/);
-    const out=[];
+    const lo=j?nameCols[j-1]:-1,up=j<nameCols.length-1?nameCols[j+1]:width;
+    const left=re=>{for(let i=nc-1;i>lo;i--)if(has(i,re))return i;return-1};
+    const right=re=>{for(let i=nc+1;i<up;i++)if(has(i,re))return i;return-1};
+    const dc=left(/^(부서|부서명|팀|팀명|소속부서)$/),sc=left(/^(근무처|회사|회사명|사업장|법인|소속)$/),gc=left(/^(그룹|조|구분)$/);
+    let tc=right(/^전체/);if(tc<0)tc=right(/^(응모권|응모권수|매수|수량|티켓|장수)$/);
+    const bc_=tc<0?right(/^기본/):-1,ac_=tc<0?right(/^추가/):-1;
+    // 표 제목 (예: "A: 일산전자+ISEMM")
+    let key=null,title='';
+    for(let r=0;r<hi&&!key;r++)for(let i=lo+1;i<=nc&&!key;i++){const mm=String((rows[r]||[])[i]??'').trim().match(/^([AaBb])\s*(그룹)?\s*[:：]\s*(.+)$/);if(mm){key=mm[1].toUpperCase();title=mm[3].trim()}}
+    const out=[];let noName=0,capped=0;
     for(let r=hi+1;r<rows.length;r++){
-      const row=rows[r],name=String(row[nc]??'').trim();
-      if(!name||NAME_RE.test(norm(name)))continue;
-      const n=tc<0?1:parseInt(String(row[tc]).replace(/[^0-9]/g,''),10);
+      const row=rows[r]||[],name=String(row[nc]??'').trim();
+      const num=c=>c<0?0:parseInt(String(row[c]??'').replace(/[^0-9]/g,''),10)||0;
+      let n=tc>=0?num(tc):(bc_>=0||ac_>=0)?num(bc_)+num(ac_):1;
+      if(!name||NAME_RE.test(norm(name))){if(n>0&&(tc>=0||bc_>=0))noName++;continue}
       if(!(n>0))continue;
+      if(n>MAXT){n=MAXT;capped++}
       const clean=v=>String(v??'').trim().replace(/,/g,' ');
-      out.push({group:gc<0?'':norm(row[gc]).toUpperCase(),site:sc<0?'':clean(row[sc]),dept:dc<0?'-':clean(row[dc])||'-',name:clean(name),n:Math.min(n,20)});
+      out.push({group:gc<0?'':norm(row[gc]).toUpperCase(),site:sc<0?'':clean(row[sc]),dept:dc<0?'-':clean(row[dc])||'-',name:clean(name),n});
     }
-    return{rows:out,hasGroup:gc>=0,noTicketCol:tc<0};
+    return{rows:out,hasGroup:gc>=0,key,title,noName,capped,noTicketCol:tc<0&&bc_<0&&ac_<0};
   });
 }
 async function importFile(file,onlyKey){
   let tables=[];
   try{
-    if(/\.csv$/i.test(file.name)&&!window.XLSX){
+    if(!window.XLSX){
+      if(!/\.csv$/i.test(file.name)){alert('엑셀 라이브러리(vendor/xlsx.full.min.js)를 불러오지 못했습니다. CSV로 저장하거나 명단을 붙여넣어 주세요.');return}
       const txt=await file.text();tables=tablesFromRows(txt.split(/\r?\n/).map(l=>l.split(l.includes('\t')?'\t':',')));
     }else{
-      if(!window.XLSX){alert('엑셀 라이브러리(vendor/xlsx.full.min.js)를 불러오지 못했습니다. 명단을 복사해 텍스트 칸에 붙여넣어 주세요.');return}
       const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
-      for(const n of wb.SheetNames)tables.push(...tablesFromRows(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:false})));
+      for(const n of wb.SheetNames)tables.push(...tablesFromRows(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:false,blankrows:true})));
     }
   }catch(e){alert('파일을 읽지 못했습니다: '+e.message);return}
   tables=tables.filter(t=>t.rows.length);
-  if(!tables.length){alert('‘성명’ 열을 찾지 못했습니다. 첫 줄(머리글)에 근무처 / 부서 / 성명 / 응모권 열이 있는지 확인해 주세요.');return}
-  const out={A:[],B:[]};
-  tables.forEach((t,idx)=>t.rows.forEach(r=>{
-    let k=null;
-    if(t.hasGroup&&r.group){k=r.group.startsWith('A')?'A':r.group.startsWith('B')?'B':null}
-    if(!k&&!t.hasGroup)k=onlyKey&&tables.length===1?onlyKey:(idx===0?'A':idx===1?'B':null);
-    if(k)out[k].push(r);
-  }));
-  const keys=onlyKey?[onlyKey]:KEYS.filter(k=>out[k].length);
-  if(!keys.length||keys.every(k=>!out[k].length)){alert('불러올 명단이 없습니다. 그룹 열 값이 A 또는 B인지 확인해 주세요.');return}
+  if(!tables.length){alert('‘성명’ 열을 찾지 못했습니다. 머리글에 근무처 / 부서 / 성명 / 응모권 열이 있는지 확인해 주세요.');return}
+  const out={A:[],B:[]},titles={},notes=[];
+  tables.forEach((t,idx)=>{
+    if(t.key&&t.title)titles[t.key]=t.title;
+    if(t.noName)notes.push(`이름이 비어 있는 행 ${t.noName}개는 제외했습니다.`);
+    if(t.capped)notes.push(`응모권이 ${MAXT}매를 넘는 ${t.capped}명은 ${MAXT}매로 맞췄습니다.`);
+    if(t.noTicketCol)notes.push('응모권 열이 없는 표는 1인 1매로 처리했습니다.');
+    for(const r of t.rows){
+      let k=null;
+      if(t.hasGroup&&r.group)k=r.group.startsWith('A')?'A':r.group.startsWith('B')?'B':null;
+      else if(!t.hasGroup)k=onlyKey&&tables.length===1?onlyKey:(t.key||(idx===0?'A':idx===1?'B':null));
+      if(k)out[k].push(r);
+    }
+  });
+  const keys=(onlyKey?[onlyKey]:KEYS).filter(k=>out[k].length);
+  if(!keys.length){alert('불러올 명단이 없습니다. 그룹 열 값이 A 또는 B인지 확인해 주세요.');return}
   const msg=[];
   for(const k of keys){
-    if(!out[k].length)continue;
     $(`#s-${k}-data`).value=out[k].map(r=>[r.site,r.dept,r.name,r.n].join(',')).join('\n');
+    if(titles[k])$(`#s-${k}-title`).value=`${k}그룹 · ${titles[k]}`;
     msg.push(`${k}그룹: ${out[k].length}명 · 응모권 ${out[k].reduce((a,r)=>a+r.n,0)}매`);
   }
-  const warn=tables.some(t=>t.noTicketCol)?'\n\n※ 응모권 열을 찾지 못한 표는 1인 1매로 처리했습니다.':'';
-  alert(`엑셀에서 불러왔습니다.\n\n${msg.join('\n')}${warn}\n\n내용 확인 후 [저장]을 눌러주세요.`);
+  alert(`엑셀에서 불러왔습니다.\n\n${msg.join('\n')}${notes.length?'\n\n※ '+[...new Set(notes)].join('\n※ '):''}\n\n내용 확인 후 [저장]을 눌러주세요.`);
 }
 function exportXlsx(){
   if(!window.XLSX){alert('엑셀 라이브러리를 불러오지 못했습니다.');return}
@@ -1003,37 +1264,56 @@ function exportXlsx(){
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'명단');XLSX.writeFile(wb,'경품추첨_명단양식.xlsx');
 }
 
-/* ---------- 서버 동기화 (관람 모드) ---------- */
+/* ---------- 수신 (관람 / 현황판 창) ---------- */
 function applyState(st){
-  if(!st||!st.groups)return;
-  const old=S;S=st;if(!S.prog)S.prog={};
+  if(!okState(st))return;
+  const old=S,snd=S.sound,au=S.audit;S=st;fixState();S.sound=snd;if(MODE==='viewer'&&!st.audit)S.audit=au||[];
   for(const k of KEYS){if(!M[k]||!old||!old.groups||old.groups[k].data!==S.groups[k].data)M[k]=build(k);ensureProg(k)}
   $('#speed').value=S.speed;renderAll();
 }
 const Q=[];let qBusy=false;
 function enqueue(msg){Q.push(msg);if(!qBusy)drain()}
 async function drain(){qBusy=true;while(Q.length){const msg=Q.shift();try{await handle(msg)}catch(e){console.error(e)}}qBusy=false}
-function needSync(st,key){return st&&(S.cur!==key||JSON.stringify(st.prog[key])!==JSON.stringify(S.prog[key]))}
+async function resync(){
+  try{
+    if(SERVER){const j=await fetch('api/state',{cache:'no-store'}).then(r=>r.json());if(j&&j.state)applyState(j.state)}
+    else{const j=localStorage.getItem(LS);if(j)applyState(JSON.parse(j))}
+  }catch(e){}
+}
+// 관리자 화면의 정확한 시각으로 맞춤 (가장 최근 기록 1건)
+function adoptTime(at){
+  let best=null;
+  for(const k of KEYS){const p=S.prog[k];for(const arr of [p.log,p.winners]){const e=arr[arr.length-1];if(e&&(!best||(e.at||0)>(best.at||0)))best=e}}
+  const g=S.grandWinners[S.grandWinners.length-1];if(g&&(!best||(g.at||0)>(best.at||0)))best=g;
+  if(best)best.at=at;
+}
 async function handle(msg){
-  const st=msg.state,d=msg.data||{};
+  const d=msg.data||{};
   switch(msg.event){
-    case'state':applyState(st);break;
-    case'sync':if(st){if(JSON.stringify(st.prog)!==JSON.stringify(S.prog)||st.cur!==S.cur)applyState(st);else{S.speed=st.speed;updateUI()}}break;
-    case'elim':if(needSync(st,d.key))applyState(st);busy=true;updateUI();await eliminateOne(d);busy=false;updateUI();break;
+    case'state':if(msg.state)applyState(msg.state);else await resync();break;
+    case'sync':if(d.ck!==ck())await resync();else{if(d.speed)S.speed=d.speed;if(d.at)adoptTime(d.at);updateUI()}break;
+    case'elim':
+      if(d.ck!==ck())await resync();
+      if(S.cur!==d.key||S.prog[d.key].status[d.ti]!==0){renderAll();break}
+      busy=true;updateUI();await eliminateOne(d);busy=false;updateUI();break;
     case'countdown':await countdown(d.title,d.sub);break;
-    case'msg':await message(d.title,d.sub,d.oid);resetStage();renderLog();updateUI();break;
-    case'win':if(needSync(st,d.key))applyState(st);await drawWinner(d);break;
+    case'msg':await message(d.title,d.sub,d.oid);resetStage();idleBanner();renderLog();updateUI();break;
+    case'win':
+      if(d.ck!==ck())await resync();
+      if(S.prog[d.key].status[d.ti]!==0){renderAll();break}
+      await drawWinner(d);break;
   }
+}
+function onRemote(msg){
+  if(!msg||typeof msg!=='object')return;
+  if(msg.event==='viewers'){$('#viewers').textContent=`👀 접속 화면 ${msg.data.n}개`;return}
+  if(MODE!=='viewer')return;
+  if(msg.event==='close'){closedOids.add(msg.data.oid);if(viewerWait&&viewerWait.oid===msg.data.oid){const r=viewerWait.res;viewerWait=null;r()}return}
+  enqueue(msg);
 }
 function connectSSE(){
   const es=new EventSource('api/events');let first=true;
-  es.onmessage=e=>{
-    let msg;try{msg=JSON.parse(e.data)}catch(x){return}
-    if(msg.event==='viewers'){$('#viewers').textContent=`👀 접속 화면 ${msg.data.n}개`;return}
-    if(MODE!=='viewer')return;
-    if(msg.event==='close'){closedOids.add(msg.data.oid);if(viewerWait&&viewerWait.oid===msg.data.oid){const r=viewerWait.res;viewerWait=null;r()}return}
-    enqueue(msg);
-  };
+  es.onmessage=e=>{let msg;try{msg=JSON.parse(e.data)}catch(x){return}onRemote(msg)};
   es.onopen=()=>{
     if(MODE==='viewer'&&!first)fetch('api/state',{cache:'no-store'}).then(r=>r.json()).then(j=>{if(j.state)enqueue({event:'state',state:j.state})}).catch(()=>{});
     first=false;
@@ -1043,45 +1323,89 @@ async function detectServer(){
   if(!/^https?:$/.test(location.protocol))return null;
   try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return j&&typeof j==='object'&&'state' in j?j:null}catch(e){return null}
 }
+function openBoardWindow(){
+  const u=new URL(location.href);u.search='';u.searchParams.set('view','board');
+  u.searchParams.set(SERVER?'viewer':'sync',SERVER?'1':'viewer');
+  window.open(u.toString(),'lottery-board');
+}
 
-/* ---------- events ---------- */
+/* ---------- 시작 ---------- */
 function onMain(){
   if(closer||starting)return;
   ac();
   const ph=P().phase;
-  if(ph==='r1'||ph==='r2'){if(running){running=false;updateUI()}else startRound()}
-  else if(ph==='final')drawWinner();
+  if(ph==='r1'||ph==='r2'){if(running){running=false;audit('일시정지',`${S.cur}그룹 ${ph==='r1'?1:2}차 발표 일시정지 (${doneCount()}/${target()}매)`);save();updateUI()}else startRound()}
+  else if(ph==='final'||inGrand())drawWinner();
+}
+/* ---------- 관리자 로그인 ---------- */
+let authWarned=false;
+function authLost(){if(authWarned)return;authWarned=true;running=false;alert('관리자 로그인이 만료되었습니다. 다시 로그인해 주세요.');location.reload()}
+function openLogin(){$('#lgMsg').textContent='';$('#loginModal').classList.add('show');setTimeout(()=>$('#lgUser').focus(),50)}
+async function doLogin(e){
+  e.preventDefault();$('#lgMsg').textContent='확인 중…';
+  try{
+    const r=await fetch('api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user:$('#lgUser').value.trim(),pw:$('#lgPw').value})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok&&j.ok){const u=new URL(location.href);u.searchParams.delete('viewer');location.href=u.toString();return}
+    $('#lgMsg').textContent=j.msg||'로그인에 실패했습니다.';$('#lgPw').value='';
+  }catch(x){$('#lgMsg').textContent='서버에 연결할 수 없습니다.'}
+}
+async function doLogout(){
+  if(running||busy||loopAlive){alert('진행을 일시정지한 뒤 로그아웃해 주세요.');return}
+  await fetch('api/logout',{method:'POST'}).catch(()=>{});location.reload();
+}
+function toggleSide(force){
+  const hide=force!=null?force:!document.body.classList.contains('side-hidden');
+  document.body.classList.toggle('side-hidden',hide);
+  try{localStorage.setItem('lottery-side',hide?'1':'0')}catch(e){}
+  setTimeout(fitBoard,320);
 }
 function toggleFS(){try{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}catch(e){}}
 async function init(){
   load();
   const srv=await detectServer();
   if(srv){
-    if(HOSTKEY){
-      const ok=await fetch('api/check',{headers:{'x-host-key':HOSTKEY}}).then(r=>r.ok).catch(()=>false);
-      MODE=ok?'host':'viewer';if(!ok)alert('진행자 키가 올바르지 않아 관람 모드로 접속합니다.');
-    }else MODE='viewer';
-    if(srv.state&&srv.state.v===1&&srv.state.groups){const snd=S.sound;S=srv.state;if(!S.prog)S.prog={};S.sound=snd}
-  }
+    SERVER=true;
+    const me=await fetch('api/me',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}));
+    MODE=me.admin&&!FORCE_VIEW?'host':'viewer';
+    if(okState(srv.state)){const snd=S.sound;S=srv.state;fixState();S.sound=snd}
+  }else if(QS.get('sync')==='viewer')MODE='viewer';
   KEYS.forEach(k=>{M[k]=build(k);ensureProg(k)});save();
+  document.body.classList.add('view-'+VIEW);
+  if(!SERVER)document.body.classList.add('local');
   if(MODE==='viewer'){document.body.classList.add('viewer');$('#ovHint').textContent='진행자가 곧 다음 순서로 진행합니다';$('#fHint').textContent='진행자가 곧 다음 순서로 진행합니다'}
-  if(MODE!=='local'){$('#liveBadge').hidden=false;connectSSE()}
-  if(MODE==='host'&&!(srv.state&&srv.state.groups))emit('state');
-  const sp=$('#speed');[2,3,4,5,6,7,8,10,12,15].forEach(s=>sp.insertAdjacentHTML('beforeend',`<option value="${s}">⏱ ${s}초/매</option>`));
-  sp.value=S.speed;sp.onchange=()=>{S.speed=+sp.value;save();updateUI();sp.blur();emit('sync')};
+  if(SERVER||MODE==='viewer')$('#liveBadge').hidden=false;
+  if(SERVER)connectSSE();
+  else if(MODE==='viewer'&&bc)bc.onmessage=e=>{let msg=e.data;if(typeof msg==='string'){try{msg=JSON.parse(msg)}catch(x){return}}onRemote(msg)};
+  if(MODE==='host'&&!okState(srv.state))emit('state');
+
+  const sp=$('#speed');[1,1.5,2,2.5,3,3.5,4,5,6,8,10].forEach(s=>sp.insertAdjacentHTML('beforeend',`<option value="${s}">${s}초</option>`));
+  if(![...sp.options].some(o=>+o.value===+S.speed))sp.insertAdjacentHTML('beforeend',`<option value="${S.speed}">${S.speed}초</option>`);
+  sp.value=String(S.speed);sp.onchange=()=>{S.speed=+sp.value;audit('설정',`발표 간격 ${S.speed}초/매`);save();updateUI();sp.blur();emit('sync')};
   $('#mainBtn').onclick=e=>{e.currentTarget.blur();onMain()};
   $('#soundBtn').onclick=e=>{e.currentTarget.blur();if(MODE==='viewer'){viewerSound=!viewerSound;ac()}else{S.sound=!S.sound;save()}updateUI()};
   $('#fsBtn').onclick=e=>{e.currentTarget.blur();toggleFS()};
   $('#setBtn').onclick=e=>{e.currentTarget.blur();openSettings()};
+  $('#winBtn').onclick=e=>{e.currentTarget.blur();openBoardWindow()};
+  $('#logBtn').onclick=e=>{e.currentTarget.blur();openLog()};
+  $('#loginBtn').hidden=!(SERVER&&MODE==='viewer'&&!FORCE_VIEW);$('#logoutBtn').hidden=!(SERVER&&MODE==='host');
+  $('#loginBtn').onclick=e=>{e.currentTarget.blur();openLogin()};$('#logoutBtn').onclick=doLogout;
+  $('#loginForm').onsubmit=doLogin;$('#lgCancel').onclick=()=>$('#loginModal').classList.remove('show');
+  $('#sideToggle').onclick=e=>{e.currentTarget.blur();toggleSide()};
+  try{if(localStorage.getItem('lottery-side')==='1')document.body.classList.add('side-hidden')}catch(e){}
+  const tick=()=>{$('#clock').textContent=fmtFull(Date.now())};tick();setInterval(tick,1000);
+  $$('.vbtn').forEach(b=>b.onclick=()=>{b.blur();if(VIEW!==b.dataset.v)setView(b.dataset.v)});
   $$('.tab').forEach(t=>t.onclick=()=>{t.blur();if(t.disabled||S.cur===t.dataset.g)return;S.cur=t.dataset.g;save();renderAll();emit('state')});
   $('#ov').onclick=()=>closer&&closer();$('#finalOv').onclick=()=>closer&&closer();
   addEventListener('keydown',e=>{
-    if(MODE==='viewer'){if(e.key==='f'||e.key==='F'||e.key==='ㄹ')toggleFS();return}
+    if(e.key==='f'||e.key==='F'||e.key==='ㄹ'){if(!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))toggleFS();return}
+    if(MODE==='viewer'){if(e.key==='Escape')$('#loginModal').classList.remove('show');return}
+    if($('#logModal').classList.contains('show')){if(e.key==='Escape')$('#logModal').classList.remove('show');return}
     if($('#setModal').classList.contains('show')){if(e.key==='Escape')closeSettings();return}
     if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
     if(e.code==='Space'||e.code==='Enter'||e.code==='NumpadEnter'){e.preventDefault();if(closer)closer();else onMain();return}
-    if(e.key==='Escape'&&closer){closer();return}
-    if(e.key==='f'||e.key==='F'||e.key==='ㄹ')toggleFS();
+    if(e.key==='Escape'&&closer)closer();
+    if(e.key==='h'||e.key==='H'||e.key==='ㅗ')toggleSide();
   });
   let rt;addEventListener('resize',()=>{resizeCanvas();clearTimeout(rt);rt=setTimeout(fitBoard,150)});
   resizeCanvas();requestAnimationFrame(frame);

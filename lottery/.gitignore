@@ -2,5 +2,7 @@ state.json
 state.json.tmp
 config.json
 접속주소.txt
+logs/
 node/
 node_modules/
+*_admin.zip

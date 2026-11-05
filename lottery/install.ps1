@@ -64,7 +64,7 @@ try {
 }
 
 # 3) 방화벽 (다른 PC에서 접속할 수 있도록) - 관리자 권한일 때만
-$port = 3000
+$port = 15138
 try { $cfg = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json; if ($cfg.port) { $port = [int]$cfg.port } } catch {}
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isAdmin) {
