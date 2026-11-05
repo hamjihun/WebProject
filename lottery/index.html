@@ -1341,9 +1341,15 @@ function connectSSE(){
     first=false;
   };
 }
+// 추첨 서버가 있는지 확인 (없거나 2초 안에 답이 없으면 단독 모드로 바로 시작)
 async function detectServer(){
   if(!/^https?:$/.test(location.protocol))return null;
-  try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)return null;const j=await r.json();return j&&typeof j==='object'&&'state' in j?j:null}catch(e){return null}
+  const ctl=window.AbortController?new AbortController():null,tm=setTimeout(()=>ctl&&ctl.abort(),2000);
+  try{
+    const r=await Promise.race([fetch('api/state',{cache:'no-store',signal:ctl?ctl.signal:undefined}),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),2200))]);
+    if(!r.ok||!/json/i.test(r.headers.get('content-type')||''))return null;
+    const j=await r.json();return j&&typeof j==='object'&&'state' in j?j:null;
+  }catch(e){return null}finally{clearTimeout(tm)}
 }
 function openBoardWindow(){
   const u=new URL(location.href);u.search='';u.searchParams.set('view','board');
@@ -1388,7 +1394,7 @@ async function init(){
   const srv=await detectServer();
   if(srv){
     SERVER=true;
-    const me=await fetch('api/me',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}));
+    const me=await Promise.race([fetch('api/me',{cache:'no-store'}).then(r=>r.json()),new Promise(r=>setTimeout(()=>r({}),2500))]).catch(()=>({}));
     MODE=me.admin&&!FORCE_VIEW?'host':'viewer';
     if(okState(srv.state)){const snd=S.sound;S=srv.state;fixState();S.sound=snd}
   }else if(QS.get('sync')==='viewer')MODE='viewer';

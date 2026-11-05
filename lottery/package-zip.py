@@ -23,10 +23,24 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
             z.writestr(info, fh.read())
 print(out, os.path.getsize(out) // 1024, 'KB')
 
-# C:\ims\event 같은 웹 폴더에 붙여넣기만 하는 단독 실행용 (서버 없음)
-static_out = os.path.join(ROOT, 'dist', 'event_paste.zip')
+# C:\ims\event 같은 웹 폴더에 그대로 넣는 단독 실행용 (서버 없음)
+#   dist/event/ 폴더 + dist/event_full.zip  (index.html 한 파일에 엑셀 기능까지 포함)
+import shutil
+ev = os.path.join(ROOT, 'dist', 'event')
+shutil.rmtree(ev, ignore_errors=True); os.makedirs(os.path.join(ev, 'vendor'))
+html = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
+lib = open(os.path.join(ROOT, 'vendor', 'xlsx.full.min.js'), encoding='utf-8').read()
+tag = '<script src="vendor/xlsx.full.min.js"></script>'
+assert html.count(tag) == 1 and '</script' not in lib
+html = html.replace(tag, '<script>/* SheetJS xlsx 0.18.5 (Apache-2.0) */\n' + lib + '\n</script>')
+open(os.path.join(ev, 'index.html'), 'w', encoding='utf-8').write(html)
+shutil.copy(os.path.join(ROOT, 'roster_template.xlsx'), ev)
+shutil.copy(os.path.join(ROOT, 'event_README.txt'), os.path.join(ev, 'README.txt'))
+shutil.copy(os.path.join(ROOT, 'vendor', 'xlsx.full.min.js'), os.path.join(ev, 'vendor'))
+static_out = os.path.join(ROOT, 'dist', 'event_full.zip')
 with zipfile.ZipFile(static_out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-    for src, dst in [('index.html', 'index.html'), ('roster_template.xlsx', 'roster_template.xlsx'),
-                     ('vendor/xlsx.full.min.js', 'vendor/xlsx.full.min.js'), ('event_README.txt', 'README.txt')]:
-        z.write(os.path.join(ROOT, src), 'event/' + dst)
+    for dp, _, fs in os.walk(ev):
+        for f in fs:
+            full = os.path.join(dp, f)
+            z.write(full, os.path.join('event', os.path.relpath(full, ev)).replace(os.sep, '/'))
 print(static_out, os.path.getsize(static_out) // 1024, 'KB')
