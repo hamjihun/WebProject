@@ -44,3 +44,11 @@ with zipfile.ZipFile(static_out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as 
             full = os.path.join(dp, f)
             z.write(full, os.path.join('event', os.path.relpath(full, ev)).replace(os.sep, '/'))
 print(static_out, os.path.getsize(static_out) // 1024, 'KB')
+
+# 바로 실행용 (서버·ims 없이 START.bat 더블클릭) : dist/YearEndLottery_Desktop.zip
+desk_out = os.path.join(ROOT, 'dist', 'YearEndLottery_Desktop.zip')
+with zipfile.ZipFile(desk_out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+    for src, dst in [(os.path.join(ev, 'index.html'), 'index.html'), (os.path.join(ROOT, 'roster_template.xlsx'), 'roster_template.xlsx'),
+                     (os.path.join(ROOT, 'desktop_START.bat'), 'START.bat'), (os.path.join(ROOT, 'desktop_README.txt'), 'README.txt')]:
+        z.write(src, 'YearEndLottery_Desktop/' + dst)
+print(desk_out, os.path.getsize(desk_out) // 1024, 'KB')
