@@ -1697,7 +1697,7 @@ public struct POINT { public int X; public int Y; }
         foreach ($k in 'HKLM:\SOFTWARE\Policies\Microsoft\Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended') {
             Remove-ItemProperty -LiteralPath $k -Name 'ShowDownloadsToolbarButton' -ErrorAction SilentlyContinue
         }
-        Set-EdgeDownloadButton
+        Set-EdgeProfilePrefs
         Add-BrowserBookmarks 'edge' '엣지'
         New-EdgeDesktopLinks
         # 직원이 바꿀 수 있게: 예전에 고정값(조직에서 관리)으로 넣은 것과 셋팅 중에만 필요한 설정은 지움
@@ -1706,39 +1706,48 @@ public struct POINT { public int X; public int Y; }
         Close-Browser 'msedge' '엣지'
     }
 
-    # 엣지 프로필 설정 파일에 '도구 모음에 다운로드 단추 표시' 켜기 (엣지가 꺼져 있어야 함)
-    # 파일 전체를 다시 쓰지 않고 해당 값만 글자로 바꿈 (설정 파일이 깨지지 않도록)
-    function Set-EdgeDownloadButton {
+    # 엣지 프로필 설정(Preferences) 값 하나를 글자로 바꿈: "section":{ ... "key":true/false ... }
+    # 파일 전체를 다시 쓰지 않음 (설정 파일이 깨지지 않도록)
+    function Set-JsonPrefBool([string]$Txt, [string]$Section, [string]$Key, [bool]$Value) {
+        $k = '"' + $Key + '"'
+        $v = if ($Value) { 'true' } else { 'false' }
+        $pat = [regex]::Escape($k) + '\s*:\s*(true|false)'
+        if ($Txt -match $pat) { return ([regex]$pat).Replace($Txt, "${k}:$v", 1) }
+        $m = [regex]::Match($Txt, '"' + [regex]::Escape($Section) + '"\s*:\s*\{')
+        if ($m.Success) {
+            # "section":{ 바로 뒤에 넣음 (빈 {} 이면 쉼표 없이)
+            $rest = $Txt.Substring($m.Index + $m.Length).TrimStart()
+            $ins = if ($rest.StartsWith('}')) { "${k}:$v" } else { "${k}:$v," }
+            return $Txt.Insert($m.Index + $m.Length, $ins)
+        }
+        $m = [regex]::Match($Txt, '^\s*\{')
+        $rest = $Txt.Substring($m.Index + $m.Length).TrimStart()
+        $ins = '"' + $Section + '":{' + "${k}:$v}" + $(if ($rest.StartsWith('}')) { '' } else { ',' })
+        return $Txt.Insert($m.Index + $m.Length, $ins)
+    }
+
+    # 엣지 기본 화면 설정 (직원이 바꿀 수 있는 개인 설정으로 넣음, 엣지가 꺼져 있어야 함)
+    #   - 즐겨찾기 모음: 항상 표시
+    #   - 도구 모음: 다운로드 단추 표시
+    function Set-EdgeProfilePrefs {
         $dir = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data\Default'
         $file = Join-Path $dir 'Preferences'
         Get-Process -Name msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
         try {
-            $key = '"show_toolbar_downloads_button"'
-            if (Test-Path -LiteralPath $file) {
-                $txt = [IO.File]::ReadAllText($file)
-                if ($txt -match [regex]::Escape($key) + '\s*:\s*(true|false)') {
-                    $txt = [regex]::Replace($txt, [regex]::Escape($key) + '\s*:\s*(true|false)', "${key}:true")
-                }
-                elseif (($m = [regex]::Match($txt, '"browser"\s*:\s*\{')).Success) {
-                    # "browser":{ 바로 뒤에 값을 넣음 (빈 {} 이면 쉼표 없이)
-                    $rest = $txt.Substring($m.Index + $m.Length).TrimStart()
-                    $ins = if ($rest.StartsWith('}')) { "${key}:true" } else { "${key}:true," }
-                    $txt = $txt.Insert($m.Index + $m.Length, $ins)
-                }
-                else {
-                    $txt = $txt -replace '^\s*\{', ('{"browser":{' + "${key}:true},")
-                }
-                [IO.File]::WriteAllText($file, $txt, (New-Object System.Text.UTF8Encoding($false)))
-            }
+            if (Test-Path -LiteralPath $file) { $txt = [IO.File]::ReadAllText($file) }
             else {
                 # 엣지를 아직 한 번도 열지 않은 새 PC
                 if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-                [IO.File]::WriteAllText($file, ('{"browser":{' + "${key}:true}}"), (New-Object System.Text.UTF8Encoding($false)))
+                $txt = '{}'
             }
-            Write-Log '엣지: 도구 모음에 다운로드 단추 표시 (직원이 바꿀 수 있음)' 'OK'
+            $txt = Set-JsonPrefBool $txt 'bookmark_bar' 'show_on_all_tabs' $true
+            $txt = Set-JsonPrefBool $txt 'bookmark_bar' 'show_only_on_ntp' $false
+            $txt = Set-JsonPrefBool $txt 'browser' 'show_toolbar_downloads_button' $true
+            [IO.File]::WriteAllText($file, $txt, (New-Object System.Text.UTF8Encoding($false)))
+            Write-Log '엣지: 즐겨찾기 모음 항상 표시, 도구 모음에 다운로드 단추 표시 (직원이 바꿀 수 있음)' 'OK'
         }
-        catch { Write-Log "엣지: 다운로드 단추 표시 실패 - $($_.Exception.Message)" 'WARN' }
+        catch { Write-Log "엣지: 즐겨찾기 모음/다운로드 단추 설정 실패 - $($_.Exception.Message)" 'WARN' }
     }
 
     # 바탕화면에 엣지로 여는 사이트 바로가기 (예: 그룹웨어) - config browser.desktopShortcuts
