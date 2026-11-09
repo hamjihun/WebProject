@@ -296,11 +296,21 @@ func (v *Vault) Stat(a Actor, shareName, p string) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	if l.share.BackendPath != "" {
+		return v.ptStat(l)
+	}
 	return v.resolve(v.DB, l, l.parts)
 }
 
 func (v *Vault) List(a Actor, shareName, p string) ([]*Node, error) {
-	dir, err := v.Stat(a, shareName, p)
+	l, err := v.locate(a, shareName, p, LevelRead)
+	if err != nil {
+		return nil, err
+	}
+	if l.share.BackendPath != "" {
+		return v.ptList(l)
+	}
+	dir, err := v.resolve(v.DB, l, l.parts)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +339,14 @@ func listChildren(q querier, id int64) ([]*Node, error) {
 
 // Open returns the file's current content. The caller must close the file.
 func (v *Vault) Open(a Actor, shareName, p string) (*Node, *os.File, error) {
-	n, err := v.Stat(a, shareName, p)
+	l, err := v.locate(a, shareName, p, LevelRead)
+	if err != nil {
+		return nil, nil, err
+	}
+	if l.share.BackendPath != "" {
+		return v.ptOpen(a, l)
+	}
+	n, err := v.resolve(v.DB, l, l.parts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -364,6 +381,9 @@ func (v *Vault) Put(a Actor, shareName, p string, r io.Reader) (n *Node, created
 	l, err := v.locate(a, shareName, p, LevelWrite)
 	if err != nil {
 		return nil, false, err
+	}
+	if l.share.BackendPath != "" {
+		return v.ptPut(a, l, r)
 	}
 	if len(l.parts) == 0 {
 		return nil, false, ErrIsDir
@@ -512,6 +532,9 @@ func (v *Vault) Mkdir(a Actor, shareName, p string) error {
 	if err != nil {
 		return err
 	}
+	if l.share.BackendPath != "" {
+		return v.ptMkdir(a, l)
+	}
 	if exportLocked(a, l) {
 		return ErrForbidden
 	}
@@ -570,6 +593,9 @@ func (v *Vault) Delete(a Actor, shareName, p string) error {
 	l, err := v.locate(a, shareName, p, LevelWrite)
 	if err != nil {
 		return err
+	}
+	if l.share.BackendPath != "" {
+		return v.ptDelete(a, l)
 	}
 	if len(l.parts) == 0 || exportRoot(a, l) {
 		return ErrForbidden
@@ -630,6 +656,9 @@ func (v *Vault) Move(a Actor, srcShare, srcPath, dstShare, dstPath string, overw
 	dl, err := v.locate(a, dstShare, dstPath, LevelWrite)
 	if err != nil {
 		return false, err
+	}
+	if sl.share.BackendPath != "" || dl.share.BackendPath != "" {
+		return v.ptMove(a, sl, dl)
 	}
 	if len(sl.parts) == 0 || exportLocked(a, dl) || exportRoot(a, sl) {
 		return false, ErrForbidden
@@ -721,6 +750,9 @@ func (v *Vault) Copy(a Actor, srcShare, srcPath, dstShare, dstPath string, overw
 	dl, err := v.locate(a, dstShare, dstPath, LevelWrite)
 	if err != nil {
 		return false, err
+	}
+	if sl.share.BackendPath != "" || dl.share.BackendPath != "" {
+		return v.ptCopy(a, sl, dl)
 	}
 	if exportLocked(a, dl) {
 		return false, ErrForbidden

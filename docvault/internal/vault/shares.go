@@ -3,6 +3,7 @@ package vault
 import (
 	"database/sql"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -23,6 +24,9 @@ type Share struct {
 	DriveLetter string `json:"driveLetter"`
 	Personal    bool   `json:"personal"`
 	QuotaBytes  int64  `json:"quotaBytes"`
+	// BackendPath, when set, makes this a passthrough drive served directly from
+	// that existing folder on disk (no hash-blob store, no import).
+	BackendPath string `json:"backendPath"`
 }
 
 type ACLEntry struct {
@@ -32,11 +36,11 @@ type ACLEntry struct {
 	Level         int    `json:"level"`
 }
 
-const shareCols = `id, name, drive_letter, personal, quota_bytes`
+const shareCols = `id, name, drive_letter, personal, quota_bytes, COALESCE(backend_path,'')`
 
 func scanShare(r rowScanner) (*Share, error) {
 	s := &Share{}
-	err := r.Scan(&s.ID, &s.Name, &s.DriveLetter, &s.Personal, &s.QuotaBytes)
+	err := r.Scan(&s.ID, &s.Name, &s.DriveLetter, &s.Personal, &s.QuotaBytes, &s.BackendPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -80,6 +84,24 @@ func normLetter(l string) (string, error) {
 }
 
 func (v *Vault) CreateShare(a Actor, name, letter string, personal bool, quota int64) (*Share, error) {
+	return v.createShare(a, name, letter, personal, quota, "")
+}
+
+// CreatePassthroughShare makes a drive served directly from an existing folder
+// (backendPath) with no import. The folder must already exist on the server.
+func (v *Vault) CreatePassthroughShare(a Actor, name, letter, backendPath string) (*Share, error) {
+	backendPath = strings.TrimSpace(backendPath)
+	if backendPath == "" {
+		return nil, errors.New("기존 폴더 경로를 입력하세요")
+	}
+	fi, err := os.Stat(backendPath)
+	if err != nil || !fi.IsDir() {
+		return nil, errors.New("그 경로의 폴더를 찾을 수 없습니다 (서버에서 접근 가능한 폴더여야 합니다): " + backendPath)
+	}
+	return v.createShare(a, name, letter, false, 0, backendPath)
+}
+
+func (v *Vault) createShare(a Actor, name, letter string, personal bool, quota int64, backendPath string) (*Share, error) {
 	name = strings.TrimSpace(name)
 	if err := validName(name); err != nil {
 		return nil, errors.New("드라이브 이름에 사용할 수 없는 문자가 있습니다")
@@ -91,8 +113,8 @@ func (v *Vault) CreateShare(a Actor, name, letter string, personal bool, quota i
 	if quota < 0 {
 		return nil, ErrBadRequest
 	}
-	res, err := v.DB.Exec(`INSERT INTO shares(name, drive_letter, personal, quota_bytes, created_at) VALUES(?,?,?,?,?)`,
-		name, l, personal, quota, v.Now())
+	res, err := v.DB.Exec(`INSERT INTO shares(name, drive_letter, personal, quota_bytes, backend_path, created_at) VALUES(?,?,?,?,?,?)`,
+		name, l, personal, quota, backendPath, v.Now())
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return nil, errors.New("이미 존재하는 드라이브 이름입니다")
@@ -100,7 +122,11 @@ func (v *Vault) CreateShare(a Actor, name, letter string, personal bool, quota i
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	v.Audit(a, "admin_share_create", name, "", "")
+	detail := ""
+	if backendPath != "" {
+		detail = "기존 폴더: " + backendPath
+	}
+	v.Audit(a, "admin_share_create", name, "", detail)
 	return v.ShareByID(id)
 }
 

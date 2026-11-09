@@ -593,6 +593,7 @@ type shareIn struct {
 	DriveLetter string `json:"driveLetter"`
 	Personal    bool   `json:"personal"`
 	QuotaGB     int64  `json:"quotaGB"`
+	BackendPath string `json:"backendPath"` // set → passthrough drive (기존 폴더 그대로)
 }
 
 func (s *API) createShare(w http.ResponseWriter, r *http.Request, c *ctx) {
@@ -601,7 +602,13 @@ func (s *API) createShare(w http.ResponseWriter, r *http.Request, c *ctx) {
 		fail(w, err)
 		return
 	}
-	sh, err := s.V.CreateShare(c.a, in.Name, in.DriveLetter, in.Personal, in.QuotaGB<<30)
+	var sh *vault.Share
+	var err error
+	if strings.TrimSpace(in.BackendPath) != "" {
+		sh, err = s.V.CreatePassthroughShare(c.a, in.Name, in.DriveLetter, in.BackendPath)
+	} else {
+		sh, err = s.V.CreateShare(c.a, in.Name, in.DriveLetter, in.Personal, in.QuotaGB<<30)
+	}
 	if err != nil {
 		fail(w, err)
 		return
