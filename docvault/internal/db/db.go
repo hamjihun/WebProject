@@ -175,6 +175,7 @@ func Open(path string) (*sql.DB, error) {
 		{"users", "dlp_free", "INTEGER NOT NULL DEFAULT 0"},       // free권한: 모든 유출 차단 면제
 		{"exports", "delivered_path", "TEXT NOT NULL DEFAULT ''"}, // file placed in 개인문서함\반출
 		{"shares", "backend_path", "TEXT NOT NULL DEFAULT ''"},    // passthrough drive: serve this existing folder in place
+		{"shares", "read_only", "INTEGER NOT NULL DEFAULT 0"},     // view-only drive (block writes)
 	} {
 		if err := ensureColumn(d, c.table, c.column, c.def); err != nil {
 			d.Close()

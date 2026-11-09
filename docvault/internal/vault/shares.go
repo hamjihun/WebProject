@@ -27,6 +27,9 @@ type Share struct {
 	// BackendPath, when set, makes this a passthrough drive served directly from
 	// that existing folder on disk (no hash-blob store, no import).
 	BackendPath string `json:"backendPath"`
+	// ReadOnly blocks all writes to this drive (view only). Used to test a
+	// passthrough drive safely while the original system still runs.
+	ReadOnly bool `json:"readOnly"`
 }
 
 type ACLEntry struct {
@@ -36,11 +39,11 @@ type ACLEntry struct {
 	Level         int    `json:"level"`
 }
 
-const shareCols = `id, name, drive_letter, personal, quota_bytes, COALESCE(backend_path,'')`
+const shareCols = `id, name, drive_letter, personal, quota_bytes, COALESCE(backend_path,''), COALESCE(read_only,0)`
 
 func scanShare(r rowScanner) (*Share, error) {
 	s := &Share{}
-	err := r.Scan(&s.ID, &s.Name, &s.DriveLetter, &s.Personal, &s.QuotaBytes, &s.BackendPath)
+	err := r.Scan(&s.ID, &s.Name, &s.DriveLetter, &s.Personal, &s.QuotaBytes, &s.BackendPath, &s.ReadOnly)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -84,12 +87,13 @@ func normLetter(l string) (string, error) {
 }
 
 func (v *Vault) CreateShare(a Actor, name, letter string, personal bool, quota int64) (*Share, error) {
-	return v.createShare(a, name, letter, personal, quota, "")
+	return v.createShare(a, name, letter, personal, quota, "", false)
 }
 
 // CreatePassthroughShare makes a drive served directly from an existing folder
 // (backendPath) with no import. The folder must already exist on the server.
-func (v *Vault) CreatePassthroughShare(a Actor, name, letter, backendPath string) (*Share, error) {
+// readOnly=true serves it view-only (safe while the original system still runs).
+func (v *Vault) CreatePassthroughShare(a Actor, name, letter, backendPath string, readOnly bool) (*Share, error) {
 	backendPath = strings.TrimSpace(backendPath)
 	if backendPath == "" {
 		return nil, errors.New("기존 폴더 경로를 입력하세요")
@@ -98,10 +102,10 @@ func (v *Vault) CreatePassthroughShare(a Actor, name, letter, backendPath string
 	if err != nil || !fi.IsDir() {
 		return nil, errors.New("그 경로의 폴더를 찾을 수 없습니다 (서버에서 접근 가능한 폴더여야 합니다): " + backendPath)
 	}
-	return v.createShare(a, name, letter, false, 0, backendPath)
+	return v.createShare(a, name, letter, false, 0, backendPath, readOnly)
 }
 
-func (v *Vault) createShare(a Actor, name, letter string, personal bool, quota int64, backendPath string) (*Share, error) {
+func (v *Vault) createShare(a Actor, name, letter string, personal bool, quota int64, backendPath string, readOnly bool) (*Share, error) {
 	name = strings.TrimSpace(name)
 	if err := validName(name); err != nil {
 		return nil, errors.New("드라이브 이름에 사용할 수 없는 문자가 있습니다")
@@ -113,8 +117,8 @@ func (v *Vault) createShare(a Actor, name, letter string, personal bool, quota i
 	if quota < 0 {
 		return nil, ErrBadRequest
 	}
-	res, err := v.DB.Exec(`INSERT INTO shares(name, drive_letter, personal, quota_bytes, backend_path, created_at) VALUES(?,?,?,?,?,?)`,
-		name, l, personal, quota, backendPath, v.Now())
+	res, err := v.DB.Exec(`INSERT INTO shares(name, drive_letter, personal, quota_bytes, backend_path, read_only, created_at) VALUES(?,?,?,?,?,?,?)`,
+		name, l, personal, quota, backendPath, readOnly, v.Now())
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return nil, errors.New("이미 존재하는 드라이브 이름입니다")
@@ -130,7 +134,7 @@ func (v *Vault) createShare(a Actor, name, letter string, personal bool, quota i
 	return v.ShareByID(id)
 }
 
-func (v *Vault) UpdateShare(a Actor, id int64, letter string, quota int64) error {
+func (v *Vault) UpdateShare(a Actor, id int64, letter string, quota int64, readOnly bool) error {
 	l, err := normLetter(letter)
 	if err != nil {
 		return err
@@ -142,9 +146,13 @@ func (v *Vault) UpdateShare(a Actor, id int64, letter string, quota int64) error
 	if err != nil {
 		return err
 	}
-	_, err = v.DB.Exec(`UPDATE shares SET drive_letter=?, quota_bytes=? WHERE id=?`, l, quota, id)
+	_, err = v.DB.Exec(`UPDATE shares SET drive_letter=?, quota_bytes=?, read_only=? WHERE id=?`, l, quota, readOnly, id)
 	if err == nil {
-		v.Audit(a, "admin_share_update", s.Name, "", "드라이브 "+l)
+		mode := ""
+		if readOnly {
+			mode = " / 읽기 전용"
+		}
+		v.Audit(a, "admin_share_update", s.Name, "", "드라이브 "+l+mode)
 	}
 	return err
 }

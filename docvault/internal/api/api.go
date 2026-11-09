@@ -594,6 +594,7 @@ type shareIn struct {
 	Personal    bool   `json:"personal"`
 	QuotaGB     int64  `json:"quotaGB"`
 	BackendPath string `json:"backendPath"` // set → passthrough drive (기존 폴더 그대로)
+	ReadOnly    bool   `json:"readOnly"`    // view-only drive
 }
 
 func (s *API) createShare(w http.ResponseWriter, r *http.Request, c *ctx) {
@@ -605,7 +606,7 @@ func (s *API) createShare(w http.ResponseWriter, r *http.Request, c *ctx) {
 	var sh *vault.Share
 	var err error
 	if strings.TrimSpace(in.BackendPath) != "" {
-		sh, err = s.V.CreatePassthroughShare(c.a, in.Name, in.DriveLetter, in.BackendPath)
+		sh, err = s.V.CreatePassthroughShare(c.a, in.Name, in.DriveLetter, in.BackendPath, in.ReadOnly)
 	} else {
 		sh, err = s.V.CreateShare(c.a, in.Name, in.DriveLetter, in.Personal, in.QuotaGB<<30)
 	}
@@ -622,7 +623,7 @@ func (s *API) updateShare(w http.ResponseWriter, r *http.Request, c *ctx) {
 		fail(w, err)
 		return
 	}
-	if err := s.V.UpdateShare(c.a, pathID(r), in.DriveLetter, in.QuotaGB<<30); err != nil {
+	if err := s.V.UpdateShare(c.a, pathID(r), in.DriveLetter, in.QuotaGB<<30, in.ReadOnly); err != nil {
 		fail(w, err)
 		return
 	}

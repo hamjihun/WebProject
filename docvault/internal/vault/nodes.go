@@ -181,7 +181,7 @@ func (v *Vault) locate(a Actor, shareName, p string, need int) (*loc, error) {
 	if lvl < need {
 		return nil, ErrForbidden
 	}
-	if need >= LevelWrite && a.User.WriteBlocked {
+	if need >= LevelWrite && (a.User.WriteBlocked || s.ReadOnly) {
 		return nil, ErrForbidden
 	}
 	parts, err := splitPath(p)

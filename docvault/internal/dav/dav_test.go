@@ -115,7 +115,7 @@ func TestUnlimitedDriveReportsDiskSpace(t *testing.T) {
 	srv, v, tok := setup(t)
 	sys := vault.Actor{Client: "test"}
 	s, _ := v.ShareByName("영업")
-	if err := v.UpdateShare(sys, s.ID, "O", 0); err != nil {
+	if err := v.UpdateShare(sys, s.ID, "O", 0, false); err != nil {
 		t.Fatal(err)
 	}
 	_, body := do(t, srv, tok, "PROPFIND", "/", "", map[string]string{"Depth": "0"})

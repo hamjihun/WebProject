@@ -462,10 +462,11 @@ async function adminShares() {
     <label>용량 제한 (GB, 0=제한 없음)<input name="quota" type="number" min="0" value="0"></label>
     <label class="row"><input type="checkbox" name="personal"> 개인문서함 (사용자마다 자기 공간만 보임)</label>
     <label>기존 폴더 그대로 연결 (선택)<input name="backend" placeholder="예: /data/plusdrive/orgcowork/b000420000/data"><span class="muted">입력하면 <b>복사·이전 없이</b> 그 서버 폴더를 바로 드라이브로 띄웁니다(passthrough). 비우면 일반 자체저장 드라이브. ⚠ 버전관리·휴지통은 미적용, 서버가 그 폴더에 접근·쓰기 가능해야 하며 용량/개인문서함 설정은 무시됩니다.</span></label>
+    <label class="row"><input type="checkbox" name="readonly"> <b>읽기 전용</b> (보기만, 저장·삭제 불가)<br><span class="muted">기존 운영 중인 시스템의 폴더를 <b>테스트</b>할 땐 꼭 체크하세요 — 원본을 절대 수정하지 않아 안전합니다. 전환 완료 후 해제하면 읽기/쓰기.</span></label>
     <div class="buttons"><button type="button" data-close>취소</button><button class="primary">추가</button></div></form>`, (box) => {
     box.querySelector("form").onsubmit = guard(async (e) => {
       e.preventDefault(); const f = e.target;
-      await api("POST", "/api/admin/shares", { name: f.name.value.trim(), driveLetter: f.letter.value, quotaGB: Number(f.quota.value), personal: f.personal.checked, backendPath: f.backend.value.trim() });
+      await api("POST", "/api/admin/shares", { name: f.name.value.trim(), driveLetter: f.letter.value, quotaGB: Number(f.quota.value), personal: f.personal.checked, backendPath: f.backend.value.trim(), readOnly: f.readonly.checked });
       closeModal(); await loadSide(); route();
     });
   });
@@ -474,10 +475,11 @@ async function adminShares() {
     openModal(`<h3>드라이브 수정 – ${esc(s.name)}</h3><form class="form">
       <label>드라이브 문자<input name="letter" maxlength="1" value="${esc(s.driveLetter)}" style="width:80px"></label>
       <label>용량 제한 (GB, 0=제한 없음)<input name="quota" type="number" min="0" value="${Math.round(s.quotaBytes / 2 ** 30)}"></label>
+      <label class="row"><input type="checkbox" name="readonly" ${s.readOnly ? "checked" : ""}> 읽기 전용 (보기만, 저장·삭제 불가)${s.backendPath ? `<br><span class="muted">기존 폴더: ${esc(s.backendPath)}</span>` : ""}</label>
       <div class="buttons"><button type="button" data-close>취소</button><button class="primary">저장</button></div></form>`, (box) => {
       box.querySelector("form").onsubmit = guard(async (e) => {
         e.preventDefault();
-        await api("POST", `/api/admin/shares/${s.id}`, { driveLetter: e.target.letter.value, quotaGB: Number(e.target.quota.value) });
+        await api("POST", `/api/admin/shares/${s.id}`, { driveLetter: e.target.letter.value, quotaGB: Number(e.target.quota.value), readOnly: e.target.readonly.checked });
         closeModal(); await loadSide(); route();
       });
     });
