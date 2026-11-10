@@ -5,3 +5,4 @@
 *.exe binary
 *.ico binary
 *.pptx binary
+*.bat -text
