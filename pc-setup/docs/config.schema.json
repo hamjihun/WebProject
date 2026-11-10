@@ -1,0 +1,570 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PC 셋팅 config.json",
+  "type": "object",
+  "definitions": {
+    "step": {
+      "type": "object",
+      "description": "설치 화면 자동 진행 한 단계. 위에서부터 차례로 진행",
+      "properties": {
+        "click": {
+          "description": "누를 버튼 이름 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "alsoClick": {
+          "description": "click 버튼이 나오기 전까지 보이면 누를 버튼 (예: 다음) (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "uncheck": {
+          "description": "체크 해제할 체크박스/목록 항목 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "radio": {
+          "description": "선택할 라디오 버튼 (예: 동의합니다) (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "select": {
+          "description": "click 전에 목록에서 고를 항목 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "setText": {
+          "description": "입력칸에 넣을 글 ({erpServer} 등 지점 값 치환)",
+          "type": "string"
+        },
+        "clickAt": {
+          "description": "버튼을 찾을 수 없는 화면: 창 안 비율 위치 [[가로,세로],...] 를 마우스로 클릭",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "window": {
+          "description": "이 제목의 창에서만 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "windowText": {
+          "description": "창 안에 이 글이 있을 때만 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "process": {
+          "description": "설치 프로그램이 아닌 다른 프로그램(이름)의 창에서 찾음 (예: Bandizip, msedge) (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "anyAge": {
+          "description": "process: 설치 전부터 실행 중이던 프로그램도 포함",
+          "type": "boolean"
+        },
+        "close": {
+          "description": "창 닫기",
+          "type": "boolean"
+        },
+        "restore": {
+          "description": "최소화된 창을 원래 크기로",
+          "type": "boolean"
+        },
+        "waitIdle": {
+          "description": "누르기 전에 윈도우 업데이트/다른 설치가 끝났는지 확인 (true 또는 이 글이 있는 창일 때만)",
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "whenInstalled": {
+          "description": "clickAt: installed 확인 뒤에만 클릭",
+          "type": "boolean"
+        },
+        "untilClosed": {
+          "description": "clickAt: 창이 닫힐 때까지 다시 클릭 (최대 3번)",
+          "type": "boolean"
+        },
+        "delay": {
+          "description": "창이 보인 뒤 기다릴 초",
+          "type": "number"
+        },
+        "fallbackKeys": {
+          "description": "버튼을 못 찾으면 5초 뒤 보낼 키 (SendKeys 형식, 예: {ENTER})",
+          "type": "string"
+        },
+        "optional": {
+          "description": "제한시간 안에 화면이 없으면 건너뜀",
+          "type": "boolean"
+        },
+        "timeout": {
+          "description": "이 단계 제한시간(초). 지나면 직접 진행으로 전환 (optional 이면 건너뜀)",
+          "type": "integer"
+        }
+      }
+    },
+    "program": {
+      "type": "object",
+      "description": "설치(또는 삭제)할 프로그램 (programs 항목에는 name 필수)",
+      "properties": {
+        "name": {
+          "description": "표시 이름",
+          "type": "string"
+        },
+        "find": {
+          "description": "USB 【 Application 】 에서 찾을 설치파일 이름 (와일드카드, 앞에 있을수록 우선, {site} 치환)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "path": {
+          "description": "설치파일 경로 직접 지정 (【 Application 】 기준)",
+          "type": "string"
+        },
+        "args": {
+          "description": "설치 옵션",
+          "type": "string"
+        },
+        "argsMsi": {
+          "description": ".msi 일 때 옵션",
+          "type": "string"
+        },
+        "argsMatch": {
+          "description": "설치파일 이름별 옵션 {\"패턴\":\"옵션\"}",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "winget": {
+          "description": "winget ID (있으면 winget 먼저, 실패하면 USB 설치파일)",
+          "type": "string"
+        },
+        "fallbackUrl": {
+          "description": "실패 시 내려받을 공식 설치파일 주소",
+          "type": "string"
+        },
+        "installed": {
+          "description": "설치 확인할 파일 경로 (%ProgramFiles% 등, 와일드카드)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "installedName": {
+          "description": "프로그램 추가/제거 목록 이름으로 설치 확인 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "waitInstalled": {
+          "description": "설치 프로그램이 끝난 뒤 설치 확인까지 기다릴 초",
+          "type": "integer"
+        },
+        "noRetry": {
+          "description": "실패해도 마지막에 다시 설치하지 않음",
+          "type": "boolean"
+        },
+        "logUninstall": {
+          "description": "설치 후 로그에 남길 프로그램 추가/제거 항목 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "uninstall": {
+          "description": "이 이름의 프로그램을 삭제 (설치 대신) (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "stopProcess": {
+          "description": "삭제 전에 끌 프로세스 이름",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dismiss": {
+          "description": "설치 중 보이면 언제든 누를 버튼 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "dismissWhen": {
+          "description": "dismiss 를 이 글이 있는 창에서만 (와일드카드 *, 여러 개는 | 로 구분)",
+          "type": "string"
+        },
+        "auto": {
+          "description": "설치 화면 자동 진행 단계",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          }
+        },
+        "guide": {
+          "description": "노란 안내창에 보일 설명 ({erpServer} 치환)",
+          "type": "string"
+        },
+        "confirmAfter": {
+          "description": "직접 진행으로 바뀌면 안내창 [완료] 를 누를 때까지 기다림",
+          "type": "boolean"
+        },
+        "clipboard": {
+          "description": "설치 시작할 때 클립보드에 복사할 글",
+          "type": "string"
+        }
+      }
+    }
+  },
+  "properties": {
+    "usb": {
+      "description": "USB 설치파일 위치",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "USB 볼륨 이름",
+          "type": "string"
+        },
+        "appFolder": {
+          "description": "설치파일 폴더 이름",
+          "type": "string"
+        }
+      }
+    },
+    "network": {
+      "description": "IP 입력칸 기본값",
+      "type": "object",
+      "properties": {
+        "ip": {
+          "description": "IP 기본값",
+          "type": "string"
+        },
+        "subnet": {
+          "description": "서브넷 마스크",
+          "type": "string"
+        },
+        "dns1": {
+          "description": "DNS",
+          "type": "string"
+        }
+      }
+    },
+    "install": {
+      "description": "프로그램 설치 방식",
+      "type": "object",
+      "properties": {
+        "parallel": {
+          "description": "동시에 설치",
+          "type": "boolean"
+        },
+        "staggerSeconds": {
+          "description": "실행 간격(초)",
+          "type": "integer"
+        }
+      }
+    },
+    "programs": {
+      "description": "설치할 프로그램 (위에서부터 실행)",
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/program"
+          },
+          {
+            "required": [
+              "name"
+            ]
+          }
+        ]
+      }
+    },
+    "fonts": {
+      "description": "폰트",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "description": "폰트 폴더 (【 Application 】 기준)",
+          "type": "string"
+        },
+        "search": {
+          "description": "폴더를 못 찾을 때 찾을 이름",
+          "type": "string"
+        }
+      }
+    },
+    "taskbar": {
+      "description": "작업표시줄",
+      "type": "object",
+      "properties": {
+        "search": {
+          "description": "검색: icon/box/hidden",
+          "type": "string",
+          "enum": [
+            "icon",
+            "box",
+            "hidden"
+          ]
+        },
+        "hideWidgets": {
+          "description": "뉴스/위젯 끄기",
+          "type": "boolean"
+        },
+        "unpin": {
+          "description": "고정 해제할 아이콘 이름",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "closeProcesses": {
+          "description": "작업표시줄에 남은 창을 닫을 프로세스",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "desktopIcons": {
+      "description": "바탕화면 아이콘",
+      "type": "array",
+      "items": {
+        "enum": [
+          "computer",
+          "userFiles",
+          "network",
+          "recycleBin",
+          "controlPanel"
+        ]
+      }
+    },
+    "misc": {
+      "description": "기타",
+      "type": "object",
+      "properties": {
+        "showFileExtensions": {
+          "description": "파일 확장명 표시",
+          "type": "boolean"
+        }
+      }
+    },
+    "power": {
+      "description": "전원 (분, 0 = 안 함)",
+      "type": "object",
+      "properties": {
+        "plan": {
+          "description": "전원 계획 GUID (빈칸 = 그대로)",
+          "type": "string"
+        },
+        "monitorTimeoutAC": {
+          "description": "화면 끄기(전원)",
+          "type": "integer"
+        },
+        "monitorTimeoutDC": {
+          "description": "화면 끄기(배터리)",
+          "type": "integer"
+        },
+        "sleepTimeoutAC": {
+          "description": "절전(전원)",
+          "type": "integer"
+        },
+        "sleepTimeoutDC": {
+          "description": "절전(배터리)",
+          "type": "integer"
+        },
+        "lidCloseAC": {
+          "description": "덮개 닫을 때",
+          "type": "string",
+          "enum": [
+            "nothing",
+            "sleep",
+            "hibernate",
+            "shutdown"
+          ]
+        },
+        "lidCloseDC": {
+          "description": "덮개 닫을 때(배터리)",
+          "type": "string",
+          "enum": [
+            "nothing",
+            "sleep",
+            "hibernate",
+            "shutdown"
+          ]
+        },
+        "lidOnlyLaptop": {
+          "description": "노트북에만 덮개 설정",
+          "type": "boolean"
+        },
+        "disableHibernate": {
+          "description": "최대 절전 끄기",
+          "type": "boolean"
+        }
+      }
+    },
+    "browser": {
+      "description": "크롬/엣지",
+      "type": "object",
+      "properties": {
+        "updateFirst": {
+          "description": "설정 전에 최신 버전으로 업데이트",
+          "type": "boolean"
+        },
+        "chromeExtensions": {
+          "description": "크롬 강제 설치 확장 ID",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "edgeExtensions": {
+          "description": "엣지 강제 설치 확장 ID",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enforceSettings": {
+          "description": "true = 설정 잠금(조직에서 관리), false = 권장값(직원이 변경 가능)",
+          "type": "boolean"
+        },
+        "hideEdgeFirstRun": {
+          "description": "엣지 첫 실행 화면 숨기기",
+          "type": "boolean"
+        },
+        "closeAfterSettings": {
+          "description": "설정 후 실행 중인 브라우저 닫기",
+          "type": "boolean"
+        },
+        "bookmarks": {
+          "description": "즐겨찾기 모음에 넣을 링크",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "desktopShortcuts": {
+          "description": "바탕화면에 만들 엣지 바로가기",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "printer": {
+      "description": "프린터",
+      "type": "object",
+      "properties": {
+        "driverFolder": {
+          "description": "드라이버 폴더",
+          "type": "string"
+        },
+        "search": {
+          "description": "폴더를 못 찾을 때 찾을 이름",
+          "type": "string"
+        },
+        "driverName": {
+          "description": "드라이버 이름 직접 지정",
+          "type": "string"
+        },
+        "driverHint": {
+          "description": "INF 에서 고를 모델 이름 일부",
+          "type": "string"
+        },
+        "namePrefix": {
+          "description": "프린터 이름 앞부분",
+          "type": "string"
+        },
+        "printers": {
+          "description": "프린터 목록",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "docCentral": {
+      "$ref": "#/definitions/program",
+      "description": "문서중앙화 설치 (program 과 같은 형식)"
+    },
+    "drivers": {
+      "description": "드라이버 확인",
+      "type": "object",
+      "properties": {
+        "localFolder": {
+          "description": "드라이버 폴더",
+          "type": "string"
+        },
+        "useVendorTool": {
+          "description": "제조사 도구 사용",
+          "type": "boolean"
+        },
+        "windowsUpdate": {
+          "description": "윈도우 업데이트로 드라이버",
+          "type": "boolean"
+        }
+      }
+    },
+    "sites": {
+      "description": "지점",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "erpServer": {
+            "type": "string",
+            "description": "ERP 서버 주소 ({erpServer})"
+          },
+          "printers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "기본 체크할 프린터 이름"
+          }
+        }
+      }
+    },
+    "windowsUpdate": {
+      "description": "윈도우 업데이트",
+      "type": "object",
+      "properties": {
+        "maxRounds": {
+          "description": "최대 반복 횟수",
+          "type": "integer"
+        },
+        "autoRebootSeconds": {
+          "description": "재부팅 전 카운트다운(초)",
+          "type": "integer"
+        }
+      }
+    },
+    "finishChecklist": {
+      "description": "마무리 체크리스트 (줄바꿈 + '   - ' 는 세부 내용)",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

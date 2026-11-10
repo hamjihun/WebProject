@@ -1,0 +1,47 @@
+{
+  // PCSetup.ps1 은 Windows PowerShell 5.1 에서 실행되므로 BOM 있는 UTF-8 + CRLF 로 저장해야 한글이 깨지지 않음
+  "[powershell]": {
+    "files.encoding": "utf8bom",
+    "files.eol": "\r\n",
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false
+  },
+  "[bat]": {
+    "files.encoding": "utf8",
+    "files.eol": "\r\n"
+  },
+  "[json]": {
+    "files.encoding": "utf8",
+    "editor.tabSize": 2
+  },
+  "[jsonc]": {
+    "editor.tabSize": 2
+  },
+  "files.autoGuessEncoding": false,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.exclude": {
+    "logs": true
+  },
+  "search.exclude": {
+    "logs": true,
+    "installers": true,
+    "drivers": true
+  },
+  // config.json 은 주석을 넣으면 PowerShell 5.1 에서 읽지 못하므로 일반 json 으로 둠
+  "files.associations": {
+    "*.ps1": "powershell"
+  },
+  "json.schemas": [
+    { "fileMatch": ["config.json"], "url": "./docs/config.schema.json" }
+  ],
+  // PowerShell 확장: 5.1 기준 분석, 프로젝트 규칙 파일 사용
+  "powershell.scriptAnalysis.enable": true,
+  "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
+  "powershell.codeFormatting.preset": "OTBS",
+  "powershell.codeFormatting.openBraceOnSameLine": true,
+  "powershell.powerShellDefaultVersion": "Windows PowerShell (x64)",
+  "powershell.integratedConsole.showOnStartup": false,
+  "editor.rulers": [140]
+}

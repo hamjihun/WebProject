@@ -1,0 +1,22 @@
+{
+  // 실행/디버그 (F5). PCSetup.ps1 은 관리자 권한이 필요하므로 VS Code 를 '관리자 권한으로 실행' 한 상태에서 사용
+  // 실제 PC 설정을 바꾸므로 테스트용 PC 에서만 실행할 것
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PCSetup 실행 (화면)",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/PCSetup.ps1",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "PCSetup 이어하기 (-Resume)",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/PCSetup.ps1",
+      "args": ["-Resume"],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

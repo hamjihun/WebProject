@@ -1,0 +1,26 @@
+root = true
+
+[*]
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Windows PowerShell 5.1 은 BOM 없는 UTF-8 을 ANSI(CP949) 로 읽어 한글이 깨짐 → 반드시 BOM
+[*.ps1]
+charset = utf-8-bom
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+
+[*.psd1]
+charset = utf-8-bom
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+
+[*.bat]
+end_of_line = crlf
+
+[*.{json,md}]
+charset = utf-8
+indent_style = space
+indent_size = 2

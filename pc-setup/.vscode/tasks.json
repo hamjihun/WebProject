@@ -1,0 +1,37 @@
+{
+  // Ctrl+Shift+P → Tasks: Run Task
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "문법 검사 (PCSetup.ps1)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-Command",
+        "$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('${workspaceFolder}\\PCSetup.ps1',[ref]$null,[ref]$e); if ($e) { $e | ForEach-Object { $_.Extent.StartLineNumber.ToString() + ': ' + $_.Message }; exit 1 } else { '문법 오류 없음' }"
+      ],
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "config.json 형식 검사",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-Command",
+        "try { Get-Content '${workspaceFolder}\\config.json' -Raw -Encoding UTF8 | ConvertFrom-Json | Out-Null; 'config.json 정상' } catch { $_.Exception.Message; exit 1 }"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "코드 분석 (PSScriptAnalyzer)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-Command",
+        "if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Scope CurrentUser -Force }; Invoke-ScriptAnalyzer -Path '${workspaceFolder}\\PCSetup.ps1' -Settings '${workspaceFolder}\\PSScriptAnalyzerSettings.psd1' | Format-Table Line, Severity, RuleName, Message -AutoSize -Wrap"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

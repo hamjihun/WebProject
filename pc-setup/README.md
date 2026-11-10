@@ -196,3 +196,15 @@ Windows 11 은 시작화면을 프로그램으로 완벽하게 지우기가 어�
 - **엣지 첫 실행 화면**(데이터 없이 시작 / Google 데이터 / 허용 안 함)은 프로그램 설치를 시작할 때 회사 정책으로 꺼둡니다. 이때 뒤에서 미리 실행 중인 엣지(시작 부스트)를 종료하고 시작 부스트도 꺼서, 다음에 엣지가 열릴 때 바로 적용됩니다. (`browser.hideEdgeFirstRun`)
 - **프린터 드라이버 이름**은 드라이버 파일에서 `C3060` 이 들어간 모델을 자동으로 고릅니다. 다른 모델이 잡히면 로그의 "드라이버 모델 목록"을 보고 `printer.driverName` 에 정확한 이름을 넣으세요.
 - 회사 백신(V3 등)이 스크립트 실행을 막으면 `pc-setup` 폴더를 예외로 등록하세요.
+
+## VS Code 로 작업하기
+
+`pc-setup` 폴더를 VS Code 로 열면(파일 > 폴더 열기) 아래가 자동으로 적용됩니다.
+
+- 추천 확장 설치 알림: **PowerShell**, EditorConfig → [설치] 누르기
+- `PCSetup.ps1` 저장 형식 고정: UTF-8 BOM + CRLF (Windows PowerShell 5.1 에서 한글이 깨지지 않도록)
+- 구역 접기: 왼쪽 ▾ 로 `#region` 단위 접기, `Ctrl+Shift+O` 로 함수 이동
+- `config.json` 자동 완성/설명: 키에 마우스를 올리면 설명 표시 (`docs/config.schema.json`)
+- 검사: `Ctrl+Shift+P` → `Tasks: Run Task` → 문법 검사 / config.json 형식 검사 / 코드 분석
+- 실행(F5): VS Code 를 **관리자 권한**으로 실행한 뒤 (실제 PC 설정이 바뀌므로 테스트 PC 에서만)
+- AI 도우미(Claude Code, Copilot)용 안내: `CLAUDE.md`, 코드 구조: `docs/ARCHITECTURE.md`

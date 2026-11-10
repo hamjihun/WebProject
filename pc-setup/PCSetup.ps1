@@ -23,6 +23,7 @@ $ConfigPath = Join-Path $Root 'config.json'
 $LogDir     = Join-Path $Root 'logs'
 $ResumePath = Join-Path $env:ProgramData 'PCSetup\resume.json'
 
+#region 관리자 권한 확인
 # ---------------------------------------------------------------------------
 # 관리자 권한 확인
 # ---------------------------------------------------------------------------
@@ -44,6 +45,9 @@ if (-not $owned) {
 $RunOnceKey  = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
 $RunOnceName = 'PCSetupResume'
 
+#endregion
+
+#region 화면과 작업 쪽에서 함께 쓰는 함수
 # ---------------------------------------------------------------------------
 # 화면과 작업 쪽에서 함께 쓰는 함수
 # ---------------------------------------------------------------------------
@@ -157,6 +161,9 @@ $Common = {
 }
 . $Common
 
+#endregion
+
+#region 설정 파일
 # ---------------------------------------------------------------------------
 # 설정 파일
 # ---------------------------------------------------------------------------
@@ -178,6 +185,9 @@ try {
     exit 1
 }
 
+#endregion
+
+#region 실제 작업 (UI 가 멈추지 않도록 별도 런스페이스에서 실행)
 # ---------------------------------------------------------------------------
 # 실제 작업 (UI 가 멈추지 않도록 별도 런스페이스에서 실행)
 # ---------------------------------------------------------------------------
@@ -265,6 +275,7 @@ $Worker = {
         return $proc.ExitCode
     }
 
+    #region 설치 화면 자동 조작 (버튼 클릭, 입력칸 채우기)
     # --- 설치 화면 자동 조작 (버튼 클릭, 입력칸 채우기) ------------------------
     function Initialize-UIA {
         if (-not ('System.Windows.Automation.AutomationElement' -as [type])) {
@@ -792,6 +803,9 @@ public struct POINT { public int X; public int Y; }
         $State.RestartExplorer = $false
     }
 
+    #endregion
+
+    #region 1. 이더넷 IP
     # --- 1. 이더넷 IP ---------------------------------------------------------
     function Set-Network {
         $n = $Plan.Network
@@ -856,6 +870,9 @@ public struct POINT { public int X; public int Y; }
         }
     }
 
+    #endregion
+
+    #region 2. 프로그램 설치 (여러 개를 간격을 두고 동시에)
     # --- 2. 프로그램 설치 (여러 개를 간격을 두고 동시에) --------------------------
     function New-InstallJob($P, [string]$Path) {
         return @{
@@ -1207,6 +1224,9 @@ public struct POINT { public int X; public int Y; }
         }
     }
 
+    #endregion
+
+    #region 3. 폰트
     # --- 3. 폰트 --------------------------------------------------------------
     function Install-Fonts {
         $f = $Cfg.fonts
@@ -1292,6 +1312,9 @@ public struct POINT { public int X; public int Y; }
         Write-Log "폰트 $ok / $($fonts.Count) 개 설치됨 (이미 열려 있던 프로그램은 다시 열어야 목록에 보입니다)" $(if ($ok -eq $fonts.Count) { 'OK' } else { 'WARN' })
     }
 
+    #endregion
+
+    #region 4. 작업표시줄
     # --- 4. 작업표시줄 ---------------------------------------------------------
     function Set-Taskbar {
         $t = $Cfg.taskbar
@@ -1371,6 +1394,9 @@ public struct POINT { public int X; public int Y; }
         else { Write-Log '작업표시줄에서 제거할 아이콘이 없습니다. (이미 없거나 고정되어 있지 않음)' }
     }
 
+    #endregion
+
+    #region 5. 바탕화면 아이콘
     # --- 5. 바탕화면 아이콘 ----------------------------------------------------
     function Set-DesktopIcons {
         $ids = [ordered]@{
@@ -1393,6 +1419,9 @@ public struct POINT { public int X; public int Y; }
         $State.RestartExplorer = $true
     }
 
+    #endregion
+
+    #region 6. 오피스 바로가기
     # --- 6. 오피스 바로가기 ----------------------------------------------------
     function New-OfficeShortcuts {
         $desktop = [Environment]::GetFolderPath('Desktop')
@@ -1425,6 +1454,9 @@ public struct POINT { public int X; public int Y; }
         }
     }
 
+    #endregion
+
+    #region 7. 파일 확장명 / PC 이름
     # --- 7. 파일 확장명 / PC 이름 ----------------------------------------------
     function Set-Misc {
         $m = $Cfg.misc
@@ -1447,6 +1479,9 @@ public struct POINT { public int X; public int Y; }
         }
     }
 
+    #endregion
+
+    #region 사용자 계정 컨트롤
     # --- 사용자 계정 컨트롤 --------------------------------------------------------
     # 슬라이더 가장 아래 = '다음의 경우 항상 알리지 않음 (사용자 계정 컨트롤 끄기)'
     # (EnableLUA 는 켜둠 - 완전히 끄면 스토어 앱/엣지 일부 기능이 동작하지 않음)
@@ -1457,6 +1492,9 @@ public struct POINT { public int X; public int Y; }
         Write-Log '사용자 계정 컨트롤: 가장 아래 (항상 알리지 않음)' 'OK'
     }
 
+    #endregion
+
+    #region 8. 전원
     # --- 8. 전원 --------------------------------------------------------------
     function Set-Power {
         $p = $Cfg.power
@@ -1500,6 +1538,9 @@ public struct POINT { public int X; public int Y; }
         if ($p.disableHibernate) { [void](Invoke-Cmd '최대 절전 모드 끄기' 'powercfg.exe' @('/hibernate', 'off')) }
     }
 
+    #endregion
+
+    #region 9. 시작화면 정리 (엣지만)
     # --- 9. 시작화면 정리 (엣지만) ---------------------------------------------
     function Set-StartMenu {
         if ($IsWin11) {
@@ -1600,6 +1641,9 @@ public struct POINT { public int X; public int Y; }
         Add-Notice '시작화면: 타일이 그대로 남아 있으면 로그아웃 후 다시 로그인하면 정리됩니다.'
     }
 
+    #endregion
+
+    #region 10~12. 브라우저
     # --- 10~12. 브라우저 --------------------------------------------------------
     function Get-PolicyRoot([string]$Browser) {
         $base = if ($Browser -eq 'chrome') { 'HKLM:\SOFTWARE\Policies\Google\Chrome' } else { 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' }
@@ -1861,6 +1905,9 @@ public struct POINT { public int X; public int Y; }
         Write-Log '크롬/엣지를 열면 확장프로그램이 자동으로 설치됩니다. (인터넷 연결 필요)'
     }
 
+    #endregion
+
+    #region 13. 프린터
     # --- 13. 프린터 ------------------------------------------------------------
     function Get-InfModelNames([string]$InfPath) {
         $sections = @{}
@@ -1964,6 +2011,9 @@ public struct POINT { public int X; public int Y; }
         }
     }
 
+    #endregion
+
+    #region 드라이버 / 윈도우 업데이트
     # --- 드라이버 / 윈도우 업데이트 ----------------------------------------------
     # 진행 상황 표시판 / 진행 순서 창의 '윈도우 업데이트' 줄에 상세 진행 표시 (백그라운드 업데이트일 때)
     # 남은 시간: 지금까지 끝난 항목의 평균 시간 × 남은 개수
@@ -2283,6 +2333,9 @@ public struct POINT { public int X; public int Y; }
         Write-ProblemDevices
     }
 
+    #endregion
+
+    #region 14. 정품 인증 확인
     # --- 14. 정품 인증 확인 -----------------------------------------------------
     function Test-Activation {
         $a = Get-ActivationInfo
@@ -2298,6 +2351,9 @@ public struct POINT { public int X; public int Y; }
         }
     }
 
+    #endregion
+
+    #region 15. 문서중앙화
     # --- 15. 문서중앙화 --------------------------------------------------------
     function Install-DocCentral {
         $dc = $Cfg.docCentral
@@ -2322,6 +2378,9 @@ public struct POINT { public int X; public int Y; }
         Invoke-InstallJobs @(New-InstallJob $p $path) 0 $false
     }
 
+    #endregion
+
+    #region 실행
     # --- 실행 ----------------------------------------------------------------
     try {
         if (-not $Plan.Background) {
@@ -2435,8 +2494,12 @@ public struct POINT { public int X; public int Y; }
         $Sync.Status  = '완료'
         $Sync.Done    = $true
     }
+    #endregion
 }
 
+#endregion
+
+#region 화면 구성
 # ---------------------------------------------------------------------------
 # 화면 구성
 # ---------------------------------------------------------------------------
@@ -2675,6 +2738,9 @@ $btnStop.ForeColor = [System.Drawing.Color]::DarkRed
 $btnStop.Enabled = $false
 $form.Controls.AddRange(@($lblStatus, $progress, $txtLog, $btnStart, $btnStop))
 
+#endregion
+
+#region 화면 데이터
 # ---------------------------------------------------------------------------
 # 화면 데이터
 # ---------------------------------------------------------------------------
@@ -2776,6 +2842,9 @@ function Get-RelativeToApp([string]$Path) {
     return $Path
 }
 
+#endregion
+
+#region 이벤트
 # ---------------------------------------------------------------------------
 # 이벤트
 # ---------------------------------------------------------------------------
@@ -3744,3 +3813,4 @@ $form.Add_Shown({
 })
 
 [void]$form.ShowDialog()
+#endregion
