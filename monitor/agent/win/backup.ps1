@@ -215,6 +215,12 @@ if ($conf['USB'] -ne '0') {
     if ($script:usedDone -contains $dn) { continue }
     $seen = $false; foreach ($x in $usbs) { if ($x.done_time -eq $dn.time -and $x.path -eq $dn.path) { $seen = $true } }; if ($seen) { continue }
     $leaf = ''; try { $leaf = Split-Path ([string]$dn.path).TrimEnd('\') -Leaf } catch {}
+    # 같은 이름(예: DATA)의 USB 가 더 새 기록을 갖고 있거나 7일 넘게 지난 기록이면 숨긴다
+    # (bat 을 고치기 전 깨진 경로·옛 경로로 남은 기록이 '복사 실패' 줄로 계속 남던 것, 1.10.13)
+    $stale = $false
+    try { if ($dn.time -and ([datetime]$dn.time) -lt (Get-Date).AddDays(-7)) { $stale = $true } } catch {}
+    foreach ($x in $usbs) { if ($leaf -and $x.name -eq $leaf -and $x.done_time -and $dn.time -and ([string]$x.done_time) -gt ([string]$dn.time)) { $stale = $true } }
+    if ($stale) { continue }
     $u = NewUsb $(if ($leaf) { $leaf } else { 'bat 기록' }); $u.spec = [string]$dn.path; $u.path = [string]$dn.path; $u.drive = [string]$dn.drive
     $u.done_time = $dn.time; $u.done_code = $dn.code; $u.done_ok = $dn.ok; $u.newest_time = $dn.newest_time; $u.newest_file = $dn.newest_file; $u.count = $dn.count; $u.free = $dn.free; $u.total = $dn.total; $u.last_seen = $dn.time
     if ($dn.copied_time) { $u.copied_time = $dn.copied_time }
