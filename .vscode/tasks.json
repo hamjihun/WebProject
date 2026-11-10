@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "문법 검사 (커밋 전에 꼭)",
+      "type": "shell",
+      "command": "node monitor/tools/check.js",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "에이전트 설치 파일 빌드 (NSIS 필요)",
+      "type": "shell",
+      "command": "makensis",
+      "args": ["-V2", "installer.nsi"],
+      "options": { "cwd": "${workspaceFolder}/monitor/agent/win" },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "수집기 실행 (내 PC 테스트, http://localhost:8787)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/monitor/server.js",
+      "cwd": "${workspaceFolder}/monitor",
+      "env": { "PORT": "8787", "BIND": "127.0.0.1" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "모의 에이전트 (가짜 서버 데이터 보내기)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/monitor/agent/simulate.js",
+      "args": ["http://127.0.0.1:8787/api/metrics"],
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    { "name": "수집기 + 모의 에이전트", "configurations": ["수집기 실행 (내 PC 테스트, http://localhost:8787)", "모의 에이전트 (가짜 서버 데이터 보내기)"] }
+  ]
+}

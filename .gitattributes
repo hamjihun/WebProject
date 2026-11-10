@@ -1,0 +1,10 @@
+# 줄바꿈을 git 이 바꾸지 않게 (Windows 에서 clone 해도 파일 그대로) — monitor/.gitattributes 와 같은 규칙
+*.cmd -text
+*.bat -text
+*.ps1 -text
+*.vbs -text
+*.nsi -text
+*.exe binary
+*.ico binary
+*.png binary
+*.jpg binary

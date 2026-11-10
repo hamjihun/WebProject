@@ -1,0 +1,23 @@
+{
+  // ---- 인코딩: 파일 종류마다 다르다 (잘못 저장하면 서버에서 한글이 깨지거나 스크립트가 멈춤) ----
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "[powershell]": { "files.encoding": "utf8bom", "files.eol": "\r\n" },   // .ps1: UTF-8 BOM (Windows PowerShell 5.1 이 한글을 읽으려면 BOM 필요)
+  "[bat]": { "files.encoding": "cp949", "files.eol": "\r\n" },           // .cmd/.bat: CP949(ANSI) + CRLF
+  "files.associations": { "*.nsi": "plaintext", "*.vbs": "plaintext" },
+
+  // ---- 저장할 때 자동으로 고치지 않음 (한 줄이 긴 코드가 많아 자동 정렬하면 변경이 커짐) ----
+  "editor.formatOnSave": false,
+  "editor.formatOnPaste": false,
+  "files.trimTrailingWhitespace": false,
+  "files.insertFinalNewline": false,
+  "powershell.codeFormatting.autoCorrectAliases": false,
+  "powershell.scriptAnalysis.enable": true,
+
+  // ---- 검색·탐색에서 뺄 것 ----
+  "files.exclude": { "**/.git": true, ".idea": true },
+  "search.exclude": { "monitor/dist/**": true, "monitor/data/**": true, "event/data/**": true, "**/node_modules": true, "**/*.exe": true },
+
+  "editor.rulers": [],
+  "editor.wordWrap": "off"
+}

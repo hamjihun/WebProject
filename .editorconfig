@@ -1,0 +1,15 @@
+# 편집기 공통 설정 (VS Code 는 EditorConfig 확장이 있으면 적용)
+root = true
+
+[*]
+charset = utf-8
+trim_trailing_whitespace = false
+insert_final_newline = false
+
+[*.{ps1,nsi}]
+charset = utf-8-bom
+end_of_line = crlf
+
+[*.{cmd,bat,vbs}]
+# CP949(ANSI) — EditorConfig 로는 지정할 수 없음. VS Code 설정(.vscode/settings.json)이 cp949 로 연다
+end_of_line = crlf
